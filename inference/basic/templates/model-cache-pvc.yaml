@@ -1,0 +1,13 @@
+{{- if and .Values.modelCache.enabled .Values.modelCache.create }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.modelCache.name }}
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: shared-vast
+  resources:
+    requests:
+      storage: {{ .Values.modelCache.size }}
+{{- end }}

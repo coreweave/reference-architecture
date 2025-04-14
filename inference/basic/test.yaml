@@ -1,0 +1,120 @@
+---
+# Source: vllm-basic/templates/pdb.yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vllm-basic
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: vllm-basic
+---
+# Source: vllm-basic/templates/model-cache-pvc.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: huggingface-model-cache
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: shared-vast
+  resources:
+    requests:
+      storage: 10Ti
+---
+# Source: vllm-basic/templates/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-basic
+  annotations:
+    service.beta.kubernetes.io/coreweave-load-balancer-type: public
+    service.beta.kubernetes.io/external-hostname: vllm-basic
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: vllm-basic
+---
+# Source: vllm-basic/templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-basic
+spec:
+  replicas: 1
+  strategy:
+    
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: vllm-basic
+  template:
+    metadata:
+      labels:
+        app: vllm-basic
+    spec:
+      tolerations: 
+        null
+      affinity: 
+        null
+      containers:
+        - name: vllm
+          image: "vllm/vllm-openai:v0.8.3"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--model"
+            - "mistralai/Mistral-7B-Instruct-v0.3"
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 
+            periodSeconds: 10
+            failureThreshold: 30
+          resources: 
+            limits:
+              cpu: "10"
+              memory: 20G
+              nvidia.com/gpu: "1"
+            requests:
+              cpu: "2"
+              memory: 6G
+              nvidia.com/gpu: "1"
+          env:
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "hf-token"
+                  key: token
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: model-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        # vLLM needs to access the host's shared memory for tensor parallel inference.
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: "huggingface-model-cache"

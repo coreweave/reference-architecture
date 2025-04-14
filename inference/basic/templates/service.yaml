@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "vllm-basic.fullname" . }}
+  {{- if .Values.service.public }}
+  annotations:
+    service.beta.kubernetes.io/coreweave-load-balancer-type: public
+    service.beta.kubernetes.io/external-hostname: {{ include "vllm-basic.service.hostname" . }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port.port }}
+      targetPort: {{ .Values.deployment.port.containerPort }}
+      protocol: {{ .Values.service.port.protocol }}
+      name: {{ .Values.service.port.name }}
+  selector:
+    app: {{ include "vllm-basic.name" . }}

@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vllm-basic.fullname" . }}
+spec:
+  replicas: {{ .Values.deployment.replicaCount }}
+  strategy:
+    {{ toYaml .Values.deployment.rollouts.strategy | nindent 4 }}
+  selector:
+    matchLabels:
+      app: {{ include "vllm-basic.name" . }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "vllm-basic.name" . }}
+    spec:
+      tolerations: {{ toYaml .Values.tolerations | nindent 8 }}
+      affinity: {{ toYaml .Values.affinity | nindent 8 }}
+      containers:
+        - name: vllm
+          image: "{{ .Values.deployment.image.repository }}:{{ .Values.deployment.image.tag }}"
+          imagePullPolicy: {{ .Values.deployment.image.pullPolicy }}
+          args:
+            - "--model"
+            - "{{ .Values.deployment.vllm.model }}"
+            {{- range .Values.deployment.vllm.extraArgs }}
+            - "{{ . }}"
+            {{- end }}
+          ports:
+            - name: {{ .Values.deployment.port.name }}
+              containerPort: {{ .Values.deployment.port.containerPort }}
+              protocol: {{ .Values.deployment.port.protocol }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.deployment.readinessProbe.path }}
+              port: {{ .Values.deployment.port.containerPort }}
+            initialDelaySeconds: {{ .Values.deployment.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.readinessProbe.periodSeconds }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.deployment.livenessProbe.path }}
+              port: {{ .Values.deployment.port.containerPort }}
+            initialDelaySeconds: {{ .Values.deployment.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.deployment.livenessProbe.failureThreshold }}
+          resources: {{ toYaml .Values.deployment.resources | nindent 12 }}
+          env:
+            {{- if .Values.hfToken.secretName }}
+            - name: HUGGING_FACE_HUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.hfToken.secretName | quote }}
+                  key: token
+            {{- else if .Values.hfToken.token }}
+            - name: HUGGING_FACE_HUB_TOKEN
+              value: {{ .Values.hfToken.token | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            {{- if .Values.modelCache.enabled }}
+            - name: model-cache
+              mountPath: {{ .Values.modelCache.mountPath }}
+            {{- end }}
+      volumes:
+        # vLLM needs to access the host's shared memory for tensor parallel inference.
+        - name: dshm
+          emptyDir:
+            medium: Memory
+        {{- if .Values.modelCache.enabled }}
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: {{ .Values.modelCache.name | quote }}
+        {{- end }}

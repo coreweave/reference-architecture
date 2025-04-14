@@ -1,0 +1,6 @@
+apiVersion: v2
+name: vllm-basic
+description: A Helm chart for deploying a basic vLLM inference service on CoreWeave Kubernetes Service
+type: application
+version: 0.1.0
+appVersion: "v0.8.3"

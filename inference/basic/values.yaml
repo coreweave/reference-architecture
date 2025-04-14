@@ -1,0 +1,77 @@
+nameOverride: ""
+fullnameOverride: ""
+
+deployment:
+  replicaCount: 1
+
+  # The following is the default strategy for a deployment in k8s, but can be changed as needed.
+  rollouts:
+    strategy:
+      type: RollingUpdate
+      rollingUpdate:
+        maxSurge: 25%
+        maxUnavailable: 25%
+
+  image:
+    repository: vllm/vllm-openai
+    tag: "v0.8.3"
+    pullPolicy: IfNotPresent
+
+  vllm:
+    model: "mistralai/Mistral-7B-Instruct-v0.3"
+    extraArgs: []
+
+  resources:
+    limits:
+      cpu: "10"
+      memory: 20G
+      nvidia.com/gpu: "1"
+    requests:
+      cpu: "2"
+      memory: 6G
+      nvidia.com/gpu: "1"
+  
+  port:
+    name: http
+    containerPort: 8000
+    protocol: TCP
+
+  readinessProbe:
+    path: /health
+    initialDelaySeconds: 10
+    periodSeconds: 5
+  livenessProbe:
+    path: /health
+    # This will give the container 5 minutes to start up (10 * 30 = 500 seconds) 
+    periodSeconds: 10
+    failureThreshold: 30
+  
+  tolerations: []
+  affinity: {}
+
+pdb:
+  enabled: true
+  # Use in combination with the deployment's rollout strategy to achieve the desired behavior
+  minAvailable: 1
+
+service:
+  type: LoadBalancer
+  public: false
+  hostnameOverride: ""
+  port:
+    name: http
+    port: 80
+    protocol: TCP
+
+modelCache:
+  enabled: true
+  create: true
+  name: huggingface-model-cache
+  size: "10Ti"
+  mountPath: /root/.cache/huggingface
+
+hfToken:
+  # Set the secret name to an existing k8s secret if one exists. The key should be `token`
+  secretName: ""
+  # Alternatively, set the token directly. Do not store this value in source control.
+  token: ""

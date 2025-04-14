@@ -1,0 +1,3 @@
+*.tgz
+charts/
+values-dev.yaml
