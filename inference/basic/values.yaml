@@ -87,5 +87,19 @@ hfToken:
 
 ingress:
   enabled: true          # toggle ingress on/off
-  clusterName: ""        # e.g. "cw0000"
-  orgID: ""              # e.g. "training"
+  clusterName: ""        # e.g. "training"
+  orgID: ""              # e.g. "cw0000"
+
+prometheus:
+  enabled: true
+  namespace: "monitoring"
+  # The prometheus redentials below by default are:
+  ## username: admin
+  ## password: cwadmin
+  # To generate new ones, use the following command:
+  # htpasswd -nb USERNAME PASSWORD
+  credentials: admin:$apr1$9VOrzfAH$iq7/eJs53lNUTKcWEzAeS1
+
+grafana:
+  enabled: true
+  ingressName: grafana

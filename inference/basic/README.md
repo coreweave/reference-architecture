@@ -18,29 +18,35 @@ helm repo add coreweave https://charts.core-services.ingress.coreweave.com
 helm repo update
 ```
 
-### 1. Ingress with Traefik
+### 1. Install Ingress
 
 Usage of an ingress controller is recommended with this chart. The rest of this example will use CoreWeave's Traefik chart. Find more details about it [here](https://docs.coreweave.com/docs/products/cks/how-to/coreweave-charts/traefik).
 
-If you don't require TLS you can install the chart without any custom values with the following command. If you do, skip to section 1.a
+If you don't require TLS certificates, you can skip most of this section and simply run the following command to install Traefik:
 
 ```bash
+# Skip this if you plan to use cert-manager
 helm install traefik coreweave/traefik --namespace traefik --create-namespace
 ```
+
+If you do require TLS certificates, you can use cert-manager to manage them. Skip the command above and follow the following instructions in sections 1.a and 1.b.
 
 #### 1.a TLS Support with cert-manager
 
 Cert-Manager is a simple way to manage TLS certificates. Like Traefik, CoreWeave publishes an easy to use chart. You can find the docs on it [here](https://docs.coreweave.com/docs/products/cks/how-to/coreweave-charts/cert-manager).
 
-You can customize the cert-issuers that traefik will use if you wish, but otherwise you can use the defaults and install with the following command:
+You can customize the cert-issuers that traefik will use if you wish, but otherwise you can use the defaults and install with the following commands:
 
 ```bash
-helm install cert-manager coreweave/cert-manager --set cert-issuers.enabled=true --namespace cert-manager --create-namespace
+helm install cert-manager coreweave/cert-manager --namespace cert-manager --create-namespace
+helm upgrade cert-manager coreweave/cert-manager --namespace cert-manager --set cert-issuers.enabled=true 
 ```
 
 Once cert-manager is installed, you can install traefik with values configured to use the cert issuers.
 
-To install it, first create the `values-traefik.yaml` file:
+#### 1.b Traefik
+
+To install it, first create the `values-traefik.yaml` file or use the one in [hack/values-traefik.yaml](./hack/values-traefik.yaml):
 
 ```yaml
 tls:
@@ -52,13 +58,46 @@ tls:
      cert-manager.io/cluster-issuer: letsencrypt-prod
 ```
 
-Then install it using the following commands:
+You can install it using the following command:
 
 ```bash
-helm install traefik coreweave/traefik --namespace traefik --create-namespace -f values-traefik.yaml
+helm install traefik coreweave/traefik --namespace traefik --create-namespace -f hack/values-traefik.yaml
 ```
 
-### 2. Huggingface tokens
+### 2. Observability
+Basic setup to enable observability for the vLLM deployment. This includes installing Prometheus and a Grafana dashboard.
+
+#### 2.a Install Prometheus
+You will need Prometheus and Grafana to monitor the vLLM deployment. There are manifests in [hack/manifests-prometheus.yaml](./hack/manifests-prometheus.yaml) to install prometheus. You can run the following command to install it:
+
+```bash
+kubectl apply -f hack/manifests-prometheus.yaml
+```
+This will create a `monitoring` namespace and install prometheus into it. You can check the status of the pods with:
+
+```bash
+kubectl get pods -n monitoring
+```
+
+**IMPORTANT**: If you modify the files and change the installation namespace, or if you already have a prometheus installation and skip this step, you will need to update the `prometheus` section of the chart values to point to your prometheus installation namespace.
+
+**FOR DEBUGGING ONLY**, you can access the prometheus UI by port-forwarding the prometheus service:
+```bash
+kubectl port-forward -n monitoring prometheus-k8s-0 9090:9090
+```
+Then you can access the prometheus UI at `http://localhost:9090`.
+
+Later, the helm chart in this repo will automatically expose the prometheus service for metrics visualization in Grafana.
+
+#### 2.b Create a ConfigMap with a Grafana Dashboard for vLLM
+You can create a ConfigMap with a Grafana dashboard for vLLM. This will allow you to visualize the metrics collected by Prometheus. You can find the dashboard JSON in [hack/manifests-grafana.yaml](./hack/manifests-grafana.yaml). Apply the configmap with the following command:
+
+```bash
+kubectl apply -f hack/manifests-grafana.yaml -n RELEASE_NAMESPACE
+```
+This will create a `grafana-dashboard` configmap in your release namespace. Later when we deploy Grafana using the chart, it will automatically load this dashboard. You can create the namespace now if it doesn't exist yet with `kubectl create namespace RELEASE_NAMESPACE`. For the rest of this guide, we will use `inference` as the `RELEASE_NAMESPACE`, but you can change it to whatever you want.
+
+### 3. Huggingface tokens
 
 Some models on huggingface require you do be authed into an account that has been granted access. You can easily do this by using a huggingface token.
 
@@ -78,7 +117,7 @@ hfToken:
   secretName: "hf-token"
 ```
 
-### 3. Model Cache PVC
+### 4. Model Cache PVC
 
 Similar to the HuggingFace token, the chart has functionality to create a PVC for you but it is recommended you create one outside the scope of the helm chart so it can persist across deployments and be reused.
 
@@ -112,18 +151,19 @@ modelCache:
   name: huggingface-model-cache
 ```
 
-### 4. Verify Dependencies
+### 5. Verify Dependencies
 
 Ensure that all of the dependencies exist with the following commands
 
 ```bash
 kubectl get pods -n traefik
 kubectl get pods -n cert-manager
+kubectl get pods -n monitoring
 kubectl get pvc -n inference
 kubectl get secret -n inference
 ```
 
-### 5. LeaderWorkerSet (Optional)
+### 6. LeaderWorkerSet (Optional)
 
 If you want to run vLLM multi-node then you need to install LeaderWorkerSet into your CKS cluster.
 
@@ -144,6 +184,11 @@ For example, to run `meta-llama/Llama-3.1-8B-Instruct` you can use `hack/values-
 ```bash
 helm install basic-inference ./ --namespace inference --create-namespace -f hack/values-llama-small.yaml
 ```
+
+By default, the chart will create three ingress objects:
+1. The main ingress for the vLLM service (uses the release name)
+2. The Grafana ingress (called `grafana`) with basic auth.
+3. The prometheus ingress (called `prometheus`) with basic auth. Default username and password are `admin` and `cwadmin`. You can change this in the values file. To get a new credentials value, run the following command: `htpasswd -nb USERNAME PASSWORD`
 
 ## Using the Service
 
@@ -240,6 +285,18 @@ for chunk in stream:
         print(chunk.choices[0].delta.content, end="", flush=True)
 ```
 
+### Access Metrics in Grafana
+CoreWeave provides a chart to install grafana. This chart was used as a subchart in this inference solution. You can find the docs [here](https://docs.coreweave.com/docs/observability/self-hosted-grafana).
+
+Log into Grafana using the following credentials:
+- Username: `admin`
+- Password: obtain it with the command `kubectl get secret {{RELEASE_NAME}}-grafana -n inference -o=jsonpath='{.data.admin-password}' | base64 --decode; echo`
+  - Your release name is likely `basic-inference`, so your command would be `kubectl get secret basic-inference-grafana -n inference -o=jsonpath='{.data.admin-password}' | base64 --decode; echo`
+
+You can continue following the steps in the link above ([this one](https://docs.coreweave.com/docs/observability/self-hosted-grafana)) to set up CoreWeave dashboards and a data source; however, this is not required for the vLLM chart to work. For the purposes of this example, you can simply add the local prometheus data source and the `vLLM` dashboard.
+
+To add the data source, go to Grafana and click on the connections section on the left sidebar. Then click on `Data Sources` and `+ Add a new data source`. Select `Prometheus` and set the URL to `https://prometheus.ORG_ID-CLUSTER_NAME.coreweave.app` (replace with your cluster name and org ID). You can also check the prometheus IngressRoute in the `monitoring` namespace to get the URL. For Authentication, select `Basic Auth` and set the username and password to `admin` and `cwadmin` (unless you changed them in the steps above). Click on `Save & Test` to save the data source.
+
 ## Cleanup
 
 To uninstall the chart and its dependencies, run:
@@ -260,7 +317,7 @@ kubectl delete secret hf-token
 # ToDo
 
 - [ ] Autoscaling
-- [ ] vLLM Metrics
+- [X] vLLM Metrics
 - [ ] Routing to different models
 - [ ] Object storage
 - [ ] Tensorizer
