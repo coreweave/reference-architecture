@@ -23,3 +23,29 @@ spec:
         - *host
       secretName: {{ include "vllm-basic.fullname" . }}-tls
 {{- end }}
+---
+{{- if .Values.grafana.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "vllm-basic.name" . }}-{{ .Values.grafana.ingressName }}
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: &host {{ include "vllm-basic.name" . }}-{{ .Values.grafana.ingressName }}.{{ .Values.ingress.orgID }}-{{ .Values.ingress.clusterName }}.coreweave.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "vllm-basic.name" . }}-grafana
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - *host
+      secretName: grafana-tls
+{{- end }}
