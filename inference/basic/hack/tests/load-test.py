@@ -66,6 +66,7 @@ async def _request_one(
             stats["success"] += 1
             stats["tokens"] += r.json().get("usage", {}).get("total_tokens", 0)
         else:
+            print(f"Request failed with status {r.status_code}: {r.text}")
             stats["fail"] += 1
     except Exception:
         stats["fail"] += 1

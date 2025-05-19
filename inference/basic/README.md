@@ -97,6 +97,20 @@ kubectl apply -f hack/manifests-grafana.yaml -n RELEASE_NAMESPACE
 ```
 This will create a `grafana-dashboard` configmap in your release namespace. Later when we deploy Grafana using the chart, it will automatically load this dashboard. You can create the namespace now if it doesn't exist yet with `kubectl create namespace RELEASE_NAMESPACE`. For the rest of this guide, we will use `inference` as the `RELEASE_NAMESPACE`, but you can change it to whatever you want.
 
+### 2.c Autoscaling
+You can enable horizontal pod autoscaling for the vLLM deployment, but you will need to install [keda](https://keda.sh/docs/latest/) to do so. KEDA is a Kubernetes-based event-driven autoscaler.
+
+First add the KEDA helm repository:
+
+```bash
+helm repo add kedacore https://kedacore.github.io/charts  
+helm repo update
+```
+Then install KEDA with the following command:
+```bash
+helm install keda kedacore/keda --namespace keda --create-namespace
+```
+
 ### 3. Huggingface tokens
 
 Some models on huggingface require you do be authed into an account that has been granted access. You can easily do this by using a huggingface token.
@@ -159,6 +173,7 @@ Ensure that all of the dependencies exist with the following commands
 kubectl get pods -n traefik
 kubectl get pods -n cert-manager
 kubectl get pods -n monitoring
+kubectl get pods -n keda
 kubectl get pvc -n inference
 kubectl get secret -n inference
 ```
@@ -297,6 +312,23 @@ You can continue following the steps in the link above ([this one](https://docs.
 
 To add the data source, go to Grafana and click on the connections section on the left sidebar. Then click on `Data Sources` and `+ Add a new data source`. Select `Prometheus` and set the URL to `https://prometheus.ORG_ID-CLUSTER_NAME.coreweave.app` (replace with your cluster name and org ID). You can also check the prometheus IngressRoute in the `monitoring` namespace to get the URL. For Authentication, select `Basic Auth` and set the username and password to `admin` and `cwadmin` (unless you changed them in the steps above). Click on `Save & Test` to save the data source.
 
+Now you can go to the dashboards and select the vLLM dashboard. Dashboard might take a while to be loaded from k8s configmaps. If you don't see yours, please wait a few minutes and refresh the page.
+
+### Autoscaling Test
+The sample deployment is configured to use KEDA for autoscaling. You can test this by running the following command (replace model with your model if you didn't use the small-sample `meta-llama/Llama-3.1-8B-Instruct`):
+```bash
+cd hack/tests
+python load-test.py \
+  --endpoint "$VLLM_ENDPOINT/v1" \
+  --model "meta-llama/Llama-3.1-8B-Instruct" \
+  --prompts-file prompts.txt \
+  --concurrency 256 \
+  --requests 1024 \
+  --out results.json
+```
+
+The autoscaler will scale the number of replicas based on the KV Cache usage of the deployments. If you monitor your cache utilization metric in the Grafana dashboard (see previous section), you should see the number of replicas increase and decrease based on the load. The load will spread among the replicas.
+
 ## Cleanup
 
 To uninstall the chart and its dependencies, run:
@@ -305,6 +337,7 @@ To uninstall the chart and its dependencies, run:
 helm uninstall basic-inference --namespace inference
 helm uninstall cert-manager --namespace cert-manager
 helm uninstall traefik --namespace traefik
+helm uninstall keda --namespace keda
 ```
 
 If you manually installed your huggingface token and model cache, clean those up as well:
@@ -316,7 +349,7 @@ kubectl delete secret hf-token
 
 # ToDo
 
-- [ ] Autoscaling
+- [X] Autoscaling
 - [X] vLLM Metrics
 - [ ] Routing to different models
 - [ ] Object storage

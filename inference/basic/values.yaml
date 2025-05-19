@@ -43,9 +43,14 @@ vllm:
   # ──────────────── workload selection & settings ────────────────
   workload:
     type: deployment         # "deployment" or "leaderWorkerSet"
-
     deployment:
       replicaCount: 1
+      autoScale:
+        minReplicas: 1
+        maxReplicas: 10
+        pollingInterval: 15
+        cooldownPeriod: 60
+        cacheUtilizationThreshold: 40
       rollouts:
         strategy:
           type: RollingUpdate
