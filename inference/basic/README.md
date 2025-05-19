@@ -317,7 +317,7 @@ Now you can go to the dashboards and select the vLLM dashboard. Dashboard might 
 ### Autoscaling Test
 The sample deployment is configured to use KEDA for autoscaling. You can test this by running the following command (replace model with your model if you didn't use the small-sample `meta-llama/Llama-3.1-8B-Instruct`):
 ```bash
-cd hack
+cd hack/tests
 python load-test.py \
   --endpoint "$VLLM_ENDPOINT/v1" \
   --model "meta-llama/Llama-3.1-8B-Instruct" \
