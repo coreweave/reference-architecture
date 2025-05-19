@@ -13,7 +13,7 @@ rules:
   resources:
   - nodes
   - services
-  - deployment
+  - deployments
   - pods
   - endpoints
   verbs:

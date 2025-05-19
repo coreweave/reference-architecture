@@ -93,7 +93,7 @@ ingress:
 prometheus:
   enabled: true
   namespace: "monitoring"
-  # The prometheus redentials below by default are:
+  # The prometheus credentials below by default are:
   ## username: admin
   ## password: cwadmin
   # To generate new ones, use the following command:
