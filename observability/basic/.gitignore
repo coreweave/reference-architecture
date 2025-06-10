@@ -1,0 +1,5 @@
+*.tgz
+charts/
+values-dev.yaml
+
+hack/tests/results.json

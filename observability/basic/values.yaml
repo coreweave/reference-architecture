@@ -1,0 +1,86 @@
+orgID: CLUSTER_ORG
+clusterName: CLUSTER_NAME
+
+grafana:
+  enabled: true
+  grafana:
+    ingress:
+      enabled: true
+      ingressClassName: traefik
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt-prod
+      #FIXME: Set cluster-org and cluster-name.
+      hosts: [&host "grafana.CLUSTER_ORG-CLUSTER_NAME.coreweave.app"]
+      tls:
+        - secretName: grafana-tls
+          hosts:
+            - *host
+    datasources:
+      # this key (datasources.yaml) becomes a file under /etc/grafana/provisioning/datasources
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            access: proxy
+            # use your Traefik ingress hostname here
+            url: http://prometheus-operated:9090
+            isDefault: true
+
+prometheus:
+  enabled: true
+  externalAccess:
+    enabled: false
+    # This is the password hash, which can be generated using: htpasswd -nb $USERNAME $PASSWORD
+    credentials: admin:$apr1$9VOrzfAH$iq7/eJs53lNUTKcWEzAeS1
+  
+  alertmanager:
+    enabled: false
+  defaultRules:
+    create: false
+  coreDns:
+    enabled: false
+  grafana:
+    enabled: false
+  kubeControllerManager:
+    enabled: false
+  kubeEtcd:
+    enabled: false
+  kubeProxy:
+    enabled: false
+  kubeScheduler:
+    enabled: false
+  kubelet:
+    enabled: false
+  nodeExporter:
+    enabled: false
+  prometheusOperator:
+    enabled: false
+  kubernetesServiceMonitors:
+    enabled: false
+  kubeApiServer:
+    enabled: false
+  kubeDns:
+    enabled: false
+  kubeStateMetrics:
+    enabled: false
+  kube-state-metrics:
+    enabled: false
+  thanosRuler:
+    enabled: false
+
+  prometheus:
+    # Can also add agent mode if you only want to forward metrics
+    prometheusSpec:
+      # remoteWrite: FILL IF NEEDED
+      image:
+        registry: quay.io
+        repository: prometheus/prometheus
+        tag: v2.54.0
+      version: 2.54.0
+      ruleNamespaceSelector: {}
+      ruleSelectorNilUsesHelmValues: false
+      serviceMonitorSelector: {}
+      serviceMonitorSelectorNilUsesHelmValues: false
+      podMonitorNamespaceSelector: {}
+      podMonitorSelectorNilUsesHelmValues: false

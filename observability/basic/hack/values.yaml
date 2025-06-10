@@ -1,0 +1,12 @@
+orgID: cw0000
+clusterName: inference
+
+grafana:
+  enabled: true
+  grafana:
+    ingress:
+      hosts: [&host "grafana.cw0000-inference.coreweave.app"]
+      tls:
+        - secretName: grafana-tls
+          hosts:
+            - *host

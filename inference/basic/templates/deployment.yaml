@@ -38,6 +38,7 @@ spec:
           volumeMounts: {{ include "vllm-basic.volumeMounts" . | nindent 12 }}
       volumes: {{ include "vllm-basic.volumes" . | nindent 10 }}
 ---
+{{- if $app.workload.deployment.autoScale.enabled }}
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
@@ -53,8 +54,9 @@ spec:
   triggers:
   - type: prometheus
     metadata:
-      serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+      serverAddress: {{ .Values.prometheus.serverURL }}
       metricName: "vllm:gpu_cache_usage_perc"
       threshold: "{{ $app.workload.deployment.autoScale.cacheUtilizationThreshold }}"
       query: '100*avg(vllm:gpu_cache_usage_perc{model_name="{{ $app.model }}"})'
+{{- end }}
 {{- end }}

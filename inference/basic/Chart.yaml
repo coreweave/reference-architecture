@@ -4,8 +4,3 @@ description: A Helm chart for deploying a basic vLLM inference service on CoreWe
 type: application
 version: 0.1.0
 appVersion: "v0.8.5"
-dependencies:
-  - name: grafana
-    version: ~1.27
-    repository: https://charts.core-services.ingress.coreweave.com
-    condition: grafana.enabled

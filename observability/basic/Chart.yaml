@@ -1,0 +1,16 @@
+apiVersion: v2
+name: observability-basic
+description: A Helm chart for deploying a basic observability stack with Prometheus and Grafana on CoreWeave Kubernetes Service
+type: application
+version: 0.1.0
+dependencies:
+  - name: grafana
+    version: ~1.27
+    repository: https://charts.core-services.ingress.coreweave.com
+    condition: grafana.enabled
+  - name: kube-prometheus-stack
+    alias: prometheus
+    repository: https://prometheus-community.github.io/helm-charts
+    version: ~72.5.1
+    condition: prometheus.enabled
+    

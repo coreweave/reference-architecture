@@ -1,27 +1,13 @@
-{{- if .Values.prometheus.enabled }}
-kind: ServiceMonitor
-apiVersion: monitoring.coreos.com/v1
-metadata:
-  name: {{ include "vllm-basic.name" . }}
-  labels:
-    app: {{ include "vllm-basic.name" . }}
-spec:
-  endpoints:
-  - targetPort: 8000
-    path: /metrics
-  selector:
-    matchLabels:
-      app: {{ include "vllm-basic.name" . }}
----
+{{- if .Values.prometheus.externalAccess.enabled }}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: prometheus-cert
-  namespace: {{ .Values.prometheus.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   secretName: prometheus-tls
   dnsNames:
-    - prometheus.{{ .Values.ingress.orgID }}-{{ .Values.ingress.clusterName }}.coreweave.app
+    - prometheus.{{ .Values.orgID }}-{{ .Values.clusterName }}.coreweave.app
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
@@ -34,7 +20,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: prometheus-auth
-  namespace: {{ .Values.prometheus.namespace }}
+  namespace: {{ .Release.Namespace }}
 spec:
   basicAuth:
     secret: prometheus-auth-secret
@@ -44,24 +30,24 @@ apiVersion: v1
 kind: Secret
 metadata:
   name: prometheus-auth-secret
-  namespace: {{ .Values.prometheus.namespace }}
+  namespace: {{ .Release.Namespace }}
 type: Opaque
 stringData:
   users: |
-    {{ .Values.prometheus.credentials }}
+    {{ .Values.prometheus.externalAccess.credentials }}
 ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
   name: prometheus
-  namespace: {{ .Values.prometheus.namespace }}
+  namespace: {{ .Release.Namespace }}
   annotations:
     kubernetes.io/ingress.class: traefik
 spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`prometheus.{{ .Values.ingress.orgID }}-{{ .Values.ingress.clusterName }}.coreweave.app`)
+    - match: Host(`prometheus.{{ .Values.orgID }}-{{ .Values.clusterName }}.coreweave.app`)
       kind: Rule
       services:
         - name: prometheus-operated

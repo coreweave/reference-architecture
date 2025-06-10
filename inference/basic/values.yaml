@@ -46,6 +46,7 @@ vllm:
     deployment:
       replicaCount: 1
       autoScale:
+        enabled: true
         minReplicas: 1
         maxReplicas: 10
         pollingInterval: 15
@@ -97,14 +98,4 @@ ingress:
 
 prometheus:
   enabled: true
-  namespace: "monitoring"
-  # The prometheus credentials below by default are:
-  ## username: admin
-  ## password: cwadmin
-  # To generate new ones, use the following command:
-  # htpasswd -nb USERNAME PASSWORD
-  credentials: admin:$apr1$9VOrzfAH$iq7/eJs53lNUTKcWEzAeS1
-
-grafana:
-  enabled: true
-  ingressName: grafana
+  serverURL: "http://prometheus-operated.monitoring:9090"

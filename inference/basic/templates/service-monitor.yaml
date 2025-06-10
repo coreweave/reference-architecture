@@ -1,0 +1,16 @@
+{{- if .Values.prometheus.enabled }}
+kind: ServiceMonitor
+apiVersion: monitoring.coreos.com/v1
+metadata:
+  name: {{ include "vllm-basic.name" . }}
+  labels:
+    app: {{ include "vllm-basic.name" . }}
+spec:
+  endpoints:
+  - targetPort: 8000
+    path: /metrics
+  selector:
+    matchLabels:
+      app: {{ include "vllm-basic.name" . }}
+---
+{{- end }}
