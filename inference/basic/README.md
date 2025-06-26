@@ -150,6 +150,7 @@ If you followed the instructions, you can use `https` because cert-manager was i
 
 ```bash
 export VLLM_ENDPOINT="$(kubectl get ingress basic-inference -n inference -o=jsonpath='{.spec.rules[0].host}')"
+echo $VLLM_ENDPOINT
 ```
 
 ### cURL
