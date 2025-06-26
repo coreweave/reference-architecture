@@ -1,0 +1,14 @@
+# Sample rclone configuration file for Google Cloud Storage and CAIOS
+## Will need to mount google/key.json file from a secret
+[gcs]
+type = google cloud storage
+service_account_file = /var/secrets/google/key.json
+
+[caios]
+type = s3
+provider = Other
+endpoint = https://cwobject.com
+access_key_id = KEY_ID_HERE
+secret_access_key = KEY_SECRET_HERE
+force_path_style = false
+no_check_bucket = true
