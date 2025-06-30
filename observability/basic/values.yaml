@@ -55,7 +55,7 @@ prometheus:
   nodeExporter:
     enabled: false
   prometheusOperator:
-    enabled: false
+    enabled: true
   kubernetesServiceMonitors:
     enabled: false
   kubeApiServer:
@@ -73,11 +73,6 @@ prometheus:
     # Can also add agent mode if you only want to forward metrics
     prometheusSpec:
       # remoteWrite: FILL IF NEEDED
-      image:
-        registry: quay.io
-        repository: prometheus/prometheus
-        tag: v2.54.0
-      version: 2.54.0
       ruleNamespaceSelector: {}
       ruleSelectorNilUsesHelmValues: false
       serviceMonitorSelector: {}

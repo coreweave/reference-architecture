@@ -10,4 +10,3 @@ spec:
     requests:
       storage: 10Ti
   storageClassName: shared-vast
-  

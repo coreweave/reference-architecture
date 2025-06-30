@@ -22,7 +22,7 @@ helm repo update
 Follow the steps in the [Observability Setup](../../observability/basic/README.md) to install Prometheus and Grafana, which are required for monitoring and visualization of metrics.
 
 ### 2. Create a ConfigMap with a Grafana Dashboard for vLLM
-You can create a ConfigMap with a Grafana dashboard for vLLM. This will allow you to visualize the metrics collected by Prometheus. You can find the dashboard JSON in [hack/manifests-grafana.yaml](./hack/manifests-grafana.yaml).
+You can create a ConfigMap with a Grafana dashboard for vLLM. This will allow you to visualize the metrics collected by Prometheus. You can find the dashboard JSON in [hack/manifests-grafana.yaml](./hack/manifests-grafana.yaml). This dashboard is created and published by the vLLM team ([docs here](https://docs.vllm.ai/en/v0.7.2/getting_started/examples/prometheus_grafana.html)) and is available in the [vLLM repository](https://github.com/vllm-project/vllm/tree/main/examples/online_serving/prometheus_grafana).
 
 You can create the namespace now if it doesn't exist yet with `kubectl create namespace inference`.
 

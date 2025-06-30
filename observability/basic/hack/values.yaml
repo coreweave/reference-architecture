@@ -1,12 +1,29 @@
-orgID: cw0000
-clusterName: inference
+orgID: cw0000 # Replace with your actual orgID
+clusterName: inference # Replace with your actual cluster name
 
 grafana:
   enabled: true
   grafana:
     ingress:
-      hosts: [&host "grafana.cw0000-inference.coreweave.app"]
+      hosts: [&host "grafana.cw0000-inference.coreweave.app"] # Replace with your actual Grafana hostname, using your orgID and clusterName
       tls:
         - secretName: grafana-tls
           hosts:
             - *host
+
+# If your cluster was created BEFORE 2025-07-04, you MUST use the values below.
+# If your cluster was created AFTER 2025-07-04, you can comment these values out.
+prometheus:
+  prometheusOperator:
+    enabled: false
+  defaultRules:
+    create: false
+  prometheus:
+    # Can also add agent mode if you only want to forward metrics
+    prometheusSpec:
+      # remoteWrite: FILL IF NEEDED
+      image:
+        registry: quay.io
+        repository: prometheus/prometheus
+        tag: v2.54.0
+      version: 2.54.0
