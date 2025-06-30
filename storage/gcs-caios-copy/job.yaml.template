@@ -1,0 +1,94 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gcs-to-caios-copy
+  namespace: data-migration
+spec:
+  completions: 32            # = number of shards
+  parallelism: 32            # = how many run at once (pods)
+  completionMode: Indexed
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 345600 # 4 days
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+      - name: fetch-shards
+        image: rclone/rclone:latest
+        resources:
+          requests:
+            cpu: "4"
+            memory: "32Gi"
+          limits:
+            memory: "64Gi"
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/secrets/google/key.json
+        - name: SHARDS_BUCKET               # handy for logs
+          value: <YOUR_SHARDS_BUCKET_NAME> # UPDATE THIS
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -euo pipefail
+
+          ## NOTE: Change the shard format to shard_%03d if you use more than 99 shards
+          SHARD=$(printf "shard_%02d" ${JOB_COMPLETION_INDEX})
+          echo "[init] downloading $SHARD ➜ /work/list.txt"
+          # Pull the manifest line-list into the pod
+          rclone --config /etc/rclone/rclone.conf \
+                  cat caios:$SHARDS_BUCKET/shards/$SHARD > /work/list.txt
+        volumeMounts:
+        - mountPath: /etc/rclone
+          name: rclone-config
+          readOnly: true
+        - mountPath: /var/secrets/google
+          name: gcs-sa
+          readOnly: true
+        - mountPath: /work              # scratch space for the shard file
+          name: work
+      containers:
+      - name: rclone
+        image: rclone/rclone:latest
+        resources:
+          requests:
+            cpu: "8"
+            memory: "64Gi"
+          limits:
+            memory: "76Gi"
+        env:
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: /var/secrets/google/key.json
+        args:
+          - --config=/etc/rclone/rclone.conf
+          - copy
+          - gcs:<YOUR_GCS_BUCKET_NAME> # UPDATE THIS
+          - caios:<YOUR_CAIOS_BUCKET_NAME> # UPDATE THIS
+          - --files-from=/work/list.txt
+          - --ignore-existing
+          - --fast-list
+          - --transfers=128
+          - --checkers=256
+          - --multi-thread-streams=12
+          - --multi-thread-cutoff=64M
+          - --buffer-size=32M
+          - --progress
+          - --stats=30s
+        volumeMounts:
+        - mountPath: /etc/rclone
+          name: rclone-config
+          readOnly: true
+        - mountPath: /var/secrets/google
+          name: gcs-sa
+          readOnly: true
+        - mountPath: /work              # scratch space for the shard file
+          name: work
+
+      volumes:
+      - name: rclone-config
+        secret:
+          secretName: rclone-config
+      - name: gcs-sa
+        secret:
+          secretName: gcs-service-account
+      - name: work
+        emptyDir: {}

@@ -47,8 +47,8 @@ gcloud config set compute/zone us-east1-c
 
 ```bash
 # Set your bucket names
-export SOURCE_BUCKET="your-source-bucket-name"
 export SHARDS_BUCKET="your-shards-bucket-name" 
+export SOURCE_BUCKET="your-source-bucket-name"
 export DESTINATION_BUCKET="your-destination-bucket-name"
 ```
 
@@ -72,6 +72,7 @@ Create a Google Cloud service account with Storage Object Viewer permissions:
 5. Download the JSON key file and save it as `gcs-access-key.json`
 
 ### 5. CAIOS Credentials Setup
+This step is optional and only needed if you are using s3cmd or a similar tool to query CAIOS directly. If you are using rclone, you can skip this step as rclone will handle the credentials through its configuration.
 
 1. Obtain your CAIOS access keys from CoreWeave
 2. Copy the template and fill in your credentials:
@@ -86,7 +87,10 @@ cp caios-keys.env.template caios-keys.env
 ```bash
 cp local-rclone.conf.template local-rclone.conf
 ```
-Edit `local-rclone.conf` and replace `KEY_ID_HERE` and `KEY_SECRET_HERE` with your CAIOS credentials.
+Edit `local-rclone.conf` and replace `KEY_ID_HERE` and `KEY_SECRET_HERE` with your CAIOS credentials. You can now use rclone this way:
+```bash
+rclone --config=local-rclone.conf ls caios:bucket
+```
 
 #### Kubernetes Configuration
 ```bash
@@ -141,16 +145,21 @@ kubectl create secret generic gcs-service-account \
 ```
 
 ### 2. Configure the Job
+Copy the job template and edit it:
 
-Edit `job.yaml` and update the following environment variables:
-- `SHARDS_BUCKET`: Your shards bucket name
-- `SOURCE_BUCKET`: Your source GCS bucket name  
-- `DESTINATION_BUCKET`: Your destination CAIOS bucket name
+```bash
+cp job.yaml.template job.yaml
+```
+
+Edit `job.yaml` and update the following values:
+- `SHARDS_BUCKET` environment variable: Use your shards inventory bucket name
+- Update `<YOUR_GCS_BUCKET_NAME>` with your source GCS bucket name
+- Update `<YOUR_CAIOS_BUCKET_NAME>` with your destination CAIOS bucket name
 
 ### 3. Deploy the Job
 
 ```bash
-kubectl create -f job.yaml
+kubectl apply -f job.yaml
 ```
 
 ## Monitoring and Management
@@ -223,14 +232,13 @@ time rclone copy gcs:$SOURCE_BUCKET/path/to/test/file caios:$DESTINATION_BUCKET 
 
 ## Configuration Reference
 
-### Environment Variables in job.yaml
+### Variables in job.yaml.template
 
 | Variable | Description |
 |----------|-------------|
 | `SHARDS_BUCKET` | CAIOS bucket containing shard manifest files |
-| `SOURCE_BUCKET` | GCS source bucket name |
-| `DESTINATION_BUCKET` | CAIOS destination bucket name |
-| `JOB_INDEX` | Automatically set pod index for logging |
+| `<YOUR_GCS_BUCKET_NAME>` | GCS source bucket name |
+| `<YOUR_CAIOS_BUCKET_NAME>` | CAIOS destination bucket name |
 
 ### File Templates
 
@@ -239,10 +247,11 @@ time rclone copy gcs:$SOURCE_BUCKET/path/to/test/file caios:$DESTINATION_BUCKET 
 | `caios-keys.env.template` | Template for CAIOS credentials |
 | `local-rclone.conf.template` | rclone config for local testing |
 | `rclone.conf.template` | rclone config for Kubernetes deployment |
+| `job.yaml.template` | job manifest template for kubernetes deployment |
 
 ## Performance Optimization
 
 - **Shard Count**: More shards = better parallelization, but more overhead
-- **Pod Resources**: Increase CPU/memory for faster transfers per pod
-- **Transfer Settings**: Tune rclone parameters based on file sizes and network
+- **Pod Resources**: Increase CPU/memory for faster transfers per pod if bottlenecks occur
+- **Transfer Settings**: Tune rclone parameters based on file sizes and network conditions
 - **Parallelism**: Balance between throughput and resource usage

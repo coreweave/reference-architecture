@@ -13,3 +13,5 @@ access_key_id = KEY_ID_HERE
 secret_access_key = KEY_SECRET_HERE
 force_path_style = false
 no_check_bucket = true
+chunk_size = 50M
+upload_concurrency = 16
