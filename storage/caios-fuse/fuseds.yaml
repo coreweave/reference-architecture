@@ -1,0 +1,112 @@
+# s3fs-daemonset.yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: s3fs-mounter-gpu
+  namespace: s3fs
+spec:
+  selector:
+    matchLabels: 
+      app: s3fs-mounter
+  template:
+    metadata:
+      labels:
+        app: s3fs-mounter
+    spec:
+      terminationGracePeriodSeconds: 30
+      hostPID: true
+      tolerations:
+      - operator: Exists         # allow scheduling on all nodes
+      volumes:
+      - name: host-mnt
+        hostPath:
+          path: /mnt
+          type: DirectoryOrCreate
+      - name: passwd
+        secret:
+          secretName: caios-passwd
+          defaultMode: 0400
+      initContainers:
+        - name: cleanup
+          image: efrecon/s3fs:1.95 # Community image for s3fs (replace at will)
+          securityContext:
+            privileged: true
+            capabilities:
+              add: ["SYS_ADMIN"]
+          command: ["/bin/sh","-c"]
+          args:
+          - |
+            MP=/hostmnt/caios
+            if mountpoint -q $MP; then
+              echo "[cleanup] found leftover mount, unmounting"
+              fusermount -u -z $MP || umount -l $MP || true
+            fi
+          volumeMounts:
+          - name: host-mnt
+            mountPath: /hostmnt
+            mountPropagation: Bidirectional
+      containers:
+        - name: s3fs
+          image: efrecon/s3fs:1.95
+          securityContext:
+            privileged: true      # needed for FUSE + host mount
+            capabilities:
+              add: ["SYS_ADMIN","SYS_RESOURCE"]
+          env:
+            - name: AWSACCESSKEYID
+              valueFrom:
+                secretKeyRef:
+                  name: caios-passwd
+                  key: passwd-s3fs
+            - name: NODE_CLASS
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.labels['node.coreweave.cloud/class']
+            - name: BUCKET_NAME
+              value: <YOUR_BUCKET_NAME> # replace with your CAIOS bucket name
+            - name: USER_GROUP_ID
+              value: <YOUR_USER_GROUP_ID> # replace with your user group ID (file permissions)
+          command: ["/bin/sh","-c"]
+          args:
+          - |
+            set -e
+            MP=/hostmnt/caios
+            mkdir -p $MP
+
+            case "$NODE_CLASS" in
+              gpu)  ENDPOINT=http://cwlota.com   ;;
+              cpu|"") ENDPOINT=https://cwobject.com ;;
+              *)    echo "[warn] unknown class '$NODE_CLASS'. Defaulting to cwobject"; ENDPOINT=https://cwobject.com ;;
+            esac
+
+            echo "[s3fs] mounting on $(hostname): $MP"
+            exec s3fs $BUCKET_NAME $MP -f \
+                -o passwd_file=/etc/passwd-s3fs \
+                -o url=$ENDPOINT \
+                -o allow_other,nonempty \
+                -o umask=0002 \
+                -o gid=$USER_GROUP_ID \
+                -o parallel_count=80 \
+                -o multipart_size=128 \
+                -o max_stat_cache_size=100000 \
+                -o connect_timeout=120 \
+                -o sigv4 \
+                -o curldbg
+          lifecycle:
+            preStop:
+              exec:
+                command:
+                - /bin/sh
+                - -c
+                - |
+                  MP=/hostmnt/caios
+                  echo "[preStop] attempting clean unmount"
+                  fusermount -u -z $MP || umount -l $MP || true
+          volumeMounts:
+          - name: host-mnt
+            mountPath: /hostmnt        # bind into host namespace
+            mountPropagation: Bidirectional
+          - name: passwd
+            mountPath: /etc/passwd-s3fs
+            subPath: passwd-s3fs
+            readOnly: true

@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fusetest
+spec:
+  replicas: 2 # Use as many replicas as you want to test (or all nodes in the cluster)
+  selector:
+    matchLabels:
+      app: fusetest
+  template:
+    metadata:
+      labels:
+        app: fusetest
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                app: fusetest
+            topologyKey: kubernetes.io/hostname
+      containers:
+      - name: worker
+        image: ubuntu:24.04
+        command: ["/bin/bash", "-c", "while true; do ls -al /data | head; sleep 5; done"]
+        volumeMounts:
+        - name: caios-host
+          mountPath: /data
+          mountPropagation: HostToContainer
+      volumes:
+      - name: caios-host
+        hostPath:
+          path: /mnt/caios
+          type: Directory
