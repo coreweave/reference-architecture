@@ -109,11 +109,11 @@ sbatch transfer.slurm
 # Check job status
 squeue -u $USER
 
-# Monitor transfer progress
-tail -f transfer_out.<job_id>
+# Monitor transfer progress (file name is based on job name)
+tail -f caios-vast-transfer_out.<job_id>
 
 # Check detailed logs
-less transfer_out.<job_id>
+less caios-vast-transfer_out.<job_id>
 ```
 
 ## Configuration
@@ -161,7 +161,7 @@ You can modify the transfer parameters in [`copy.sh`](storage/caios-to-dfs/copy.
 
 ```bash
 # View real-time progress (updated every 10 minutes)
-tail -f transfer_out.<job_id>
+tail -f caios-vast-transfer_out.<job_id>
 ```
 
 ### Verify transfer completion
@@ -172,7 +172,7 @@ echo "Source files:" $(wc -l < $WORK_DIR/files.txt)
 echo "Transferred files:" $(find $DESTINATION_PATH -type f | wc -l)
 
 # Check for any failed transfers
-grep -i "error\|failed" transfer_out.<job_id>
+grep -i "error\|failed" caios-vast-transfer_out.<job_id>
 ```
 
 ### Resume interrupted transfers

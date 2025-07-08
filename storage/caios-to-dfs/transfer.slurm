@@ -4,7 +4,7 @@
 #SBATCH --nodes=8
 #SBATCH --ntasks-per-node=8
 #SBATCH --cpus-per-task=14
-#SBATCH --output="transfer_out.%j"
+#SBATCH --output="%x_out.%j"
 #SBATCH --exclusive
 
 # Log the assigned nodes
