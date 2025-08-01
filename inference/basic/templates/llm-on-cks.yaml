@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llama-3-1-8b-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: llama-3-1-8b-server
+  template:
+    metadata:
+      labels:
+        app: llama-3-1-8b-server
+    spec:
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 2Gi
+      restartPolicy: Always
+      containers:
+        - name: vllm-server
+          image: ghcr.io/coreweave/ml-containers/vllm-tensorizer:es-fa3-te-update-f67f9ec-v0.9.2
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              vllm serve $MODEL \
+                --host 0.0.0.0 \
+                --port 8000 \
+                --tensor-parallel-size $TENSOR_PARALLEL_SIZE \
+          env:
+            - name: MODEL
+              value: "meta-llama/Llama-3.1-8B-Instruct"
+            - name: TENSOR_PARALLEL_SIZE
+              value: "1"
+            - name: HF_TOKEN
+              valueFrom:
+                secretKeyRef:
+                   name: hf-token-secret
+                   key: api_token
+          ports:
+            - containerPort: 8000
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+            limits:
+              nvidia.com/gpu: 1
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llama-3-1-8b-svc
+spec:
+  selector:
+    app: llama-3-1-8b-server
+  ports:
+    - protocol: TCP
+      port: 11434
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: open-webui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: open-webui
+  template:
+    metadata:
+      labels:
+        app: open-webui
+    spec:
+      containers:
+        - name: open-webui
+          image: ghcr.io/open-webui/open-webui:main
+          ports:
+            - containerPort: 8080
+          env:
+            - name: WEBUI_AUTH
+              value: "false"
+            - name: OPENAI_API_BASE_URL
+              value: "http://llama-3-1-8b-svc:11434/v1"
+            - name: PROVIDER
+              value: "vllm"
+            - name: MODEL_NAME
+              value: "meta-llama/Llama-3.1-8B-Instruct"
+            - name: MODEL_ENDPOINT
+              value: "http://llama-3-1-8b-svc:11434/v1/completions"
+          volumeMounts:
+            - name: open-webui-storage
+              mountPath: /app/backend/data
+      volumes:
+        - name: open-webui-storage
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: open-webui-svc
+  annotations:
+    service.beta.kubernetes.io/coreweave-load-balancer-type: public
+spec:
+  type: LoadBalancer
+  selector:
+    app: open-webui
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
