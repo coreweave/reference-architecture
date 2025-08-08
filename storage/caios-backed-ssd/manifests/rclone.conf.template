@@ -1,0 +1,10 @@
+[caios]
+type = s3
+provider = Other
+endpoint = https://cwobject.com
+access_key_id = ${AWS_ACCESS_KEY_ID}
+secret_access_key = ${AWS_SECRET_ACCESS_KEY}
+force_path_style = false
+no_check_bucket = true
+chunk_size = 50M
+upload_concurrency = 64

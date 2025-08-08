@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dev-${DEV_USERNAME}
+  namespace: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dev-${DEV_USERNAME}
+  template:
+    metadata:
+      labels:
+        app: dev-${DEV_USERNAME}
+    spec:
+      # ---------- fast local storage ----------
+      volumes:
+        - name: workdir
+          emptyDir:
+            sizeLimit: 800Gi
+        - name: rclone-config
+          secret:
+            secretName: rclone-config
+      # ---------- init container (restore) ----------
+      initContainers:
+        - name: restore
+          image: rclone/rclone:1.69
+          command: ["/bin/sh","-c"]
+          args:
+            - |
+              echo "Restoring ${DEV_USERNAME} workdir from CAIOS..."
+              rclone --config=/etc/rclone/rclone.conf --transfers 256 -L \
+                copy caios:${CAIOS_BUCKET}/${DEV_USERNAME}/workdir /workdir || true
+          env:
+            - name: USERNAME
+              value: "${DEV_USERNAME}"
+          volumeMounts:
+            - mountPath: /etc/rclone
+              name: rclone-config
+              readOnly: true
+            - name: workdir
+              mountPath: /workdir
+      # ---------- main dev container ----------
+      containers:
+        - name: dev
+          image: ubuntu:latest   # any image with your tool‑chain
+          command: ["tail", "-f", "/dev/null"]
+          ports: [{containerPort: 22}]                      # SSH (optional)
+          env: [{name: USERNAME, value: "${DEV_USERNAME}"}]
+          volumeMounts:
+            - {name: workdir, mountPath: /workspace}
+        # ---------- sidecar backup ----------
+        - name: backup
+          image: rclone/rclone:1.69
+          command: ["/bin/sh","-c"]
+          args:
+            - |
+              echo "Starting continuous sync every ${SYNC_INTERVAL}s ..."
+              while true; do
+                rclone --config=/etc/rclone/rclone.conf \
+                  sync /workdir caios:${CAIOS_BUCKET}/${DEV_USERNAME}/workdir \
+                  --quiet --s3-no-head -L
+                sleep ${SYNC_INTERVAL}
+              done
+          volumeMounts:
+            - mountPath: /workdir
+              name: workdir
+            - mountPath: /etc/rclone
+              name: rclone-config
+              readOnly: true
