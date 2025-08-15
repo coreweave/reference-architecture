@@ -21,8 +21,9 @@ spec:
         - name: {{ include "vllm-basic.name" . }}
           image: "{{ $app.image.repository }}:{{ $app.image.tag }}"
           imagePullPolicy: {{ $app.image.pullPolicy }}
+          command: {{ $app.command }}
           args:
-            - "--model"
+            - "serve"
             - "{{ $app.model }}"
             {{- range $arg := $app.extraArgs }}
             - "{{ $arg }}"

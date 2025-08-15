@@ -3,9 +3,10 @@ fullnameOverride: ""
 
 vllm:
   # ──────────────── container-level defaults ────────────────
+  command: ["vllm"]
   image:
-    repository: vllm/vllm-openai
-    tag: "v0.8.5"
+    repository: ghcr.io/coreweave/ml-containers/vllm-tensorizer
+    tag: "8552fbc-v0.10.0"
     pullPolicy: IfNotPresent
 
   model: "mistralai/Mistral-7B-Instruct-v0.3"

@@ -75,12 +75,17 @@ helm install observability ./ --namespace monitoring --create-namespace --values
 
 The chart creates an Ingress for Grafana using Traefik and TLS is managed by cert-manager.
 
-To get the credentials to Grafana, you must run the following command:
+To get the password for the `admin` user in Grafana, you must run the following command (this will get you the password):
 ```sh
 kubectl get secret observability-grafana -n monitoring -o=jsonpath='{.data.admin-password}' | base64 --decode; echo
 ```
+You need to go to the Grafana UI at the deployed endpoint and enter the username `admin` with the password returned by the command above.
 
-To get the endpoint
+To get the endpoint, run the following command:
+```sh
+kubectl get ingress observability-grafana -n monitoring -o=jsonpath='{.spec.rules[0].host}'; echo
+```
+Then go to the endpoint in your browser and log in.
 
 **NOTE**: This assumes you used the default namespace `monitoring` and default release name `observability`. If you used different values, update the commands.
 

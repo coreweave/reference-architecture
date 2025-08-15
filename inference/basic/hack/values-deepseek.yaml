@@ -7,8 +7,8 @@ vllm:
       replicaCount: 1
 
   image:
-    repository: vllm/vllm-openai
-    tag: "v0.8.5"
+    repository: ghcr.io/coreweave/ml-containers/vllm-tensorizer
+    tag: "8552fbc-v0.10.0"
 
   model: "deepseek-ai/DeepSeek-R1"
   extraArgs:
