@@ -48,7 +48,7 @@ spec:
           ports: [{containerPort: 22}]                      # SSH (optional)
           env: [{name: USERNAME, value: "${DEV_USERNAME}"}]
           volumeMounts:
-            - {name: workdir, mountPath: /workspace}
+            - {name: workdir, mountPath: /workdir}
         # ---------- sidecar backup ----------
         - name: backup
           image: rclone/rclone:1.69
