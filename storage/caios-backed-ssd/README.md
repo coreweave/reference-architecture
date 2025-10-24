@@ -36,6 +36,7 @@ no_check_bucket = true
 git clone https://github.com/coreweave/reference-architecture.git
 cd reference-architecture/storage/caios-backed-ssd
 
+## Create the 'dev' namespace
 kubectl apply -f manifests/00-namespace.yaml
 
 cp .env.sample .env
@@ -43,11 +44,14 @@ cp .env.sample .env
 ## IMPORTANT
 ## Open the new .env file and edit values in .env
 
+## Turn on allexport
+set -a
+
 source .env
 
 envsubst < manifests/rclone.conf.template > manifests/rclone.conf
-# Create rclone configuration secret
-kubectl create secret generic rclone-config \
+# Create rclone configuration secret in 'dev' namespace
+kubectl -n dev create secret generic rclone-config \
   --from-file=rclone.conf=manifests/rclone.conf
 ```
 

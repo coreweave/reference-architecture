@@ -1,0 +1,11 @@
+[caios]
+type = s3
+provider = Other
+endpoint = https://s3.ap-northeast-1.amazonaws.com # match with your AWS region
+region = ap-northeast-1 # match with your AWS region. Needed if region is other than us-east-1
+access_key_id = ${AWS_ACCESS_KEY_ID}
+secret_access_key = ${AWS_SECRET_ACCESS_KEY}
+force_path_style = false
+no_check_bucket = true
+chunk_size = 50M
+upload_concurrency = 64
