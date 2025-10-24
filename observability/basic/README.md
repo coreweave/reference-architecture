@@ -21,6 +21,7 @@ This sample installs **Prometheus** and **Grafana** for observability in your Ku
 ### 1. **Add Helm repositories** (if needed):
 
 ```sh
+helm repo add coreweave https://charts.core-services.ingress.coreweave.com
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add grafana https://grafana.github.io/helm-charts
 helm repo update
