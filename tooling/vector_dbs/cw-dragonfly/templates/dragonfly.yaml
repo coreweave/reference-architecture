@@ -1,0 +1,45 @@
+apiVersion: dragonflydb.io/v1alpha1
+kind: Dragonfly
+metadata:
+  labels:
+    app.kubernetes.io/name: dragonfly
+    app.kubernetes.io/instance: dragonfly-sample
+    app.kubernetes.io/part-of: dragonfly-operator
+    app.kubernetes.io/managed-by: kustomize
+    app.kubernetes.io/created-by: dragonfly-operator
+  name: {{ include "cw-dragonfly.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  {{- with .Values.resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.affinity }}
+  affinity:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.args }}
+  args:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .Values.snapshot }}
+  snapshot:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  env:
+    {{- if and .Values.caiosAccessKey .Values.caiosSecretKey not .Values.existingCaiosSecretName }}
+    - name: AWS_ACCESS_KEY_ID
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "cw-dragonfly.caiosSecretRef" . }}
+          key: accesskey
+    - name: AWS_SECRET_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: {{ include "cw-dragonfly.caiosSecretRef" . }}
+          key: secretkey
+    {{- end }}
+  authentication:
+    passwordFromSecret:
+      name: {{ include "cw-dragonfly.dbPasswordSecretRef" . }} 
+      key: password

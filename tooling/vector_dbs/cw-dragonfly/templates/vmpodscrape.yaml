@@ -1,0 +1,14 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: {{ include "cw-dragonfly.name" . }}
+  labels:
+    group: dragonfly
+    app: {{ include "cw-dragonfly.name" . }}
+spec:
+  podMetricsEndpoints:
+    - port: admin
+      scheme: http
+  selector:
+    matchLabels:
+      app: {{ include "cw-dragonfly.name" . }}
