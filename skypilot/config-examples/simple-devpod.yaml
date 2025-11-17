@@ -1,0 +1,14 @@
+name: mydevpod
+
+resources:
+  # Modify this below to request different resources
+  accelerators: H100_NVLINK_80GB:1  # Use 1 H100
+  image_id: docker:ghcr.io/coreweave/ml-containers/nightly-torch-extras:8b6c417-base-25110205-cuda12.9.1-ubuntu22.04-torch2.10.0a0-vision0.25.0a0-audio2.10.0a0
+  memory: 32+  # Request at least 32GB of RAM
+
+run: |
+  echo "Starting container..."
+  echo "Node info:"
+  nvidia-smi
+  echo "Available GPUs: $(nvidia-smi --list-gpus | wc -l)"
+  echo "Container ready for testing..."
