@@ -38,29 +38,36 @@ affinity:
 # caiosBucketName: <YOUR_BUCKET_NAME>
 # caiosAccessKey: <YOUR_ACCESS_KEY>
 # caiosSecretKey: <YOUR_SECRET_KEY>
-# # use if a secret with CAIOS keys already exists
+# use if a secret with CAIOS keys already exists
 # existingCaiosSecretName:
-# # defaults to sanitized chart name
+# defaults to sanitized chart name
 # caiosBucketRootPath:
 
 snapshot:
   cron: "30 7 * * *"
   enableOnMasterOnly: false
+# Use for VAST / NFS snapshot storage. Multiple timestamped snapshots require changes to CKS clusters due to ":" in snapshot names.
+# Ask your CoreWeave SA if you would like this functionality enabled
+# The default setting for this chart is a single snapshot periodically copied to persistent storage via a sidecar.
   persistentVolumeClaimSpec:
     storageClassName: shared-vast
     accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
     resources:
       requests:
         storage: 2Gi
 # Use for CAIOS snapshot storage. See above for details
 # dir: s3://{{ .Values.caiosBucketName }}/{{ include "cw-dragonfly.caiosBucketRootPath" . }}/
 
+# Cron expression for copying the single snapshot to persistent storage.
+# Copy operation should be scheduled after snapshotting and should account for time to write the snapshot.
+snapshotMoveCron: "40 7 * * *"
+
 args:
   # Use for CAIOS snapshot storage. See above for details
   # - "--s3_endpoint=cwobject.com"
   # Use this arg to only keep one snapshot
-  # - "--dbfilename=mySnapshotName"
+  - "--dbfilename=dragonfly-snapshot"
   # Use this to specify number of proactor threads (ignored in favour of CPU limit, if that is also set)
   # - --proactor_threads=4
 
@@ -69,3 +76,21 @@ dbPassword:
 # Use to specify an existing secret containing the password for the database
 existingDbPasswordSecretName:
 # If neither of these attributes are set, a random password is generated on initial install
+
+additionalVolumes:
+  - name: snapshot-permanent-storage
+    persistentVolumeClaim:
+      claimName: '{{ include "cw-dragonfly.fullname" . }}-pvc'
+
+additionalContainers:
+  - name: backup-mover
+    image: busybox
+    command:
+    - sh
+    - -c
+    - '{{ include "cw-dragonfly.backupMoverCmd" . }}'
+    volumeMounts:
+    - mountPath: /permanent-snapshots
+      name: snapshot-permanent-storage
+    - mountPath: /ephemeral-snapshots
+      name: df

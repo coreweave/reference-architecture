@@ -43,3 +43,11 @@ spec:
     passwordFromSecret:
       name: {{ include "cw-dragonfly.dbPasswordSecretRef" . }} 
       key: password
+  {{- if .Values.additionalVolumes }}
+  additionalVolumes:
+    {{- include "retemplate" (list .Values.additionalVolumes .) | nindent 4 }}
+  {{- end }}
+  {{- if .Values.additionalContainers }}
+  additionalContainers:
+    {{- include "retemplate" (list .Values.additionalContainers .) | nindent 4 }}
+  {{- end }}
