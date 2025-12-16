@@ -1,0 +1,77 @@
+# Default values for cw-dragonfly.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+# Number of Dragonfly pods
+replicaCount: 3
+
+# This is to override the chart name.
+nameOverride: ""
+fullnameOverride: ""
+
+resources:
+  # If specifying CPU and memory limits, remember to keep a ratio of 256MiB of memory per CPU
+  # If not specifying CPU limits, remember Dragonfly will try to allocate 256MiB of memory per available CPU
+  # If the ratio cannot be maintained, use the --proactor_threads arg below and do not specify a CPU limit
+  # See https://github.com/dragonflydb/dragonfly/issues/4251 for details
+  requests:
+    cpu: 500m
+    memory: 500Mi
+  limits:
+    cpu: 4
+    memory: 2Gi
+
+affinity:
+  # prefer running on CPU nodes, if available
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+          - key: node.coreweave.cloud/class
+            operator: In
+            values:
+            - cpu
+
+# CAIOS settings
+# See https://github.com/dragonflydb/dragonfly-operator/issues/399 for details on why these are unavailable for now
+# caiosBucketName: <YOUR_BUCKET_NAME>
+# caiosAccessKey: <YOUR_ACCESS_KEY>
+# caiosSecretKey: <YOUR_SECRET_KEY>
+# use if a secret with CAIOS keys already exists
+# existingCaiosSecretName:
+# defaults to sanitized chart name
+# caiosBucketRootPath:
+
+snapshot:
+  cron: "30 7 * * *"
+  enableOnMasterOnly: false
+# Use for VAST / NFS snapshot storage. See tutorial for options.
+# The default setting for this chart is a single snapshot periodically copied to persistent storage via a sidecar.
+  persistentVolumeClaimSpec:
+    storageClassName: shared-vast
+    accessModes:
+    - ReadWriteMany
+    resources:
+      requests:
+        storage: 2Gi
+# Use for CAIOS snapshot storage. See above for details
+# dir: s3://{{ .Values.caiosBucketName }}/{{ include "cw-dragonfly.caiosBucketRootPath" . }}/
+
+# Cron expression for copying the single snapshot to persistent storage.
+# Copy operation should be scheduled after snapshotting and should account for time to write the snapshot.
+snapshotCopyCron: "40 7 * * *"
+
+args:
+  # Use for CAIOS snapshot storage. See above for details
+  # - "--s3_endpoint=cwobject.com"
+  # Use this arg to only keep one snapshot
+  - "--dbfilename=dragonfly-snapshot"
+  # Use this to specify number of proactor threads (ignored in favour of CPU limit, if that is also set)
+  # - --proactor_threads=4
+
+# Use to specify a password for the database
+dbPassword:
+# Use to specify an existing secret containing the password for the database
+existingDbPasswordSecretName:
+# If neither of these attributes are set, a random password is generated on initial install
