@@ -100,7 +100,7 @@ DB password secret ref
 backup-mover cmd
 */}}
 {{- define "cw-dragonfly.backupMoverCmd" -}}
-mkdir -p /crontab && mkdir -p /permanent-snapshots/$HOSTNAME && echo "TS=\$(date +%Y%m%d_%H%M%S) && mkdir /permanent-snapshots/$HOSTNAME/\$TS && cp /ephemeral-snapshots/*.dfs /permanent-snapshots/$HOSTNAME/\$TS/" > /cp_backups.sh && echo "{{ .Values.snapshotMoveCron }} /bin/sh /cp_backups.sh > /cp_backups.log 2>&1" > /crontab/root && crond -f -c /crontab -L /crond.log
+mkdir -p /crontab && mkdir -p /permanent-snapshots/$HOSTNAME && echo "TS=\$(date +%Y%m%d_%H%M%S) && mkdir /permanent-snapshots/$HOSTNAME/\$TS && cp /ephemeral-snapshots/*.dfs /permanent-snapshots/$HOSTNAME/\$TS/" > /cp_backups.sh && echo "{{ .Values.snapshotCopyCron }} /bin/sh /cp_backups.sh > /cp_backups.log 2>&1" > /crontab/root && crond -f -c /crontab -L /crond.log
 {{- end }}
 
 {{- define "retemplate" -}}

@@ -46,8 +46,7 @@ affinity:
 snapshot:
   cron: "30 7 * * *"
   enableOnMasterOnly: false
-# Use for VAST / NFS snapshot storage. Multiple timestamped snapshots require changes to CKS clusters due to ":" in snapshot names.
-# Ask your CoreWeave SA if you would like this functionality enabled
+# Use for VAST / NFS snapshot storage. See tutorial for options.
 # The default setting for this chart is a single snapshot periodically copied to persistent storage via a sidecar.
   persistentVolumeClaimSpec:
     storageClassName: shared-vast
@@ -61,7 +60,7 @@ snapshot:
 
 # Cron expression for copying the single snapshot to persistent storage.
 # Copy operation should be scheduled after snapshotting and should account for time to write the snapshot.
-snapshotMoveCron: "40 7 * * *"
+snapshotCopyCron: "40 7 * * *"
 
 args:
   # Use for CAIOS snapshot storage. See above for details
@@ -76,21 +75,3 @@ dbPassword:
 # Use to specify an existing secret containing the password for the database
 existingDbPasswordSecretName:
 # If neither of these attributes are set, a random password is generated on initial install
-
-additionalVolumes:
-  - name: snapshot-permanent-storage
-    persistentVolumeClaim:
-      claimName: '{{ include "cw-dragonfly.fullname" . }}-pvc'
-
-additionalContainers:
-  - name: backup-mover
-    image: busybox
-    command:
-    - sh
-    - -c
-    - '{{ include "cw-dragonfly.backupMoverCmd" . }}'
-    volumeMounts:
-    - mountPath: /permanent-snapshots
-      name: snapshot-permanent-storage
-    - mountPath: /ephemeral-snapshots
-      name: df

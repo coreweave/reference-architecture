@@ -43,11 +43,21 @@ spec:
     passwordFromSecret:
       name: {{ include "cw-dragonfly.dbPasswordSecretRef" . }} 
       key: password
-  {{- if .Values.additionalVolumes }}
+  {{- if .Values.snapshotCopyCron }}
   additionalVolumes:
-    {{- include "retemplate" (list .Values.additionalVolumes .) | nindent 4 }}
-  {{- end }}
-  {{- if .Values.additionalContainers }}
+  - name: snapshot-permanent-storage
+    persistentVolumeClaim:
+      claimName: {{ include "cw-dragonfly.fullname" . }}-pvc
   additionalContainers:
-    {{- include "retemplate" (list .Values.additionalContainers .) | nindent 4 }}
-  {{- end }}
+    - name: backup-mover
+      image: busybox
+      command:
+      - sh
+      - -c
+      - {{ include "cw-dragonfly.backupMoverCmd" . }}
+      volumeMounts:
+      - mountPath: /permanent-snapshots
+        name: snapshot-permanent-storage
+      - mountPath: /ephemeral-snapshots
+        name: df
+  {{- end }}  
