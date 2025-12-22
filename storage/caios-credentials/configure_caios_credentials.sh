@@ -102,7 +102,7 @@ cat > ~/.coreweave/cw.credentials << EOF
 aws_access_key_id = ${ACCESS_KEY}
 aws_secret_access_key = ${SECRET_KEY}
 output = json
-[local]
+[cw]
 aws_access_key_id = ${ACCESS_KEY}
 aws_secret_access_key = ${SECRET_KEY}
 output = json
@@ -117,7 +117,7 @@ cat > ~/.coreweave/cw.config << EOF
 endpoint_url = https://cwlota.com
 s3 =
     addressing_style = virtual
-[profile local]
+[profile cw]
 endpoint_url = https://cwobject.com
 s3 =
     addressing_style = virtual
@@ -135,7 +135,7 @@ echo ""
 
 echo export AWS_SHARED_CREDENTIALS_FILE=\"~/.coreweave/cw.credentials\"
 echo export AWS_CONFIG_FILE=\"~/.coreweave/cw.config\"
-echo export AWS_PROFILE=\"local\"
+echo export AWS_PROFILE=\"cw\"
 
 echo "To use CoreWeave object storage from CoreWeave, copy them to your pod or SUNK home directory."
 echo "Then set the environment variables to use the default profile."
