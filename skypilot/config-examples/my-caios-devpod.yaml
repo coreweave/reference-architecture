@@ -8,7 +8,7 @@ resources:
 
 file_mounts:
   /my_data: # Mount storage bucket to /my_data in the container
-    source: cw://appliedcompute-testbucket # Change this to be your bucket name
+    source: cw://testbucket # Change this to be your bucket name
     mode: MOUNT  # MOUNT or COPY or MOUNT_CACHED. Defaults to MOUNT. Optional.
 # Sync data in my-code/ on local machine to ~/sky_workdir in the container
 # workdir: ./my-code
@@ -52,7 +52,7 @@ run: |
   
   # LOTA endpoint for CoreWeave Object Storage
   ENDPOINT_URL = 'http://cwlota.com'
-  BUCKET_NAME = 'appliedcompute-testbucket'
+  BUCKET_NAME = 'testbucket'
   
   # Read credentials from AWS config files
   session = boto3.Session(profile_name='cw')
