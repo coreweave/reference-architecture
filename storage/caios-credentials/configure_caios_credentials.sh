@@ -129,13 +129,13 @@ chmod 600 ~/.coreweave/cw.config
 echo "Credentials file created successfully at ~/.coreweave/cw.credentials"
 echo "Config file created successfully at ~/.coreweave/cw.config"
 
-echo "To use CoreWeave object storage on your laptop, execute these commands in your shell."
+echo "To use CoreWeave object storage on your local laptop, execute these commands in your shell."
 echo "You may also want to add them to your shell profile (~/.bashrc, ~/.zshrc, etc.):"
 echo ""
 
 echo export AWS_SHARED_CREDENTIALS_FILE=\"~/.coreweave/cw.credentials\"
 echo export AWS_CONFIG_FILE=\"~/.coreweave/cw.config\"
-echo export AWS_PROFILE=\"default\"
+echo export AWS_PROFILE=\"local\"
 
 echo "To use CoreWeave object storage from CoreWeave, copy them to your pod or SUNK home directory."
 echo "Then set the environment variables to use the cw profile."
