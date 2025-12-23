@@ -98,11 +98,11 @@ fi
 
 # Create the credentials file
 cat > ~/.coreweave/cw.credentials << EOF
-[default]
+[cw]
 aws_access_key_id = ${ACCESS_KEY}
 aws_secret_access_key = ${SECRET_KEY}
 output = json
-[cw]
+[local]
 aws_access_key_id = ${ACCESS_KEY}
 aws_secret_access_key = ${SECRET_KEY}
 output = json
@@ -113,12 +113,12 @@ chmod 600 ~/.coreweave/cw.credentials
 
 # Create the config file
 cat > ~/.coreweave/cw.config << EOF
-[default]
-endpoint_url = https://cwobject.com
+[cw]
+endpoint_url = https://cwlota.com
 s3 =
     addressing_style = virtual
-[profile cw]
-endpoint_url = https://cwlota.com
+[profile local]
+endpoint_url = https://cwobject.com
 s3 =
     addressing_style = virtual
 EOF
