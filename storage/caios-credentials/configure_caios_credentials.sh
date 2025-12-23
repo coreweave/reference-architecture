@@ -114,11 +114,11 @@ chmod 600 ~/.coreweave/cw.credentials
 # Create the config file
 cat > ~/.coreweave/cw.config << EOF
 [default]
-endpoint_url = https://cwlota.com
+endpoint_url = https://cwobject.com
 s3 =
     addressing_style = virtual
 [profile cw]
-endpoint_url = https://cwobject.com
+endpoint_url = https://cwlota.com
 s3 =
     addressing_style = virtual
 EOF
@@ -135,12 +135,12 @@ echo ""
 
 echo export AWS_SHARED_CREDENTIALS_FILE=\"~/.coreweave/cw.credentials\"
 echo export AWS_CONFIG_FILE=\"~/.coreweave/cw.config\"
-echo export AWS_PROFILE=\"cw\"
+echo export AWS_PROFILE=\"default\"
 
 echo "To use CoreWeave object storage from CoreWeave, copy them to your pod or SUNK home directory."
-echo "Then set the environment variables to use the default profile."
+echo "Then set the environment variables to use the cw profile."
 
 echo export AWS_SHARED_CREDENTIALS_FILE=\"~/.coreweave/cw.credentials\"
 echo export AWS_CONFIG_FILE=\"~/.coreweave/cw.config\"
-echo export AWS_PROFILE=\"default\"
+echo export AWS_PROFILE=\"cw\"
 
