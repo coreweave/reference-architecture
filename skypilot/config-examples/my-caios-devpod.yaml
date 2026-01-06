@@ -8,7 +8,7 @@ resources:
 
 file_mounts:
   /my_data: # Mount storage bucket to /my_data in the container
-    source: cw://testbucket # Change this to be your bucket name
+    source: cw://BUCKETNAME # Change this to be your bucket name
     mode: MOUNT  # MOUNT or COPY or MOUNT_CACHED. Defaults to MOUNT. Optional.
 # Sync data in my-code/ on local machine to ~/sky_workdir in the container
 # workdir: ./my-code
@@ -37,13 +37,6 @@ setup: |
   pip install boto3
 
 run: |
-  echo "Starting container..."
-  echo "Node info:"
-  nvidia-smi
-  echo "Available GPUs: $(nvidia-smi --list-gpus | wc -l)"
-  echo "Container ready for testing..."
-
-
   echo "Testing CAIOS bucket access with boto3..."
   python3 << 'EOF'
   import boto3
@@ -52,7 +45,7 @@ run: |
   
   # LOTA endpoint for CoreWeave Object Storage
   ENDPOINT_URL = 'http://cwlota.com'
-  BUCKET_NAME = 'testbucket'
+  BUCKET_NAME = 'BUCKET_NAME'
   
   # Read credentials from AWS config files
   session = boto3.Session(profile_name='cw')
