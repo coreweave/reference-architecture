@@ -22,6 +22,12 @@ A multi-node distributed training configuration using PyTorch's Distributed Data
 
 **Use Case:** Large-scale distributed training across multiple nodes for computationally intensive models.
 
+### 4. my-caios-devpod.yaml
+
+A development environment configuration demonstrating CoreWeave Object Storage (CAIOS) integration with boto3 for reading, writing, and listing objects. If you have not yet configured CAIOS credentials, please follow the guidance in [this section](https://github.com/coreweave/reference-architecture/tree/main/storage/caios-credentials) to automatically configure CAIOS credentials. 
+
+**Use Case:** Testing and validating CAIOS bucket access with AWS-compatible tools in a GPU-accelerated development environment. 
+
 ## Getting Started
 
 To use any of these configurations:
