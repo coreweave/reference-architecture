@@ -1,0 +1,103 @@
+# DFS Shared PVC - Customer Example Manifest
+#
+# This manifest demonstrates how to share a distributed file storage (DFS)
+# PersistentVolumeClaim across multiple Kubernetes namespaces with different
+# access modes. Requires VAST CSI driver for source PVC.
+#
+# Usage:
+#   1. Copy this file and modify the source and targets for your use case
+#   2. Apply: ./share-pvc.sh apply -f customer-example.yaml
+#   3. List:  ./share-pvc.sh list -f customer-example.yaml
+#   4. Validate: ./share-pvc.sh validate -f customer-example.yaml
+#   5. Delete: ./share-pvc.sh delete -f customer-example.yaml
+#
+# Documentation: https://github.com/coreweave/kubernetes-cloud/tree/master/docs/storage
+
+---
+apiVersion: v1
+kind: DFSShareConfig
+metadata:
+  # Unique name for this share configuration
+  name: example-data-shares
+
+# Source PVC to share (must exist and be bound)
+source:
+  pvc: my-data-volume          # Name of the source PVC
+  namespace: production         # Namespace where the source PVC exists
+
+# Target PVCs to create (can be multiple)
+targets:
+  # Example 1: Development environment (read-write access)
+  - pvc: dev-data               # Name for the new PVC in target namespace
+    namespace: development      # Target namespace (will be created if needed)
+    readOnly: false             # false = read-write, true = read-only
+
+  # Example 2: Staging environment (read-only for safety)
+  - pvc: staging-data
+    namespace: staging
+    readOnly: true              # Read-only prevents accidental modifications
+
+  # Example 3: QA environment (read-only for testing)
+  - pvc: qa-test-data
+    namespace: qa
+    readOnly: true
+
+  # Example 4: Analytics team (read-only access)
+  - pvc: analytics-data
+    namespace: analytics
+    readOnly: true
+
+# Optional: Labels applied to all created PVs
+# These help with organization, tracking, and cleanup
+labels:
+  # Standard labels
+  managed-by: platform-team     # Who manages these shares
+  environment: multi            # Which environment(s) this affects
+  
+  # Custom labels for your use case
+  project: customer-portal
+  cost-center: engineering
+  data-classification: internal
+  
+  # Lifecycle labels
+  created-date: "2026-01-08"
+  review-date: "2026-07-08"     # When to review these shares
+  
+  # Tracking labels
+  ticket-id: PROJ-1234
+  owner: platform-ops@company.com
+
+---
+# You can include multiple DFSShareConfig resources in one file
+# Each will be processed independently
+
+apiVersion: v1
+kind: DFSShareConfig
+metadata:
+  name: ml-training-shares
+
+source:
+  pvc: training-datasets
+  namespace: ml-production
+
+targets:
+  # Data scientists need read-write for experiments
+  - pvc: experiment-data
+    namespace: data-science
+    readOnly: false
+
+  # Training jobs only need read access
+  - pvc: training-input
+    namespace: ml-training
+    readOnly: true
+
+  # Model serving only needs read access
+  - pvc: model-data
+    namespace: ml-serving
+    readOnly: true
+
+labels:
+  team: machine-learning
+  dataset-version: v2.5.0
+  purpose: model-training
+  compliance: data-retention-90d

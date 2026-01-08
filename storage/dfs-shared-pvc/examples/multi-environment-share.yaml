@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: DFSShareConfig
+metadata:
+  name: production-data-sharing
+source:
+  pvc: production-data
+  namespace: production
+targets:
+  - pvc: prod-data
+    namespace: development
+    readOnly: false
+  - pvc: prod-data-readonly
+    namespace: analytics
+    readOnly: true
+  - pvc: prod-backup
+    namespace: staging
+    readOnly: false
+labels:
+  environment: production
+  managed-by: platform-team

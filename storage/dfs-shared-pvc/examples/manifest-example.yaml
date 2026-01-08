@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: DFSShareConfig
+metadata:
+  name: ml-dataset-shares
+source:
+  pvc: training-data
+  namespace: ml-production
+targets:
+  - pvc: training-data
+    namespace: ml-dev
+    readOnly: false
+  - pvc: training-data-ro
+    namespace: ml-staging
+    readOnly: true
+  - pvc: validation-data
+    namespace: ml-qa
+    readOnly: true
+labels:
+  team: ml-engineering
+  owner: ml-ops
+  project: model-training
