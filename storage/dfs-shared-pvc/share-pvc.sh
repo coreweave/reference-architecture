@@ -322,9 +322,17 @@ parse_manifest() {
         fi
         
         if [[ "$in_labels" == "true" && "$line" =~ ^[[:space:]]+[a-zA-Z] ]]; then
-            local key=$(echo "$line" | sed 's/^ *//' | sed 's/: .*//')
-            local value=$(echo "$line" | sed 's/.*: *//' | sed 's/ *$//')
-            echo "LABEL=$key=$value"
+            local key
+            key=$(echo "$line" | sed 's/^ *//' | sed 's/: .*//')
+            local value
+            value=$(echo "$line" | sed 's/.*: *//' | sed 's/ *$//')
+            # Combine key and value and safely single-quote the result so it can be eval'ed without code injection.
+            local combined
+            combined="${key}=${value}"
+            # Escape any single quotes in the combined string for safe single-quoting in the shell.
+            local escaped_combined
+            escaped_combined=$(printf "%s" "$combined" | sed "s/'/'\"'\"'/g")
+            echo "LABEL='$escaped_combined'"
         fi
     done < "$file"
 }
