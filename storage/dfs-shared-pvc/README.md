@@ -4,7 +4,7 @@ Full lifecycle management for sharing distributed file storage (DFS) persistent 
 
 ## Overview
 
-This script enables seamless sharing of distributed file storage volumes across multiple Kubernetes namespaces using the VAST CSI driver. It provides a complete command-line interface with subcommands for managing the entire lifecycle of shared DFS PVCs - from creation through validation, reconciliation, and cleanup
+This script enables seamless sharing of distributed file storage volumes across multiple Kubernetes namespaces using the VAST CSI driver. It provides a complete command-line interface with subcommands for managing the entire lifecycle of shared DFS PVCs - from creation through validation, reconciliation, and cleanup.
 
 ## Prerequisites
 
