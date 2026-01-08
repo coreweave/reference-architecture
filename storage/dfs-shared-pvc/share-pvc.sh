@@ -490,7 +490,8 @@ metadata:
     coreweave.com/target-pvc: ${target_pvc}
     coreweave.com/target-namespace: ${target_namespace}
     coreweave.com/shared-by: dfs-shared-pvc-script
-${extra_labels}spec:
+$(printf '%s' "$extra_labels")
+  spec:
   capacity:
     storage: ${capacity}
   accessModes:
