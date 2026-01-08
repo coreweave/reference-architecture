@@ -43,8 +43,8 @@ usage() {
     cat << EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Comprehensive test suite for DFS shared PVC script.
-Tests distributed file storage (DFS) volume sharing with VAST CSI driver.
+Comprehensive test suite for share-pvc.sh (DFS shared PVC script).
+Tests how share-pvc.sh performs distributed file storage (DFS) volume sharing with the VAST CSI driver.
 
 Options:
   -v, --verbose          Enable verbose output (shows all commands and details)
