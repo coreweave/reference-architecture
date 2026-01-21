@@ -2,7 +2,7 @@
 
 A Kubernetes utility script for rebinding Persistent Volume Claims (PVCs) across namespaces.
 
-> **Note**: Always delete rebound (child) PVCs before deleting the original (base) PVC to avoid stale handles and stuck pods. See [CoreWeave PVMO Considerations](#coreweave-pvmo-considerations) for details.
+> **Note**: Always delete rebound (child) PVCs before deleting the original (base) PVC to avoid stale handles and stuck pods. See [Proper teardown procedure](#proper-teardown-procedure) for details.
 
 ## Overview
 
