@@ -20,7 +20,7 @@ A Kubernetes utility script for rebinding Persistent Volume Claims (PVCs) across
 Download the script: 
 
 ```bash
-curl -O https://raw.githubusercontent.com/your-repo/rebind-pvc/main/rebind-pvc.sh
+curl -O https://raw.githubusercontent.com/coreweave/reference-architecture/storage/rebind-pvc/main/rebind-pvc.sh
 ```
 
 Make it executable: 
