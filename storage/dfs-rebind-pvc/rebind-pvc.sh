@@ -6,6 +6,14 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
+if ! command -v kubectl &> /dev/null; then
+    echo "Error: kubectl is not installed or not in PATH"
+    exit 1
+fi
+
+TMPDIR=$(mktemp -d)
+trap "rm -rf $TMPDIR" EXIT
+
 if [[ $# -lt 3 ]]; then
     echo "Usage: $0 <original-pvc> <original-namespace> <new-namespace> [new-pvc-name]"
     exit 1
@@ -48,7 +56,7 @@ echo "$PV_JSON" | jq -r '
         "    volumeAttributes:", 
         (to_entries[] | "      \(.key): \"\(.value)\"") 
     else empty end
-' > pv_attributes.yaml
+' > "$TMPDIR/pv_attributes.yaml"
 
 echo "$PV_JSON" | jq -r '
     .spec.mountOptions | 
@@ -56,7 +64,7 @@ echo "$PV_JSON" | jq -r '
         "  mountOptions:", 
         (.[] | "    - \(.)") 
     else empty end
-' > pv_mount_options.yaml
+' > "$TMPDIR/pv_mount_options.yaml"
 
 cat > "${NEW_PV}.yaml" <<EOF
 apiVersion: v1
@@ -73,8 +81,8 @@ spec:
   volumeMode: Filesystem
 EOF
 
-if [[ -s pv_mount_options.yaml ]]; then
-    cat pv_mount_options.yaml >> "${NEW_PV}.yaml"
+if [[ -s "$TMPDIR/pv_mount_options.yaml" ]]; then
+    cat "$TMPDIR/pv_mount_options.yaml" >> "${NEW_PV}.yaml"
 fi
 
 cat >> "${NEW_PV}.yaml" <<EOF
@@ -84,8 +92,8 @@ cat >> "${NEW_PV}.yaml" <<EOF
     readOnly: false
 EOF
 
-if [[ -s pv_attributes.yaml ]]; then
-    cat pv_attributes.yaml >> "${NEW_PV}.yaml"
+if [[ -s "$TMPDIR/pv_attributes.yaml" ]]; then
+    cat "$TMPDIR/pv_attributes.yaml" >> "${NEW_PV}.yaml"
 fi
 
 cat > "${NEW_PVC}-${NEW_NS}.yaml" <<EOF
@@ -103,8 +111,6 @@ spec:
   storageClassName: ${STORAGE_CLASS}
   volumeName: ${NEW_PV}
 EOF
-
-rm -f pv_attributes.yaml pv_mount_options.yaml
 
 echo ""
 echo "Manifests created successfully!"
