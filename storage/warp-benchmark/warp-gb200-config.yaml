@@ -1,0 +1,144 @@
+# Example values file using configFile option instead of warpConfiguration
+# This example demonstrates how to use a full YAML config from https://github.com/minio/warp/tree/master/yml-samples
+# Note: The warp-client property is automatically added by the Helm chart based on replicaCount
+
+# n - 1; n=nodeCount
+replicaCount: 33
+
+image:
+  repository: minio/warp
+  version: v1.0.8
+  pullPolicy: IfNotPresent
+
+configFile: |
+  warp:
+    api: v1
+    benchmark: get # type of workload; get is what most customers need; get/put/mixed
+    quiet: false
+    no-color: false
+    json: false
+    # warp-client is auto-generated, no need to specify it here
+
+    remote:
+      region: us-west-04
+      access-key: ''
+      secret-key: ''
+      host:
+       - cwlota.com
+      insecure: true
+      lookup: host
+      bucket: gb200-benchmark
+
+    params:
+      # Duration to run the benchmark
+      duration: 5m
+
+      # Concurrent operations to run per warp instance
+      concurrent: 300
+
+      # The number of objects to upload before starting the benchmark
+      objects: 1000 # how many objects client puts in bucket before read
+
+      # Properties of uploaded objects
+      obj:
+        # Size of each uploaded object
+        size: 50MiB # small objects = less performance from lota; 50MiB is typical of customer workloads
+
+        # Randomize the size of each object
+        rand-size: false
+
+      # Use automatic termination when traffic stabilizes
+      autoterm:
+        enabled: false
+        dur: 10s
+        pct: 7.5
+
+      # Do not clear bucket before or after running benchmarks; set to true to leave the objects after a test
+      no-clear: false
+
+      # Leave benchmark data. Do not run cleanup after benchmark
+      keep-data: false
+
+    # Custom IO properties
+    io:
+      # Use a custom prefix
+      prefix: benchmark-
+
+      # Do not use separate prefix for each thread
+      no-prefix: false
+
+      # Add MD5 sum to uploads
+      md5: false
+
+      # Disable multipart uploads
+      disable-multipart: false
+
+      # Server-side sse-s3 encrypt/decrypt objects
+      sse-s3-encrypt: false
+
+      # Override storage class
+      storage-class: STANDARD
+
+    # Analysis settings
+    analyze:
+      verbose: false
+
+    # Advanced settings
+    advanced:
+      stress: false
+      debug: false
+      disable-http-keepalive: false
+      http2: false
+      host-select: weighed
+      resolve-host: false
+      sndbuf: 32768
+      rcvbuf: 32768
+
+
+serviceAccount:
+  create: true
+
+securityContext:
+  readOnlyRootFilesystem: true
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+service:
+  port: 7761
+
+clientResources: {}
+serverResources: {}
+nodeSelector: {}
+
+tolerations:
+  - operator: Exists
+    key: is_gpu
+  - operator: Exists
+    key: node.coreweave.cloud/reserved
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: node.coreweave.cloud/state
+              operator: In
+              values:
+                - production
+            - key: node.coreweave.cloud/class
+              operator: In
+              values:
+                - gpu
+
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/instance
+              operator: In
+              values:
+                - warp
+        topologyKey: kubernetes.io/hostname
