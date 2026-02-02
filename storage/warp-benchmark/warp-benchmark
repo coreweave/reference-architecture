@@ -74,8 +74,8 @@ echo ""
 # ============================================================================
 # Get the API token from kubeconfig
 echo "Extracting API token from kubeconfig..."
-API_ACCESS_TOKEN=$(kubectl config view --raw -o jsonpath='{.users[0].user.token}')
-API_TOKEN="${API_ACCESS_TOKEN}"
+API_TOKEN=$(kubectl config view --raw -o jsonpath='{.users[0].user.token}')
+
 
 print_info "Object Storage API credentials are required."
 
