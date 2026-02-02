@@ -1,0 +1,242 @@
+#!/bin/bash 
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Function to print colored output
+print_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+print_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+print_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
+}
+
+# Check if required tools are available
+if ! command -v kubectl &> /dev/null; then
+    print_error "kubectl not found. Please install kubectl."
+    exit 1
+fi
+
+if ! command -v helm &> /dev/null; then
+    print_error "helm not found. Please install helm."
+    exit 1
+fi
+
+if ! command -v jq &> /dev/null; then
+    print_error "jq not found. Please install jq."
+    exit 1
+fi
+
+if ! command -v curl &> /dev/null; then
+    print_error "curl not found. Please install curl."
+    exit 1
+fi
+
+# ============================================================================
+# 1. Get current Kubernetes context and cluster information
+# ============================================================================
+
+print_info "Checking current Kubernetes context..."
+CURRENT_CONTEXT=$(kubectl config current-context)
+print_info "Current context: ${CURRENT_CONTEXT}"
+
+# Get cluster name from context
+CLUSTER_NAME=$(kubectl config view -o jsonpath="{.contexts[?(@.name==\"${CURRENT_CONTEXT}\")].context.cluster}")
+print_info "Cluster name: ${CLUSTER_NAME}"
+
+# Get total number of nodes
+TOTAL_NODES=$(kubectl get nodes --no-headers | wc -l | tr -d ' ')
+print_info "Total nodes in cluster: ${TOTAL_NODES}"
+
+# Get number of GPU nodes (assuming nodes with GPU have nvidia.com/gpu resource)
+GPU_NODES=$(kubectl get nodes -o json | jq '[.items[] | select(.status.capacity."nvidia.com/gpu" != null)] | length')
+print_info "GPU nodes in cluster: ${GPU_NODES}"
+
+# Get cluster region (this may vary based on cloud provider)
+# For CoreWeave, check node labels
+CLUSTER_REGION=$(kubectl get nodes -o json | jq -r '.items[0].metadata.labels."topology.kubernetes.io/region" // .items[0].metadata.labels."failure-domain.beta.kubernetes.io/region" // "unknown"')
+print_info "Cluster region: ${CLUSTER_REGION}"
+
+echo ""
+
+# ============================================================================
+# 2. Get Object Storage API credentials
+# ============================================================================
+# Get the API token from kubeconfig
+echo "Extracting API token from kubeconfig..."
+API_TOKEN=$(kubectl config view --raw -o jsonpath='{.users[0].user.token}')
+
+
+print_info "Object Storage API credentials are required."
+
+API_BASE="https://api.coreweave.com"
+
+# Check if credentials are already set as environment variables
+if [[ -n "${ACCESS_KEY_ID:-}" && -n "${ACCESS_KEY_SECRET:-}" ]]; then
+    print_info "Using existing credentials from environment variables"
+else
+    API_ENDPOINT="https://api.coreweave.com/v1/cwobject/access-key"
+
+
+
+    # Create an AI Object Storage access key
+    print_info "Creating AI Object Storage access key..."
+
+    # Create JSON payload
+    JSON_PAYLOAD='{"durationSeconds": 0}'
+
+    # Make API call to get access key and secret key
+    echo "Requesting access credentials from CoreWeave API..."
+    RESPONSE=$(curl -s -X POST "$API_ENDPOINT" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $API_ACCESS_TOKEN" \
+        -d "$JSON_PAYLOAD")
+
+    # Check if curl was successful
+    if [ $? -ne 0 ]; then
+        print_error "API request failed"
+        exit 1
+    fi
+
+    # Extract accessKeyID and secretKey from response
+    ACCESS_KEY_ID="$(jq -r '.accessKeyId // empty' <<<"${RESPONSE}")"
+    ACCESS_KEY_SECRET="$(jq -r '.secretKey // empty' <<<"${RESPONSE}")"
+
+    if [[ -z "${ACCESS_KEY_ID}" || -z "${ACCESS_KEY_SECRET}" ]]; then
+      print_error "Failed to create AI Object Storage access key."
+      print_error "Response: ${RESPONSE}"
+      exit 1
+    fi
+fi
+
+
+# ============================================================================
+# 3. List existing buckets and select one
+# ============================================================================
+
+print_info "Fetching available buckets..."
+
+AUTH_HEADERS=(
+  -H "Authorization: Bearer ${API_TOKEN}"
+  -H "Content-Type: application/json"
+)
+
+# 1) Fetch all buckets once
+BUCKET_NAMES="$(
+  curl -sS "${API_BASE}/v1/cwobject/bucket-info" \
+    "${AUTH_HEADERS[@]}" \
+  | jq -r '.info[].name'
+)"
+
+print_info "All available buckets:"
+while IFS= read -r bucket; do
+  [[ -z "$bucket" ]] && continue
+  echo "  - ${bucket}"
+done <<<"${BUCKET_NAMES}"
+echo ""
+
+# Prompt for bucket name with validation
+while true; do
+    read -p "Enter bucket name: " BUCKET_NAME
+
+    if [ -z "${BUCKET_NAME}" ]; then
+        print_error "Bucket name is required."
+        continue
+    fi
+
+    # Check if bucket exists in BUCKET_NAMES
+    if echo "${BUCKET_NAMES}" | grep -q "^${BUCKET_NAME}$"; then
+        break
+    else
+        print_error "Bucket '${BUCKET_NAME}' not found in available buckets. Please try again."
+    fi
+done
+
+print_info "Selected bucket: ${BUCKET_NAME}"
+echo ""
+
+# ============================================================================
+# 2. Calculate number of replicas
+# ============================================================================
+
+
+DEFAULT_REPLICAS=$((GPU_NODES > 1 ? GPU_NODES - 1 : 1))
+
+print_info "Default replicas based on GPU nodes: ${DEFAULT_REPLICAS}"
+read -p "Enter number of replicas (or press Enter for default ${DEFAULT_REPLICAS}): " REPLICAS_OVERRIDE
+
+if [ -z "${REPLICAS_OVERRIDE}" ]; then
+    REPLICAS=${DEFAULT_REPLICAS}
+else
+    REPLICAS=${REPLICAS_OVERRIDE}
+fi
+
+print_info "Using ${REPLICAS} replicas for warp benchmark."
+echo ""
+
+# ============================================================================
+# 3. Create/modify warp config file
+# ============================================================================
+
+WARP_CONFIG_FILE="warp-config-generated.yaml"
+print_info "Creating warp configuration file: ${WARP_CONFIG_FILE}"
+
+
+curl -o "${WARP_CONFIG_FILE}" https://raw.githubusercontent.com/coreweave/reference-architecture/main/storage/warp-benchmark/warp-gb200-config.yaml
+
+# Create a temporary file for all modifications
+TMP_FILE=$(mktemp)
+echo $TMP_FILE
+# Modify the replicaCount in the downloaded config file
+sed "s/.*replicaCount:.*/replicaCount: ${REPLICAS}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
+print_info "Updated replicaCount to ${REPLICAS}"
+
+# Modify the region in the config file
+sed "s/^\( *\)region:.*/\1region: ${CLUSTER_REGION}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
+print_info "Updated region to ${CLUSTER_REGION}"
+
+# Modify the bucket in the config file
+sed "s/^\( *\)bucket:.*/\1bucket: ${BUCKET_NAME}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
+print_info "Updated bucket to ${BUCKET_NAME}"
+
+# Modify the access-key and secret-key in the config file
+sed "s/^\( *\)access-key:.*/\1access-key: ${ACCESS_KEY_ID}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
+sed "s/^\( *\)secret-key:.*/\1secret-key: ${ACCESS_KEY_SECRET}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
+print_info "Updated access credentials"
+
+
+# ============================================================================
+# 4. Display summary and next steps
+# ============================================================================
+
+print_info "=== Benchmark Configuration Summary ==="
+echo "Cluster: ${CLUSTER_NAME}"
+echo "Context: ${CURRENT_CONTEXT}"
+echo "Region: ${CLUSTER_REGION}"
+echo "GPU Nodes: ${GPU_NODES}"
+echo "Bucket: ${BUCKET_NAME}"
+echo "Replicas: ${REPLICAS}"
+echo "Config File: ${WARP_CONFIG_FILE}"
+echo ""
+
+print_info "Next steps:"
+echo "1. Review the generated config file: ${WARP_CONFIG_FILE}"
+echo "2. Install or upgrade warp helm chart:"
+echo "   git clone https://github.com/minio/warp.git"
+echo "   cd warp/k8s"
+echo "   helm install warp -n <<NAMESPACE>> ./helm -f ${WARP_CONFIG_FILE}"
+echo "3. Monitor the benchmark execution"
+echo ""
+
+
+print_info "Benchmark setup complete!"
