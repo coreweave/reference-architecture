@@ -89,7 +89,7 @@ else
 
 
 
-    # Create a temporary AI Object Storage access key
+    # Create an AI Object Storage access key
     print_info "Creating AI Object Storage access key..."
 
     # Create JSON payload
