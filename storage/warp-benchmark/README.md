@@ -13,7 +13,7 @@ You must have a valid KUBECONFIG, and at least one bucket already set up with po
 ## Benchmarking
 
 The `warp-benchmark` script collects information about your Kubernetes cluster for creating a warp configuration file. 
-If environment variables (`ACCESS_KEY_ID` and `SECRET_KEY`) are set, it will use those variables for storage access. Alternatively, it can create a key to configure the benchmark. 
+If environment variables (`ACCESS_KEY_ID` and `ACCESS_KEY_SECRET`) are set, it will use those variables for storage access. Alternatively, it can create a key to configure the benchmark. 
 
 It will fetches and displays all available object storage buckets
 and prompt the user to select a target bucket for benchmarking.

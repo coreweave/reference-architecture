@@ -82,7 +82,7 @@ print_info "Object Storage API credentials are required."
 API_BASE="https://api.coreweave.com"
 
 # Check if credentials are already set as environment variables
-if [[ -n "${ACCESS_KEY_ID:-}" && -n "${SECRET_KEY:-}" ]]; then
+if [[ -n "${ACCESS_KEY_ID:-}" && -n "${ACCESS_KEY_SECRET:-}" ]]; then
     print_info "Using existing credentials from environment variables"
 else
     API_ENDPOINT="https://api.coreweave.com/v1/cwobject/access-key"
@@ -110,9 +110,9 @@ else
 
     # Extract accessKeyID and secretKey from response
     ACCESS_KEY_ID="$(jq -r '.accessKeyId // empty' <<<"${RESPONSE}")"
-    SECRET_KEY="$(jq -r '.secretKey // empty' <<<"${RESPONSE}")"
+    ACCESS_KEY_SECRET="$(jq -r '.secretKey // empty' <<<"${RESPONSE}")"
 
-    if [[ -z "${ACCESS_KEY_ID}" || -z "${SECRET_KEY}" ]]; then
+    if [[ -z "${ACCESS_KEY_ID}" || -z "${ACCESS_KEY_SECRET}" ]]; then
       print_error "Failed to create AI Object Storage access key."
       print_error "Response: ${RESPONSE}"
       exit 1
@@ -211,7 +211,7 @@ print_info "Updated bucket to ${BUCKET_NAME}"
 
 # Modify the access-key and secret-key in the config file
 sed "s/^\( *\)access-key:.*/\1access-key: ${ACCESS_KEY_ID}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
-sed "s/^\( *\)secret-key:.*/\1secret-key: ${SECRET_KEY}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
+sed "s/^\( *\)secret-key:.*/\1secret-key: ${ACCESS_KEY_SECRET}/" "${WARP_CONFIG_FILE}" > "${TMP_FILE}" && mv "${TMP_FILE}" "${WARP_CONFIG_FILE}"
 print_info "Updated access credentials"
 
 
