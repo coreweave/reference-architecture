@@ -19,6 +19,7 @@ Usage:
 
 import subprocess
 import shlex
+import sys
 import os
 from typing import Optional, Union
 
@@ -164,8 +165,6 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
         # Stream long-running commands
         ssh("tail -f /var/log/syslog", stream=True)
     """
-    import sys
-    import os
     
     if stream:
         # Set unbuffered mode for better streaming
@@ -234,8 +233,6 @@ def shell(command: Union[str, list], quiet: bool = False, check: bool = False, s
         shell(["kubectl", "get", "pods"])
         shell("s5cmd cp ...", stream=True)  # Stream output in real-time
     """
-    import sys
-    import os
     
     if isinstance(command, str):
         cmd_display = command
@@ -322,7 +319,6 @@ def bash(command: str, quiet: bool = False, stream: bool = False) -> str:
 
 
 if __name__ == "__main__":
-    import sys
     
     if len(sys.argv) > 1:
         cmd = " ".join(sys.argv[1:])
