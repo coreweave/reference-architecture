@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=128
 #SBATCH --gres=gpu:8
 #SBATCH --time=01:00:00
-#SBATCH --output=ailabs_benchmark_throughput_%j.out
-#SBATCH --error=ailabs_benchmark_throughput_%j.err
+#SBATCH --output=arena_benchmark_throughput_%j.out
+#SBATCH --error=arena_benchmark_throughput_%j.err
 
 set -e
 

@@ -34,7 +34,7 @@ if not AWS_ACCESS_KEY_ID or not AWS_SECRET_ACCESS_KEY:
 
 BUCKET = os.getenv('S3_BUCKET')
 if not BUCKET:
-    print("ERROR: S3_BUCKET not set. Please set S3_BUCKET=<orgid>-ailabs-benchmark in /mnt/data/env/.env", flush=True)
+    print("ERROR: S3_BUCKET not set. Please set S3_BUCKET=<orgid>-arena-benchmark in /mnt/data/env/.env", flush=True)
     exit(1)
 S3_ENDPOINT = os.getenv('S3_ENDPOINT_URL', "https://cwobject.com")
 PATH_PREFIX = ""  # Optional path prefix for shard files
@@ -93,7 +93,7 @@ ensure_bucket_exists()
 '''
    Shards are dummy test files with .dummy extension.
    Example listing:
-   $ aws s3 ls --human-readable --endpoint-url https://cwobject.com cw-ailabs-benchmark/
+   $ aws s3 ls --human-readable --endpoint-url https://cwobject.com cw-arena-benchmark/
     2025-11-21 21:17:42    2.5 GiB shard_000000.dummy
     2025-11-21 21:19:05    2.6 GiB shard_000001.dummy
     ...

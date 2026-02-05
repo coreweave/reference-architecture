@@ -16,21 +16,21 @@ benchmarks:
 Or via helm install/upgrade:
 
 ```bash
-helm upgrade --install ailabs ./charts/ailabs --set benchmarks.network.enabled=true
+helm upgrade --install arena ./charts/arena --set benchmarks.network.enabled=true
 ```
 
 The chart creates:
-- Namespace: `ailabs-benchmark-network`
-- Deployment: `ailabs-iperf-server`
-- Service: `ailabs-iperf-server` (ClusterIP, port 5201)
+- Namespace: `arena-benchmark-network`
+- Deployment: `arena-iperf-server`
+- Service: `arena-iperf-server` (ClusterIP, port 5201)
 - IngressRouteTCP: `iperf.<clusterDomain>` via Traefik
 
 Verify the deployment:
 
 ```bash
-kubectl get pods -n ailabs-benchmark-network
-kubectl get svc -n ailabs-benchmark-network
-kubectl get ingressroutetcp -n ailabs-benchmark-network
+kubectl get pods -n arena-benchmark-network
+kubectl get svc -n arena-benchmark-network
+kubectl get ingressroutetcp -n arena-benchmark-network
 ```
 
 ## Running Tests
@@ -39,7 +39,7 @@ kubectl get ingressroutetcp -n ailabs-benchmark-network
 
 ```bash
 # Get the service IP
-IPERF_IP=$(kubectl get svc ailabs-iperf-server -n ailabs-benchmark-network -o jsonpath='{.spec.clusterIP}')
+IPERF_IP=$(kubectl get svc arena-iperf-server -n arena-benchmark-network -o jsonpath='{.spec.clusterIP}')
 
 # Run a test pod
 kubectl run iperf-client --rm -it --image=networkstatic/iperf3:latest -- -c $IPERF_IP
@@ -49,7 +49,7 @@ kubectl run iperf-client --rm -it --image=networkstatic/iperf3:latest -- -c $IPE
 
 ```bash
 # Get the service IP
-IPERF_IP=$(kubectl get svc ailabs-iperf-server -n ailabs-benchmark-network -o jsonpath='{.spec.clusterIP}')
+IPERF_IP=$(kubectl get svc arena-iperf-server -n arena-benchmark-network -o jsonpath='{.spec.clusterIP}')
 
 # TCP bandwidth test (default)
 iperf3 -c $IPERF_IP
@@ -95,13 +95,13 @@ Note: External iperf testing via ingress may have overhead. For accurate network
 Disable via Helm:
 
 ```bash
-helm upgrade ailabs ./charts/ailabs --set benchmarks.network.enabled=false
+helm upgrade arena ./charts/arena --set benchmarks.network.enabled=false
 ```
 
 Or delete the namespace directly:
 
 ```bash
-kubectl delete namespace ailabs-benchmark-network
+kubectl delete namespace arena-benchmark-network
 ```
 
 ## Expected Results

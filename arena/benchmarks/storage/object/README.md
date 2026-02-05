@@ -19,8 +19,8 @@ S3_ENDPOINT_URL=https://cwobject.com
 LOTA_ENDPOINT_URL=http://cwlota.com
 
 # Bucket name (REQUIRED) - use your org ID as prefix
-S3_BUCKET=<orgid>-ailabs-benchmark
-# Example: S3_BUCKET=poc049-ailabs-benchmark
+S3_BUCKET=<orgid>-arena-benchmark
+# Example: S3_BUCKET=poc049-arena-benchmark
 ```
 
 ### 2. Create Dummy Shards
@@ -28,7 +28,7 @@ S3_BUCKET=<orgid>-ailabs-benchmark
 Before running benchmarks, create test data in your bucket:
 
 ```bash
-cd /mnt/data/ailabs/benchmarks/storage/object
+cd /mnt/data/arena/benchmarks/storage/object
 
 # Make script executable
 chmod +x create_dummy_shards.sh
@@ -67,7 +67,7 @@ sbatch submit_caios_lota_node_throughput_benchmark.slurm --gpu
 squeue -u $USER
 
 # View output (replace JOBID)
-tail -f ailabs_benchmark_throughput__JOBID.out
+tail -f arena_benchmark_throughput__JOBID.out
 ```
 
 ## Files

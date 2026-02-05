@@ -15,7 +15,7 @@ Environment Variables (expected from Kubernetes secrets):
     - API_ACCESS_TOKEN (for organization policy management)
 
 Usage:
-    from ailabs.object_storage_helpers import apply_policy, get_policy, list_policies
+    from arena.object_storage_helpers import apply_policy, get_policy, list_policies
     
     # Apply a policy from JSON string
     policy_json = '''

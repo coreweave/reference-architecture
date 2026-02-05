@@ -6,7 +6,7 @@ The actual NCCL tests are cloned from the CoreWeave nccl-tests repository:
 https://github.com/coreweave/nccl-tests
 
 During container startup, the repository is cloned to the remote login node at:
-`/mnt/data/ailabs/benchmarks/nccl/`
+`/mnt/data/arena/benchmarks/nccl/`
 
 ## Repository Contents
 
