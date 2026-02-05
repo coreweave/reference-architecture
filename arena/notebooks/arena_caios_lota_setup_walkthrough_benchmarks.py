@@ -10,8 +10,8 @@ def _():
     import json
     import os
     import time
-    from ailabs.object_storage_helpers import apply_policy, list_policies, delete_policy, get_s3_client, list_buckets
-    from ailabs.remote_execution_helpers import shell
+    from arena.object_storage_helpers import apply_policy, list_policies, delete_policy, get_s3_client, list_buckets
+    from arena.remote_execution_helpers import shell
     return apply_policy, delete_policy, get_s3_client, json, list_buckets, list_policies, mo, os, shell, time
 
 
