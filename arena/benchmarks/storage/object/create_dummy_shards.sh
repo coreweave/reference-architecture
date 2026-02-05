@@ -19,7 +19,7 @@ fi
 NUM_SHARDS=${1:-128}
 SHARD_SIZE_GB=2
 if [ -z "$S3_BUCKET" ]; then
-    echo "ERROR: S3_BUCKET not set. Please set S3_BUCKET=<orgid>-ailabs-benchmark in /mnt/data/env/.env"
+    echo "ERROR: S3_BUCKET not set. Please set S3_BUCKET=<orgid>-arena-benchmark in /mnt/data/env/.env"
     exit 1
 fi
 BUCKET="$S3_BUCKET"

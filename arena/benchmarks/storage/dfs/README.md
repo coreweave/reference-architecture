@@ -9,7 +9,7 @@ This directory contains benchmarks for distributed file system performance testi
 ## Remote Location
 
 During container startup, contents are synced to the login node at:
-`/mnt/data/ailabs/benchmarks/storage/dfs/`
+`/mnt/data/arena/benchmarks/storage/dfs/`
 
 ## Common Benchmarks
 
