@@ -1,13 +1,13 @@
-import marimo as mo
+import marimo
 
 __generated_with = "0.19.4"
-app = mo.App(width="medium")
+app = marimo.App(width="medium")
 
 
 @app.cell(hide_code=True)
 def _():
     # setup cell runs before anything else, recommend putting values in here
-
+    import marimo as mo
     """
     Import SSH helpers from arena library.
 
