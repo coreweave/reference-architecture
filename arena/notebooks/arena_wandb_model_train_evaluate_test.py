@@ -1,3 +1,16 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "wandb",
+#     "transformers",
+#     "datasets",
+#     "evaluate",
+#     "accelerate",
+#     "scikit-learn",
+#     "torch",
+# ]
+# ///
+
 import marimo
 
 __generated_with = "0.19.4"
