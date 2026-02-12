@@ -19,7 +19,9 @@ app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.image(src="arena/notebooks/arena/assets/banner.jpg")
+    mo.md(r"""
+    ![CoreWeave ARENA Banner](public/banner.jpg)
+    """)
     return
 
 
@@ -121,9 +123,7 @@ def _(entity, project_name, wandb):
     from datasets import load_dataset
 
     def acquire_data():
-        with wandb.init(
-            project=project_name, entity=entity, job_type="data-acquisition"
-        ):
+        with wandb.init(project=project_name, entity=entity, job_type="data-acquisition"):
             # Using dair-ai/emotion dataset (tweet_eval structure changed)
             ds = load_dataset("dair-ai/emotion")
             ds.save_to_disk("emotion_dataset")
@@ -417,10 +417,7 @@ def _(idx2label, model, tokenizer):
             "text": text,
             "predicted_emotion": idx2label[predicted_class],
             "confidence": f"{confidence:.2%}",
-            "all_scores": {
-                idx2label[i]: f"{score:.2%}"
-                for i, score in enumerate(probs[0].tolist())
-            },
+            "all_scores": {idx2label[i]: f"{score:.2%}" for i, score in enumerate(probs[0].tolist())},
         }
 
     # Test with sample texts

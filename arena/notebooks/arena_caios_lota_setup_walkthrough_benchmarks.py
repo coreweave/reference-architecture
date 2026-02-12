@@ -1,7 +1,15 @@
 import marimo
 
-__generated_with = "0.19.7"
+__generated_with = "0.19.11"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ![CoreWeave ARENA Banner](public/banner.jpg)
+    """)
+    return
 
 
 @app.cell(hide_code=True)
@@ -19,12 +27,6 @@ def _():
     from arena.remote_execution_helpers import shell
 
     return apply_policy, json, list_buckets, list_policies, mo, os, shell, time
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.image(src="arena/notebooks/arena/assets/banner.jpg")
-    return
 
 
 @app.cell(hide_code=True)
@@ -440,9 +442,7 @@ def _(mo):
 
 @app.cell
 def _(os, shell, time):
-    def run_rclone_upload_test(
-        transfers: int = 64, upload_concurrency: int = 10, chunk_size_mb: int = 50
-    ):
+    def run_rclone_upload_test(transfers: int = 64, upload_concurrency: int = 10, chunk_size_mb: int = 50):
         """Upload using rclone with optimized settings for CoreWeave."""
         bucket = os.environ.get("CW_BENCHMARK_BUCKET", "")
 
@@ -459,9 +459,7 @@ def _(os, shell, time):
         result = shell("rclone listremotes 2>/dev/null || echo ''", quiet=True)
         if "coreweave:" not in result:
             print("⚠️  Rclone 'coreweave' remote not configured.")
-            print(
-                "   This is auto-configured if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set."
-            )
+            print("   This is auto-configured if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are set.")
             print("   Or manually add to ~/.config/rclone/rclone.conf:")
             print("""
     [coreweave]
