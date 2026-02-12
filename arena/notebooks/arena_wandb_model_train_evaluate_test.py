@@ -255,7 +255,11 @@ def _(MODEL_NAME, data_collator, dataset, entity, project_name, tokenized_ds, wa
         preds, labels = eval_pred
         preds = np.argmax(preds, axis=1)
         acc = accuracy.compute(predictions=preds, references=labels)
+        if acc is None:
+            acc = {}
         f1_score = f1.compute(predictions=preds, references=labels, average="weighted")
+        if f1_score is None:
+            f1_score = {}
         return {"accuracy": acc["accuracy"], "f1": f1_score["f1"]}
 
     def train_model():

@@ -32,7 +32,8 @@ select = ["E", "F", "W", "I", "C"]
 "arena/notebooks/**/*.py" = [
  "F401", # unused import
  "F841", # unused variable
- "E999" # syntax errors
+ "E999", # syntax errors
+ "E501", # line length, since we have big multiline strings for markdown
 ]
 [tool.ruff.lint.isort]
 lines-after-imports = 1
@@ -41,4 +42,3 @@ lines-after-imports = 1
 [tool.marimo.language_servers.pylsp]
 enabled = true # Enable/disable the Python language server inside the notebook editor
 enable_ruff = true
-
