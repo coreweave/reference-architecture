@@ -11,12 +11,18 @@ dependencies = [
     "evaluate>=0.4.6",
     "httpx>=0.28.1",
     "marimo>=0.19.10",
+
     "ray>=2.53.0",
-    "ruff>=0.15.0",
     "statistics>=1.0.3.5",
     "torch>=2.10.0",
     "transformers>=5.0.0",
     "wandb>=0.24.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.0",
 ]
 
 [tool.pyright]
