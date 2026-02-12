@@ -14,13 +14,20 @@
 import marimo
 
 __generated_with = "0.19.4"
-app = marimo.App(width="medium")
+app = marimo.App(width="medium", app_title="CoreWeave ARENA")
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.image(src="arena/notebooks/arena/assets/banner.jpg")
+    return
 
 
 @app.cell(hide_code=True)
 def _():
     import marimo as mo
     from arena.remote_execution_helpers import shell
+
     return mo, shell
 
 
@@ -28,15 +35,15 @@ def _():
 def _(mo):
     mo.md(r"""
     # CoreWeave AI Labs: W&B Model Training Demo
-    
+
     /// admonition | About This Notebook
         type: info
-    
+
     This notebook is a demo adaptation of [W&B HuggingFace artifacts](https://colab.research.google.com/drive/1WObS8JQnVODKG-gxtWVokCvSkKjIWUjt?usp=sharing#scrollTo=06gXuaF8HTBD) to provide an example of AILabs use with W&B integration.
     ///
-    
+
     /// details | Pipeline Steps
-    
+
     1. **Setup** - Install dependencies
     2. **Data Acquisition** - Load and log dataset to W&B
     3. **Tokenization** - Preprocess text data
@@ -53,9 +60,9 @@ def _(mo):
     mo.md(r"""
     ---
     ## 1. Setup & Dependencies
-    
+
     /// attention | Required Packages
-    
+
     Installing: `wandb`, `transformers`, `datasets`, `evaluate`, `accelerate`, `scikit-learn`, `torch`
     ///
     """)
@@ -71,8 +78,10 @@ def _(shell):
 
 @app.cell
 def _():
-    import wandb
     import os
+
+    import wandb
+
     return os, wandb
 
 
@@ -86,7 +95,7 @@ def _():
 @app.cell
 def _(os):
     # can be "end", "checkpoint" or "false"
-    os.environ['WANDB_LOG_MODEL'] = "checkpoint"
+    os.environ["WANDB_LOG_MODEL"] = "checkpoint"
     return
 
 
@@ -95,12 +104,12 @@ def _(mo):
     mo.md(r"""
     ---
     ## 2. Data Acquisition
-    
+
     /// admonition | Dataset
         type: info
-    
+
     Loading the **dair-ai/emotion** dataset with 6 emotion classes: sadness, joy, love, anger, fear, surprise.
-    
+
     The dataset is saved locally and logged as a W&B artifact for versioning and reproducibility.
     ///
     """)
@@ -112,11 +121,13 @@ def _(entity, project_name, wandb):
     from datasets import load_dataset
 
     def acquire_data():
-        with wandb.init(project=project_name, entity=entity, job_type='data-acquisition'):
+        with wandb.init(
+            project=project_name, entity=entity, job_type="data-acquisition"
+        ):
             # Using dair-ai/emotion dataset (tweet_eval structure changed)
             ds = load_dataset("dair-ai/emotion")
             ds.save_to_disk("emotion_dataset")
-            artifact = wandb.Artifact(name='emotion_dataset_raw', type='hf_dataset')
+            artifact = wandb.Artifact(name="emotion_dataset_raw", type="hf_dataset")
             artifact.add_dir("emotion_dataset")
             wandb.log_artifact(artifact)
         return ds
@@ -130,7 +141,7 @@ def _(dataset):
     # What does the dataset look like?
     print(dataset)
     print("\nSample Record:", dataset["validation"][0])
-    
+
     # What do the labels mean?
     _idx2label = dict(enumerate(dataset["train"].features["label"].names))
     print(f"\nLabel mapping: {_idx2label}")
@@ -142,12 +153,12 @@ def _(mo):
     mo.md(r"""
     ---
     ## 3. Tokenization
-    
+
     /// admonition | Preprocessing
         type: info
-    
+
     Using **DistilRoBERTa** tokenizer to convert text to token IDs.
-    
+
     - Texts are truncated to max length
     - Sorted by length for efficient batching
     - Tokenized dataset logged as W&B artifact
@@ -158,8 +169,7 @@ def _(mo):
 
 @app.cell
 def _(dataset, entity, project_name, wandb):
-    from transformers import AutoTokenizer
-    from transformers import DataCollatorWithPadding
+    from transformers import AutoTokenizer, DataCollatorWithPadding
 
     MODEL_NAME = "distilroberta-base"
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -171,7 +181,7 @@ def _(dataset, entity, project_name, wandb):
         def length_function(examples):
             return {"length": [len(example) for example in examples["input_ids"]]}
 
-        with wandb.init(project=project_name, entity=entity, job_type='tokenization'):
+        with wandb.init(project=project_name, entity=entity, job_type="tokenization"):
             wandb.use_artifact("emotion_dataset_raw:latest")
 
             ds = dataset.map(preprocess_function, batched=True)
@@ -179,9 +189,11 @@ def _(dataset, entity, project_name, wandb):
             ds = ds.sort("length")
             ds.save_to_disk("emotion_tokenized_ds")
 
-            artifact = wandb.Artifact(name='emotion_tokenized_ds',
-                                 type='tokenized_hf_dataset',
-                                 metadata={"tokenizer": MODEL_NAME})
+            artifact = wandb.Artifact(
+                name="emotion_tokenized_ds",
+                type="tokenized_hf_dataset",
+                metadata={"tokenizer": MODEL_NAME},
+            )
 
             artifact.add_dir("emotion_tokenized_ds")
             wandb.log_artifact(artifact)
@@ -197,11 +209,11 @@ def _(mo):
     mo.md(r"""
     ---
     ## 4. Model Training
-    
+
     /// attention | Training Configuration
-    
+
     Fine-tuning **DistilRoBERTa** for emotion classification:
-    
+
     | Parameter | Value |
     |-----------|-------|
     | Learning Rate | 2e-5 |
@@ -210,10 +222,10 @@ def _(mo):
     | Optimizer | AdamW |
     | Metric | F1 (weighted) |
     ///
-    
+
     /// admonition | W&B Integration
         type: success
-    
+
     All training metrics, checkpoints, and the final model are automatically logged to Weights & Biases.
     ///
     """)
@@ -222,9 +234,13 @@ def _(mo):
 
 @app.cell
 def _(MODEL_NAME, data_collator, dataset, entity, project_name, tokenized_ds, wandb):
-    import numpy as np
     import evaluate
-    from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
+    import numpy as np
+    from transformers import (
+        AutoModelForSequenceClassification,
+        Trainer,
+        TrainingArguments,
+    )
 
     # Get label mappings
     idx2label = dict(enumerate(dataset["train"].features["label"].names))
@@ -243,7 +259,7 @@ def _(MODEL_NAME, data_collator, dataset, entity, project_name, tokenized_ds, wa
         return {"accuracy": acc["accuracy"], "f1": f1_score["f1"]}
 
     def train_model():
-        with wandb.init(project=project_name, entity=entity, job_type='training'):
+        with wandb.init(project=project_name, entity=entity, job_type="training"):
             wandb.use_artifact("emotion_tokenized_ds:latest")
 
             # Load pre-trained model with classification head
@@ -286,9 +302,11 @@ def _(MODEL_NAME, data_collator, dataset, entity, project_name, tokenized_ds, wa
 
             # Save model artifact
             t.save_model("emotion_model_final")
-            artifact = wandb.Artifact(name='emotion_model',
-                                 type='model',
-                                 metadata={"base_model": MODEL_NAME, "num_labels": num_labels})
+            artifact = wandb.Artifact(
+                name="emotion_model",
+                type="model",
+                metadata={"base_model": MODEL_NAME, "num_labels": num_labels},
+            )
             artifact.add_dir("emotion_model_final")
             wandb.log_artifact(artifact)
 
@@ -303,12 +321,12 @@ def _(mo):
     mo.md(r"""
     ---
     ## 5. Model Evaluation
-    
+
     /// admonition | Test Set Evaluation
         type: info
-    
+
     Evaluating the trained model on the held-out test set:
-    
+
     - **Accuracy** and **F1 score** computed
     - **Confusion matrix** logged to W&B
     - Results tracked for experiment comparison
@@ -320,7 +338,7 @@ def _(mo):
 @app.cell
 def _(entity, idx2label, project_name, tokenized_ds, trainer, wandb):
     def evaluate_model():
-        with wandb.init(project=project_name, entity=entity, job_type='evaluation'):
+        with wandb.init(project=project_name, entity=entity, job_type="evaluation"):
             wandb.use_artifact("emotion_model:latest")
 
             # Evaluate on test set
@@ -330,9 +348,13 @@ def _(entity, idx2label, project_name, tokenized_ds, trainer, wandb):
                 print(f"  {key}: {value:.4f}")
 
             # Log test metrics
-            wandb.log({"test_accuracy": results["eval_accuracy"],
-                       "test_f1": results["eval_f1"],
-                       "test_loss": results["eval_loss"]})
+            wandb.log(
+                {
+                    "test_accuracy": results["eval_accuracy"],
+                    "test_f1": results["eval_f1"],
+                    "test_loss": results["eval_loss"],
+                }
+            )
 
             # Create a simple classification report
             pred_output = trainer.predict(tokenized_ds["test"])
@@ -340,12 +362,16 @@ def _(entity, idx2label, project_name, tokenized_ds, trainer, wandb):
             true_labels = pred_output.label_ids
 
             # Log confusion data
-            wandb.log({"confusion_matrix": wandb.plot.confusion_matrix(
-                probs=None,
-                y_true=true_labels,
-                preds=pred_classes,
-                class_names=list(idx2label.values())
-            )})
+            wandb.log(
+                {
+                    "confusion_matrix": wandb.plot.confusion_matrix(
+                        probs=None,
+                        y_true=true_labels,
+                        preds=pred_classes,
+                        class_names=list(idx2label.values()),
+                    )
+                }
+            )
 
         return results, pred_classes
 
@@ -358,10 +384,10 @@ def _(mo):
     mo.md(r"""
     ---
     ## 6. Inference
-    
+
     /// admonition | Live Predictions
         type: success
-    
+
     Test the trained model with sample texts. The `predict_emotion()` function can be used for real-time inference.
     ///
     """)
@@ -380,18 +406,21 @@ def _(idx2label, model, tokenizer):
         inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
         # Move inputs to the same device as the model
         inputs = {k: v.to(device) for k, v in inputs.items()}
-        
+
         with torch.no_grad():
             outputs = model(**inputs)
             probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
             predicted_class = probs.argmax().item()
             confidence = probs.max().item()
-        
+
         return {
             "text": text,
             "predicted_emotion": idx2label[predicted_class],
             "confidence": f"{confidence:.2%}",
-            "all_scores": {idx2label[i]: f"{score:.2%}" for i, score in enumerate(probs[0].tolist())}
+            "all_scores": {
+                idx2label[i]: f"{score:.2%}"
+                for i, score in enumerate(probs[0].tolist())
+            },
         }
 
     # Test with sample texts
@@ -421,12 +450,12 @@ def _(mo):
     mo.md(r"""
     ---
     ## Summary
-    
+
     /// admonition | Pipeline Complete :rocket:
         type: success
-    
+
     This notebook demonstrated a complete ML pipeline with W&B integration:
-    
+
     | Step | Description | W&B Artifact |
     |------|-------------|--------------|
     | 1. Data | Load emotion dataset | `emotion_dataset_raw` |
@@ -434,7 +463,7 @@ def _(mo):
     | 3. Train | Fine-tune classifier | `emotion_model` |
     | 4. Evaluate | Test set metrics | Logged metrics |
     | 5. Inference | Live predictions | - |
-    
+
     All artifacts are versioned and tracked in W&B, enabling full reproducibility.
     ///
     """)
@@ -446,10 +475,10 @@ def _(mo):
     mo.md(r"""
     ---
     ## Scratchpad
-    
+
     /// details | Scratchpad
         type: info
-    
+
     Use the cell below for experimentation and quick tests. This cell is independent and won't affect the pipeline.
     ///
     """)
@@ -460,7 +489,7 @@ def _(mo):
 def _():
     # Scratchpad - use for experimentation
     # This cell is independent and won't affect the pipeline
-    
+
     scratch_notes = """
     Quick experiments go here...
     """
