@@ -6,7 +6,9 @@ app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.image(src="arena/notebooks/arena/assets/banner.jpg")
+    mo.md(r"""
+    ![CoreWeave ARENA Banner](public/banner.jpg)
+    """)
     return
 
 

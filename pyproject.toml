@@ -1,0 +1,50 @@
+[project]
+name = "reference-architecture"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "argparse>=1.4.0",
+    "asyncio>=4.0.0",
+    "boto3>=1.42.45",
+    "datasets>=4.5.0",
+    "evaluate>=0.4.6",
+    "httpx>=0.28.1",
+    "marimo>=0.19.10",
+
+    "ray>=2.53.0",
+    "statistics>=1.0.3.5",
+    "torch>=2.10.0",
+    "transformers>=5.0.0",
+    "wandb>=0.24.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.5.1",
+    "ruff>=0.15.0",
+]
+
+[tool.pyright]
+reportUnusedExpression = false
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "C"]
+[tool.ruff.lint.per-file-ignores]
+# Ignore common notebook noise:
+"arena/notebooks/**/*.py" = [
+ "F401", # unused import
+ "F841", # unused variable
+ "E999", # syntax errors
+ "E501", # line length, since we have big multiline strings for markdown
+]
+[tool.ruff.lint.isort]
+lines-after-imports = 1
+
+# Language server configuration
+[tool.marimo.language_servers.pylsp]
+enabled = true # Enable/disable the Python language server inside the notebook editor
+enable_ruff = true

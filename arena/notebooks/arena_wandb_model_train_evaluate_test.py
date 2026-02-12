@@ -19,7 +19,9 @@ app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.image(src="arena/notebooks/arena/assets/banner.jpg")
+    mo.md(r"""
+    ![CoreWeave ARENA Banner](public/banner.jpg)
+    """)
     return
 
 
@@ -121,9 +123,7 @@ def _(entity, project_name, wandb):
     from datasets import load_dataset
 
     def acquire_data():
-        with wandb.init(
-            project=project_name, entity=entity, job_type="data-acquisition"
-        ):
+        with wandb.init(project=project_name, entity=entity, job_type="data-acquisition"):
             # Using dair-ai/emotion dataset (tweet_eval structure changed)
             ds = load_dataset("dair-ai/emotion")
             ds.save_to_disk("emotion_dataset")
@@ -255,7 +255,11 @@ def _(MODEL_NAME, data_collator, dataset, entity, project_name, tokenized_ds, wa
         preds, labels = eval_pred
         preds = np.argmax(preds, axis=1)
         acc = accuracy.compute(predictions=preds, references=labels)
+        if acc is None:
+            acc = {}
         f1_score = f1.compute(predictions=preds, references=labels, average="weighted")
+        if f1_score is None:
+            f1_score = {}
         return {"accuracy": acc["accuracy"], "f1": f1_score["f1"]}
 
     def train_model():
@@ -417,10 +421,7 @@ def _(idx2label, model, tokenizer):
             "text": text,
             "predicted_emotion": idx2label[predicted_class],
             "confidence": f"{confidence:.2%}",
-            "all_scores": {
-                idx2label[i]: f"{score:.2%}"
-                for i, score in enumerate(probs[0].tolist())
-            },
+            "all_scores": {idx2label[i]: f"{score:.2%}" for i, score in enumerate(probs[0].tolist())},
         }
 
     # Test with sample texts

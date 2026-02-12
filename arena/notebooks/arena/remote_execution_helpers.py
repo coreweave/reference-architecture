@@ -9,7 +9,7 @@ Usage:
 
     # Quick one-liner for remote
     output = ssh("hostname")
-    
+
     # Quick one-liner for local shell
     shell("aws s3 ls")
 
@@ -17,12 +17,11 @@ Usage:
     cmd = ssh_command("htop")
 """
 
-import subprocess
-import shlex
-import sys
 import os
+import shlex
+import subprocess
+import sys
 from typing import Optional, Union
-
 
 # SSH Configuration (from environment or defaults)
 SSH_KEY = os.getenv("CW_ARENA_SSH_KEY_PATH", "/root/.ssh/id_rsa")
@@ -46,15 +45,15 @@ def ssh_command(
         The full SSH command string
     """
     ssh_flags = ["-i", SSH_KEY]
-    
+
     if allocate_tty:
         ssh_flags.append("-tt")  # Force pseudo-terminal allocation
     elif interactive:
-        ssh_flags.append("-t")   # Request pseudo-terminal
-    
+        ssh_flags.append("-t")  # Request pseudo-terminal
+
     flags_str = " ".join(ssh_flags)
     escaped_command = shlex.quote(command)
-    
+
     return f"ssh {flags_str} {SSH_HOST} {escaped_command}"
 
 
@@ -83,7 +82,7 @@ def run_remote(
         print(result.stdout)
     """
     ssh_cmd = ssh_command(command, interactive=interactive, allocate_tty=False)
-    
+
     return subprocess.run(
         ssh_cmd,
         shell=True,
@@ -97,7 +96,7 @@ def run_remote(
 def run_remote_interactive(command: str) -> int:
     """
     Run a command interactively on the remote host (with full TTY).
-    
+
     This is useful for commands that require user interaction like
     editors, htop, or anything that needs a proper terminal.
 
@@ -108,7 +107,7 @@ def run_remote_interactive(command: str) -> int:
         The exit code of the command
     """
     ssh_cmd = ssh_command(command, interactive=True, allocate_tty=True)
-    
+
     result = subprocess.run(ssh_cmd, shell=True)
     return result.returncode
 
@@ -133,7 +132,7 @@ def run_remote_stream(
             print(line, end='')
     """
     ssh_cmd = ssh_command(command, interactive=interactive, allocate_tty=False)
-    
+
     return subprocess.Popen(
         ssh_cmd,
         shell=True,
@@ -147,32 +146,32 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
     """
     Quick helper to run a command and return stdout.
     Handles errors gracefully by printing them instead of raising exceptions.
-    
+
     Args:
         command: The command to run on the remote host
         verbose: If True, print errors to stderr (default True)
         stream: If True, stream output line-by-line in real-time.
                 Note: In Marimo notebooks, streaming may still buffer until
                 cell completion due to Marimo's output capture mechanism.
-        
+
     Returns:
         The stdout output as a string (empty string on error)
-        
+
     Example:
         output = ssh("hostname")
         print(output)  # prints the remote hostname
-        
+
         # Stream long-running commands
         ssh("tail -f /var/log/syslog", stream=True)
     """
-    
+
     if stream:
         # Set unbuffered mode for better streaming
-        os.environ['PYTHONUNBUFFERED'] = '1'
-        
+        os.environ["PYTHONUNBUFFERED"] = "1"
+
         # Stream output in real-time
         ssh_cmd = ssh_command(command, interactive=False, allocate_tty=False)
-        
+
         proc = subprocess.Popen(
             ssh_cmd,
             shell=True,
@@ -181,26 +180,27 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
             text=True,
             bufsize=0,  # Unbuffered
         )
-        
+
         output_lines = []
-        for line in iter(proc.stdout.readline, ''):
-            if not line:
-                break
-            sys.stdout.write(line)
-            sys.stdout.flush()
-            output_lines.append(line)
-        
+        if proc.stdout:
+            for line in iter(proc.stdout.readline, ""):
+                if not line:
+                    break
+                sys.stdout.write(line)
+                sys.stdout.flush()
+                output_lines.append(line)
+
         proc.wait()
-        
+
         if proc.returncode != 0 and verbose:
             sys.stderr.write(f"\n[SSH] Exit code: {proc.returncode}\n")
             sys.stderr.flush()
-        
+
         return "".join(output_lines)
-    
+
     else:
         result = run_remote(command, interactive=False, capture_output=True)
-        
+
         if result.returncode != 0:
             if verbose:
                 print(f"[SSH Error] Command: {command}", file=sys.stderr)
@@ -208,14 +208,14 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
                 if result.stderr:
                     print(f"[SSH Error] {result.stderr.strip()}", file=sys.stderr)
             return ""
-        
+
         return result.stdout
 
 
-def shell(command: Union[str, list], quiet: bool = False, check: bool = False, stream: bool = False) -> str:
+def shell(command: Union[str, list], quiet: bool = False, check: bool = False, stream: bool = False) -> str:  # noqa: C901
     """
     Run a local shell command with clean output.
-    
+
     Args:
         command: Command string or list of arguments
         quiet: If True, suppress status messages (only show command output)
@@ -223,33 +223,33 @@ def shell(command: Union[str, list], quiet: bool = False, check: bool = False, s
         stream: If True, stream stdout/stderr in real-time (for long-running commands).
                 Note: In Marimo notebooks, streaming may still buffer until
                 cell completion due to Marimo's output capture mechanism.
-        
+
     Returns:
         The stdout output as a string (empty if streaming)
-        
+
     Example:
         shell("aws s3 ls")
         shell("aws configure set s3.addressing_style virtual")
         shell(["kubectl", "get", "pods"])
         shell("s5cmd cp ...", stream=True)  # Stream output in real-time
     """
-    
+
     if isinstance(command, str):
         cmd_display = command
         shell_mode = True
     else:
         cmd_display = " ".join(command)
         shell_mode = False
-    
+
     if stream:
         # Set unbuffered mode for better streaming
-        os.environ['PYTHONUNBUFFERED'] = '1'
-        
+        os.environ["PYTHONUNBUFFERED"] = "1"
+
         # Stream output in real-time
         if not quiet:
             sys.stdout.write(f"▶ {cmd_display}\n")
             sys.stdout.flush()
-        
+
         proc = subprocess.Popen(
             command,
             shell=shell_mode,
@@ -258,30 +258,31 @@ def shell(command: Union[str, list], quiet: bool = False, check: bool = False, s
             text=True,
             bufsize=0,  # Unbuffered
         )
-        
+
         # Stream output line by line
         output_lines = []
-        for line in iter(proc.stdout.readline, ''):
-            if not line:
-                break
-            sys.stdout.write(line)
-            sys.stdout.flush()
-            output_lines.append(line)
-        
+        if proc.stdout:
+            for line in iter(proc.stdout.readline, ""):
+                if not line:
+                    break
+                sys.stdout.write(line)
+                sys.stdout.flush()
+                output_lines.append(line)
+
         proc.wait()
-        
+
         if proc.returncode == 0:
             if not quiet:
-                sys.stdout.write(f"✓ Done (exit: 0)\n")
+                sys.stdout.write("✓ Done (exit: 0)\n")
                 sys.stdout.flush()
         else:
             sys.stdout.write(f"✗ Failed (exit: {proc.returncode})\n")
             sys.stdout.flush()
             if check:
                 raise subprocess.CalledProcessError(proc.returncode, command)
-        
+
         return "".join(output_lines)
-    
+
     else:
         # Capture output (original behavior)
         result = subprocess.run(
@@ -290,7 +291,7 @@ def shell(command: Union[str, list], quiet: bool = False, check: bool = False, s
             capture_output=True,
             text=True,
         )
-        
+
         if result.returncode == 0:
             if not quiet:
                 print(f"✓ {cmd_display}")
@@ -309,7 +310,7 @@ def shell(command: Union[str, list], quiet: bool = False, check: bool = False, s
 def bash(command: str, quiet: bool = False, stream: bool = False) -> str:
     """
     Alias for shell() - run a bash command.
-    
+
     Example:
         bash("echo Hello")
         bash("aws s3 ls")
@@ -319,7 +320,6 @@ def bash(command: str, quiet: bool = False, stream: bool = False) -> str:
 
 
 if __name__ == "__main__":
-    
     if len(sys.argv) > 1:
         cmd = " ".join(sys.argv[1:])
         print(f"Running: {cmd}")
