@@ -19,15 +19,27 @@ else:
     S3Client = object
 
 
+class ObjectStorageError(Exception):
+    """Base exception for ObjectStorage errors."""
+
+    pass
+
+
+class MissingCredentialsError(ObjectStorageError):
+    """Raised when required credentials are missing"""
+
+    pass
+
+
 class ObjectStorage(ABC):
     """
     Abstract base class for CAIOS operations.
     Provides s3 access and org policy management.
     """
 
-    def __init__(self, cw_token: str = "", use_lota: bool = True):
+    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
         self.use_lota = use_lota
-        self.region = os.environ.get("AWS_DEFAULT_REGION", "")
+        self.region = region if region else os.environ.get("AWS_DEFAULT_REGION", "")
         self._s3_client: S3Client | None = None
         self._api_session: requests.Session | None = None
         self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
@@ -40,45 +52,46 @@ class ObjectStorage(ABC):
         self.cw_token = cw_token if cw_token else os.environ.get("CW_TOKEN", "")
 
     @staticmethod
-    def auto(region: str = "", use_lota: bool = True) -> "ObjectStorage":
+    def auto(cw_token: str = "", use_lota: bool = True) -> "ObjectStorage":
         """
         Auto detect and create the ObjectStorage client
         Tries pod identity first, and falls back to access keys
         """
 
         try:
-            client = PodIdentityObjectStorage(use_lota=use_lota)
+            client = PodIdentityObjectStorage(cw_token, use_lota)
             client.s3_client.list_buckets()
-            print("Using pod identity authentication")
+            print("Initialized CAIOS client using pod identity authentication.")
             return client
         except Exception:
-            print("Pod identity not available, using Access Keys")
-            return AccessKeyObjectStorage(use_lota=use_lota)
+            client = AccessKeyObjectStorage(cw_token, use_lota)
+            print("Initialized CAIOS client using cw_token and access keys.")
+            return client
 
     @staticmethod
-    def with_pod_identity(use_lota: bool = True) -> "PodIdentityObjectStorage":
+    def with_pod_identity(cw_token: str = "", use_lota: bool = True) -> "PodIdentityObjectStorage":
         """
         Create ObjectStorage client using Pod Identity / Workload Identity authentication.
         """
-        return PodIdentityObjectStorage(use_lota=use_lota)
+        return PodIdentityObjectStorage(cw_token, use_lota)
 
     @staticmethod
-    def with_access_keys(use_lota: bool = True) -> "AccessKeyObjectStorage":
+    def with_access_keys(cw_token: str = "", use_lota: bool = True) -> "AccessKeyObjectStorage":
         """
         Create ObjectStorage client using Access Key authentication.
         """
-        return AccessKeyObjectStorage(use_lota=use_lota)
+        return AccessKeyObjectStorage(cw_token, use_lota)
 
     @property
     @abstractmethod
     def s3_client(self) -> S3Client:
-        "Get the boto3 s3 client. Must be implemented by subclasses."
+        "Get the boto3 s3 client"
         pass
 
     @property
     @abstractmethod
     def api_session(self) -> requests.Session:
-        "Get http session for cwobject api. Must be implemented by subclasses."
+        "Get http session for cwobject api"
         pass
 
     def list_buckets(self) -> list[str]:
@@ -181,7 +194,7 @@ class PodIdentityObjectStorage(ObjectStorage):
     """
 
     @property
-    def s3_client(self):
+    def s3_client(self) -> S3Client:
         if self._s3_client is None:
             s3_config = Config(s3={"addressing_style": self.addressing_style})
             self._s3_client = boto3.client(
@@ -216,13 +229,12 @@ class AccessKeyObjectStorage(ObjectStorage):
         super().__init__(cw_token=cw_token, use_lota=use_lota)
         self._access_key_id: str | None = None
         self._secret_access_key: str | None = None
+        if not self.cw_token:
+            raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
 
     @property
     def s3_client(self) -> S3Client:
         if self._s3_client is None:
-            if not self.cw_token:
-                raise ValueError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
-
             access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
             secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
 

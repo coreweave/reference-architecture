@@ -19,14 +19,10 @@ def _():
     import time
 
     import marimo as mo
-    from arena.object_storage_helpers import (
-        apply_policy,
-        list_buckets,
-        list_policies,
-    )
+    from arena.object_storage_helpers import MissingCredentialsError, ObjectStorage
     from arena.remote_execution_helpers import shell
 
-    return apply_policy, json, list_buckets, list_policies, mo, os, shell, time
+    return MissingCredentialsError, ObjectStorage, json, mo, os, shell, time
 
 
 @app.cell(hide_code=True)
@@ -65,14 +61,63 @@ def _(mo):
     ## Access Keys
 
     /// attention | Console Setup Required
-    Access keys are set up for you in the notebook if pod identity is set up.
+    Access keys are set up for you in the notebook automatically.
 
-    If you'd like to use object storage outside of this pod you'll need to create your Access Key and Secret Access Key in the [CoreWeave Console](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios).
+    If you'd like to use object storage outside of this notebook you'll need to create your own Access Key and Secret Access Key in the [CoreWeave Console](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios).
 
     These credentials are used for S3 API access to CAIOS and LOTA.
     ///
     """)
     return
+
+
+@app.cell(hide_code=True)
+def _(MissingCredentialsError, ObjectStorage, mo):
+    try:
+        caios = ObjectStorage.auto()
+    except MissingCredentialsError as e:
+        caios = None
+    if caios is None:
+        form = (
+            mo.md("{cw_token}")
+            .batch(cw_token=mo.ui.text(kind="password", placeholder="CW-SECRET-...", full_width=True))
+            .form(submit_button_label="Connect", bordered=False)
+        )
+        ui = mo.md(
+            f"""
+            /// admonition | Manual Initialization Required
+                type: warning
+
+            Automatic credentials not found. Please enter your [CoreWeave access token](https://console.coreweave.com/tokens) to initialize the ObjectStorage client.
+            ///
+
+            {form}
+            """
+        )
+    else:
+        form = None
+        ui = mo.md("✓ ObjectStorage client initialized successfully")
+
+    ui
+    return caios, form
+
+
+@app.cell(hide_code=True)
+def _(ObjectStorage, caios, form, mo):
+    if caios is not None:
+        storage = caios
+        status = "ObjectStorage client initialized with pod identity."
+    elif form.value and form.value.get("cw_token"):
+        storage = ObjectStorage.with_access_keys(use_lota=False, cw_token=form.value["cw_token"])
+        status = "ObjectStorage client initialized with provided token."
+    else:
+        storage = None
+        status = "Please initialize the client above"
+    mo.md(f"""
+        /// admonition
+        {status}
+        """)
+    return (storage,)
 
 
 @app.cell(hide_code=True)
@@ -133,24 +178,24 @@ def _(mo):
 
 
 @app.cell
-def _(apply_policy):
-    apply_policy("""
-            {
-              "policy": {
+def _(storage):
+    storage.apply_org_policy(
+        {
+            "policy": {
                 "version": "v1alpha1",
-                "name": "test_policy_user_full_access",
+                "name": "_policy_user_full_access",
                 "statements": [
-                  {
-                    "name": "allow-full-access",
-                    "effect": "Allow",
-                    "actions": ["s3:*"],
-                    "resources": ["*"],
-                    "principals": ["role/Admin"]
-                  }
-                ]
-              }
+                    {
+                        "name": "allow-full-access",
+                        "effect": "Allow",
+                        "actions": ["s3:*"],
+                        "resources": ["*"],
+                        "principals": ["*"],
+                    }
+                ],
             }
-            """)
+        }
+    )
     return
 
 
@@ -163,9 +208,15 @@ def _(mo):
 
 
 @app.cell
-def _(json, list_policies):
-    policies = list_policies()
+def _(json, storage):
+    policies = storage.list_org_policies()
     print(json.dumps(policies, indent=2))
+    return
+
+
+@app.cell
+def _(storage):
+    storage.create_bucket("arena-test-bucket")
     return
 
 
@@ -185,8 +236,8 @@ def _(mo):
 
 
 @app.cell
-def _(list_buckets):
-    list_buckets()
+def _(storage):
+    storage.list_buckets()
     return
 
 
