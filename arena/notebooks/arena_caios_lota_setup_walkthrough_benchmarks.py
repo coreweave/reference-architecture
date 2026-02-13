@@ -1,3 +1,10 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "boto3==1.42.45",
+#     "marimo>=0.19.11",
+# ]
+# ///
 import marimo
 
 __generated_with = "0.19.11"
@@ -63,7 +70,8 @@ def _(mo):
     /// attention | Console Setup Required
     Access keys are set up for you in the notebook automatically.
 
-    If you'd like to use object storage outside of this notebook you'll need to create your own Access Key and Secret Access Key in the [CoreWeave Console](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios).
+    If you'd like to use object storage outside of this notebook you'll need to create your own Access Key and Secret Access Key in the [CoreWeave Console](https://console.coreweave.com/object-storage/access-keys)
+    See [here](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios) for more details.
 
     These credentials are used for S3 API access to CAIOS and LOTA.
     ///
@@ -181,19 +189,17 @@ def _(mo):
 def _(storage):
     storage.apply_org_policy(
         {
-            "policy": {
-                "version": "v1alpha1",
-                "name": "_policy_user_full_access",
-                "statements": [
-                    {
-                        "name": "allow-full-access",
-                        "effect": "Allow",
-                        "actions": ["s3:*"],
-                        "resources": ["*"],
-                        "principals": ["*"],
-                    }
-                ],
-            }
+            "name": "PodIdentity",
+            "version": "v1alpha1",
+            "statements": [
+                {
+                    "name": "caios-access",
+                    "effect": "Allow",
+                    "actions": ["s3:*", "cwobject:CreateAccessKey", "cwobject:CreateAccessKeyOIDC"],
+                    "resources": ["*"],
+                    "principals": ["*:system:serviceaccount:tenant-slurm:cw-api-trusted"],
+                }
+            ],
         }
     )
     return

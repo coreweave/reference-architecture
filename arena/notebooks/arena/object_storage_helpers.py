@@ -207,11 +207,15 @@ class PodIdentityObjectStorage(ObjectStorage):
 
     @property
     def api_session(self) -> requests.Session:
+        if not self.cw_token:
+            with open("/var/run/secrets/cks.coreweave.com/serviceaccount/cks-pod-identity-token") as f:
+                self.cw_token = f.read().strip()
         if self._api_session is None:
             session = requests.Session()
             session.headers.update(
                 {
                     "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.cw_token}",
                 }
             )
             self._api_session = session
