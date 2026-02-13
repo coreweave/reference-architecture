@@ -8,10 +8,13 @@ import boto3
 import requests
 from botocore.config import Config
 
+from arena.k8s import K8s
+
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
 LOTA_ENDPOINT_URL = "https://cwlota.com"
 CAIOS_ENDPOINT_URL = "https://cwobject.com"
 DEFAULT_ACCESS_TOKEN_DURATION = 3600  # 1 hour
+DEFAULT_ADDRESSING_STYLE = "virtual"
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
@@ -31,6 +34,12 @@ class MissingCredentialsError(ObjectStorageError):
     pass
 
 
+class MissingRegionError(ObjectStorageError):
+    """Raised when unable to get a region"""
+
+    pass
+
+
 class ObjectStorage(ABC):
     """
     Abstract base class for CAIOS operations.
@@ -39,48 +48,105 @@ class ObjectStorage(ABC):
 
     def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
         self.use_lota = use_lota
-        self.region = region if region else os.environ.get("AWS_DEFAULT_REGION", "")
         self._s3_client: S3Client | None = None
         self._api_session: requests.Session | None = None
-        self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
+        self.region = region
 
-        style = os.environ.get("AWS_S3_ADDRESSING_STYLE", "path")
+        style = os.environ.get("AWS_S3_ADDRESSING_STYLE")
         self.addressing_style: Literal["path", "virtual", "auto"] = (
-            style if style in ("path", "virtual", "auto") else "path"
+            style if style in ("path", "virtual", "auto") else DEFAULT_ADDRESSING_STYLE
         )
 
         self.cw_token = cw_token if cw_token else os.environ.get("CW_TOKEN", "")
 
+        # shared s3_config for all auth methods
+        self.s3_config = Config(
+            s3={"addressing_style": self.addressing_style},
+            connect_timeout=5,
+            read_timeout=10,
+            retries={"max_attempts": 2},
+        )
+
+        self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
+
     @staticmethod
-    def auto(cw_token: str = "", use_lota: bool = True) -> "ObjectStorage":
+    def auto(cw_token: str = "", use_lota: bool = True, region: str = "") -> "ObjectStorage":
         """
         Auto detect and create the ObjectStorage client
-        Tries pod identity first, and falls back to access keys
+        Tries pod identity first with both lota and cwobject endpoints, and falls back to access keys with both lota and cwobject endpoints
         """
+        print("Initializing CoreWeave AI object storage")
+        # try a few ways to get the region we want to use if it isn't provided as an arg
+        if region:
+            pass
+        elif os.environ.get("AWS_DEFAULT_REGION"):
+            region = os.environ.get("AWS_DEFAULT_REGION", "")
+        else:
+            pod_region = K8s().get_pod_region()
+            if pod_region:
+                region = f"{pod_region}a"  # hacky shit since we can't tell what az we're in from in-cluster
+                print(f"Detected region from pod: {region}")
+            else:
+                raise MissingRegionError(
+                    "Unable to determine object storage region, provide as function input or env var 'AWS_DEFAULT_REGION'."
+                )
+
+        # Choose our subclass with preference for PodIdentity if it works
+        try:
+            print(f"Attempting pod identity authentication with {'LOTA' if use_lota else 'CAIOS'}...")
+            client = PodIdentityObjectStorage(cw_token, use_lota, region)
+            print("Testing pod identity credentials...")
+            client.s3_client.list_buckets()
+            print(f"Initialized CAIOS client using pod identity authentication ({'LOTA' if use_lota else 'CAIOS'}).")
+            return client
+        except Exception as e:
+            # fallback to cwobject if lota isn't reachable from our location (local or non-gpu cluster)
+            e_msg = str(e).lower()
+            if use_lota and ("timeout" in e_msg or "connect" in e_msg):
+                print(f"LOTA endpoint failed ({e})\n  Does your cluster have GPUs? Trying CWObject endpoint...")
+                try:
+                    client = PodIdentityObjectStorage(cw_token, False, region)
+                    print("Testing pod identity credentials with CWObject endpoint...")
+                    client.s3_client.list_buckets()
+                    print("Initialized CAIOS client using pod identity authentication and CWObject endpoint.")
+                    return client
+                except Exception as cwobject_e:
+                    print(f"CWObject endpoint failed: {cwobject_e}")
+            else:
+                print(f"Pod identity authentication failed: {e}")
 
         try:
-            client = PodIdentityObjectStorage(cw_token, use_lota)
+            print(f"Attempting access key authentication with {'LOTA' if use_lota else 'CAIOS'}...")
+            client = AccessKeyObjectStorage(cw_token, use_lota, region)
+            print("Testing access key credentials...")
             client.s3_client.list_buckets()
-            print("Initialized CAIOS client using pod identity authentication.")
+            print(f"Initialized CAIOS client using access key authentication ({'LOTA' if use_lota else 'CAIOS'}).")
             return client
-        except Exception:
-            client = AccessKeyObjectStorage(cw_token, use_lota)
-            print("Initialized CAIOS client using cw_token and access keys.")
-            return client
+        except Exception as e:
+            # fallback to cwobject if lota isn't reachable from our location (local or non-gpu cluster)
+            error_msg = str(e).lower()
+            if use_lota and ("timeout" in error_msg or "connect" in error_msg):
+                print(f"LOTA endpoint failed ({e})\n  Does your cluster have GPUs? Trying CWObject endpoint...")
+                client = AccessKeyObjectStorage(cw_token, use_lota=False, region=region)
+                print("Initialized CAIOS client using access key authentication (CAIOS).")
+                return client
+            else:
+                # Re-raise if it's not a connection issue
+                raise
 
     @staticmethod
-    def with_pod_identity(cw_token: str = "", use_lota: bool = True) -> "PodIdentityObjectStorage":
+    def with_pod_identity(cw_token: str = "", use_lota: bool = True, region: str = "") -> "PodIdentityObjectStorage":
         """
         Create ObjectStorage client using Pod Identity / Workload Identity authentication.
         """
-        return PodIdentityObjectStorage(cw_token, use_lota)
+        return PodIdentityObjectStorage(cw_token, use_lota, region)
 
     @staticmethod
-    def with_access_keys(cw_token: str = "", use_lota: bool = True) -> "AccessKeyObjectStorage":
+    def with_access_keys(cw_token: str = "", use_lota: bool = True, region: str = "") -> "AccessKeyObjectStorage":
         """
         Create ObjectStorage client using Access Key authentication.
         """
-        return AccessKeyObjectStorage(cw_token, use_lota)
+        return AccessKeyObjectStorage(cw_token, use_lota, region)
 
     @property
     @abstractmethod
@@ -109,7 +175,10 @@ class ObjectStorage(ABC):
 
     def create_bucket(self, bucket_name: str) -> bool:
         try:
-            self.s3_client.create_bucket(Bucket=bucket_name)
+            self.s3_client.create_bucket(
+                Bucket=bucket_name,
+                CreateBucketConfiguration={"LocationConstraint": self.region},
+            )
             print(f"Created bucket: '{bucket_name}'")
             return True
         except Exception as e:
@@ -121,7 +190,7 @@ class ObjectStorage(ABC):
             self.s3_client.delete_bucket(Bucket=bucket_name)
             print(f"Deleted bucket '{bucket_name}'")
             return True
-        except exception as e:
+        except Exception as e:
             print(f"Error deleting bucket: {e}")
             return False
 
@@ -196,12 +265,11 @@ class PodIdentityObjectStorage(ObjectStorage):
     @property
     def s3_client(self) -> S3Client:
         if self._s3_client is None:
-            s3_config = Config(s3={"addressing_style": self.addressing_style})
             self._s3_client = boto3.client(
                 "s3",
                 region_name=self.region,
                 endpoint_url=self.endpoint_url,
-                config=s3_config,
+                config=self.s3_config,
             )
         return self._s3_client
 
@@ -229,8 +297,8 @@ class AccessKeyObjectStorage(ObjectStorage):
     If AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY is not set, uses the CW_TOKEN to create a temporary access key pair.
     """
 
-    def __init__(self, cw_token: str = "", use_lota: bool = True):
-        super().__init__(cw_token=cw_token, use_lota=use_lota)
+    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
+        super().__init__(cw_token=cw_token, use_lota=use_lota, region=region)
         self._access_key_id: str | None = None
         self._secret_access_key: str | None = None
         if not self.cw_token:
@@ -249,12 +317,11 @@ class AccessKeyObjectStorage(ObjectStorage):
                 self._access_key_id = access_key_id
                 self._secret_access_key = secret_access_key
 
-            s3_config = Config(s3={"addressing_style": self.addressing_style})
             self._s3_client = boto3.client(
                 "s3",
                 region_name=self.region,
                 endpoint_url=self.endpoint_url,
-                config=s3_config,
+                config=self.s3_config,
                 aws_access_key_id=access_key_id,
                 aws_secret_access_key=secret_access_key,
             )

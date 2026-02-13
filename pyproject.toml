@@ -10,7 +10,7 @@ dependencies = [
     "datasets>=4.5.0",
     "evaluate>=0.4.6",
     "httpx>=0.28.1",
-    "marimo>=0.19.10",
+    "kubernetes>=35.0.0",
     "ray>=2.53.0",
     "statistics>=1.0.3.5",
     "torch>=2.10.0",
@@ -18,11 +18,14 @@ dependencies = [
     "wandb>=0.24.2",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
+    "ty>=0.0.17",
     "boto3-stubs[s3]>=1.42.48",
     "pre-commit>=4.5.1",
     "ruff>=0.15.0",
+    "marimo[lsp]>=0.19.11",
+    "mypy-boto3-s3>=1.42.37",
 ]
 
 [tool.pyright]

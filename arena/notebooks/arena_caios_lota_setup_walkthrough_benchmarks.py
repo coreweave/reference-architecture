@@ -2,13 +2,27 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "boto3==1.42.45",
-#     "marimo>=0.19.11",
+#     "k8s==0.28.0",
+#     "kubernetes==35.0.0",
+#     "marimo>=0.19.7",
+#     "marimo[lsp]>=0.19.7",
+#     "mypy-boto3-s3>=1.42.37",
+#     "shell==1.0.1",
 # ]
 # ///
 import marimo
 
 __generated_with = "0.19.11"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
+
+with app.setup:
+    import json
+    import os
+    import time
+
+    import marimo as mo
+    from arena.object_storage_helpers import MissingCredentialsError, ObjectStorage
+    from arena.remote_execution_helpers import shell
 
 
 @app.cell(hide_code=True)
@@ -21,19 +35,6 @@ def _(mo):
 
 @app.cell(hide_code=True)
 def _():
-    import json
-    import os
-    import time
-
-    import marimo as mo
-    from arena.object_storage_helpers import MissingCredentialsError, ObjectStorage
-    from arena.remote_execution_helpers import shell
-
-    return MissingCredentialsError, ObjectStorage, json, mo, os, shell, time
-
-
-@app.cell(hide_code=True)
-def _(mo):
     mo.md(r"""
     # CoreWeave AI Labs: Object Storage & LOTA
 
@@ -47,7 +48,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     /// details | Table of Contents
 
@@ -62,7 +63,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ---
     ## Access Keys
@@ -80,7 +81,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(MissingCredentialsError, ObjectStorage, mo):
+def _():
     try:
         caios = ObjectStorage.auto()
     except MissingCredentialsError as e:
@@ -104,14 +105,14 @@ def _(MissingCredentialsError, ObjectStorage, mo):
         )
     else:
         form = None
-        ui = mo.md("✓ ObjectStorage client initialized successfully")
+        ui = mo.md("ObjectStorage client initialized successfully")
 
     ui
     return caios, form
 
 
 @app.cell(hide_code=True)
-def _(ObjectStorage, caios, form, mo):
+def _(caios: ObjectStorage, form):
     if caios is not None:
         storage = caios
         status = "ObjectStorage client initialized with pod identity."
@@ -119,7 +120,6 @@ def _(ObjectStorage, caios, form, mo):
         storage = ObjectStorage.with_access_keys(use_lota=False, cw_token=form.value["cw_token"])
         status = "ObjectStorage client initialized with provided token."
     else:
-        storage = None
         status = "Please initialize the client above"
     mo.md(f"""
         /// admonition
@@ -129,7 +129,7 @@ def _(ObjectStorage, caios, form, mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ---
     ## 2. Set Organizational Policies
@@ -186,7 +186,7 @@ def _(mo):
 
 
 @app.cell
-def _(storage):
+def _(storage: ObjectStorage):
     storage.apply_org_policy(
         {
             "name": "PodIdentity",
@@ -202,11 +202,12 @@ def _(storage):
             ],
         }
     )
+    storage.s3_config
     return
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ### Query Organizational Access Policies
     """)
@@ -214,20 +215,14 @@ def _(mo):
 
 
 @app.cell
-def _(json, storage):
+def _(storage: ObjectStorage):
     policies = storage.list_org_policies()
     print(json.dumps(policies, indent=2))
     return
 
 
-@app.cell
-def _(storage):
-    storage.create_bucket("arena-test-bucket")
-    return
-
-
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ---
     ## 3. Bucket Operations
@@ -242,13 +237,19 @@ def _(mo):
 
 
 @app.cell
-def _(storage):
+def _(storage: ObjectStorage):
+    storage.create_bucket("arena-test-bucket")
+    return
+
+
+@app.cell
+def _(storage: ObjectStorage):
     storage.list_buckets()
     return
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ---
     ## 4. AWS CLI Configuration
@@ -267,26 +268,26 @@ def _(mo):
 
 
 @app.cell
-def _(shell):
-    shell("aws configure set s3.addressing_style virtual")
+def _():
+    shell.shell("aws configure set s3.addressing_style virtual")
     return
 
 
 @app.cell
-def _(os, shell):
-    endpoint = os.environ.get("S3_ENDPOINT_URL", "https://cwobject.com")
+def _(storage: ObjectStorage):
+    endpoint = storage.endpoint_url
     shell(f"aws configure set endpoint_url {endpoint}")
     return
 
 
 @app.cell
-def _(shell):
+def _():
     shell("aws s3 ls")
     return
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ---
     ## 5. Data Transfer with s5cmd
@@ -318,7 +319,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ### Download Test
 
@@ -337,7 +338,7 @@ def _(mo):
 
 
 @app.cell
-def _(os, shell, time):
+def _():
     def run_download_test():
         shell("mkdir -p /tmp/bandwidth-test")
         print("--- Download Test: 10GB file ---\n")
@@ -368,7 +369,7 @@ def _(os, shell, time):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ### Upload with s5cmd
 
@@ -412,7 +413,7 @@ def _(mo):
 
 
 @app.cell
-def _(os, shell, time):
+def _():
     def run_s5cmd_upload_test(numworkers: int = 16, concurrency: int = 32):
         """Upload using s5cmd with configurable parallelism."""
         bucket = os.environ.get("CW_BENCHMARK_BUCKET", "")
@@ -462,7 +463,7 @@ def _(os, shell, time):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ### Upload/Download with Rclone
 
@@ -498,7 +499,7 @@ def _(mo):
 
 
 @app.cell
-def _(os, shell, time):
+def _():
     def run_rclone_upload_test(transfers: int = 64, upload_concurrency: int = 10, chunk_size_mb: int = 50):
         """Upload using rclone with optimized settings for CoreWeave."""
         bucket = os.environ.get("CW_BENCHMARK_BUCKET", "")
@@ -570,7 +571,7 @@ def _(os, shell, time):
 
 
 @app.cell
-def _(shell):
+def _():
     # Cleanup local test file
     shell("rm -rf /tmp/bandwidth-test", quiet=True)
     print("✓ Cleaned up local test files")
@@ -578,7 +579,7 @@ def _(shell):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ---
     ## 6. Benchmark Performance
@@ -596,7 +597,7 @@ def _(mo):
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _():
     mo.md(r"""
     ---
     ## Scratchpad
