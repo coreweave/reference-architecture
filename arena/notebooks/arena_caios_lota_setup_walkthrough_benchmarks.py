@@ -62,11 +62,12 @@ def _(mo):
 def _(mo):
     mo.md(r"""
     ---
-    ## 1. Create Access Keys
+    ## Access Keys
 
     /// attention | Console Setup Required
+    Access keys are set up for you in the notebook if pod identity is set up.
 
-    Create your Access Key and Secret Access Key in the [CoreWeave Console](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios).
+    If you'd like to use object storage outside of this pod you'll need to create your Access Key and Secret Access Key in the [CoreWeave Console](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios).
 
     These credentials are used for S3 API access to CAIOS and LOTA.
     ///
@@ -127,7 +128,6 @@ def _(mo):
       }
     }
     ```
-    ///
     """)
     return
 

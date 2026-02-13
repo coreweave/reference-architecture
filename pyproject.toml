@@ -21,6 +21,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "boto3-stubs[s3]>=1.42.48",
     "pre-commit>=4.5.1",
     "ruff>=0.15.0",
 ]
@@ -41,8 +42,6 @@ select = ["E", "F", "W", "I", "C"]
  "E999", # syntax errors
  "E501", # line length, since we have big multiline strings for markdown
 ]
-[tool.ruff.lint.isort]
-lines-after-imports = 1
 
 # Language server configuration
 [tool.marimo.language_servers.pylsp]

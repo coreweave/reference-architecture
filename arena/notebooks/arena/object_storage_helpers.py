@@ -1,299 +1,284 @@
-"""
-CoreWeave AI Object Storage Policy Helpers.
-
-Simple helpers for applying and retrieving organization access policies.
-
-Reference: https://docs.coreweave.com/docs/products/storage/object-storage/auth-access/organization-policies/examples
-
-Environment Variables (expected from Kubernetes secrets):
-    - AWS_ACCESS_KEY_ID
-    - AWS_SECRET_ACCESS_KEY
-    - AWS_DEFAULT_REGION
-    - S3_ENDPOINT_URL
-    - LOTA_ENDPOINT_URL
-    - AWS_S3_ADDRESSING_STYLE
-    - API_ACCESS_TOKEN (for organization policy management)
-
-Usage:
-    from arena.object_storage_helpers import apply_policy, get_policy, list_policies
-    
-    # Apply a policy from JSON string
-    policy_json = '''
-    {
-      "policy": {
-        "version": "v1alpha1",
-        "name": "full-s3-api-access",
-        "statements": [
-          {
-            "name": "allow-full-s3-api-access-to-all",
-            "effect": "Allow",
-            "actions": ["s3:*"],
-            "resources": ["*"],
-            "principals": ["role/Admin"]
-          }
-        ]
-      }
-    }
-    '''
-    apply_policy(policy_json)
-    
-    # Get a specific policy
-    policy = get_policy("full-s3-api-access")
-    
-    # List all policies
-    policies = list_policies()
-"""
-
-import os
 import json
-from typing import Dict, List, Any, Optional, Union
+import os
+from abc import ABC, abstractmethod
+from logging import exception
+from typing import TYPE_CHECKING, Any, Literal
+
+import boto3
+import requests
+from botocore.config import Config
+
+COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
+LOTA_ENDPOINT_URL = "https://cwlota.com"
+CAIOS_ENDPOINT_URL = "https://cwobject.com"
+DEFAULT_ACCESS_TOKEN_DURATION = 3600  # 1 hour
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3.client import S3Client
+else:
+    S3Client = object
 
 
-# =============================================================================
-# Configuration
-# =============================================================================
-
-def get_config() -> Dict[str, str]:
+class ObjectStorage(ABC):
     """
-    Get configuration from environment variables.
-    
-    Returns:
-        Dictionary with configuration values
-        
-    Raises:
-        EnvironmentError: If required environment variables are not set
+    Abstract base class for CAIOS operations.
+    Provides s3 access and org policy management.
     """
-    required_vars = [
-        "AWS_ACCESS_KEY_ID",
-        "AWS_SECRET_ACCESS_KEY",
-        "AWS_DEFAULT_REGION",
-        "S3_ENDPOINT_URL",
-    ]
-    
-    config = {}
-    missing = []
-    
-    for var in required_vars:
-        value = os.environ.get(var)
-        if not value:
-            missing.append(var)
-        else:
-            config[var] = value
-    
-    # Optional variables
-    config["LOTA_ENDPOINT_URL"] = os.environ.get("LOTA_ENDPOINT_URL", "")
-    config["AWS_S3_ADDRESSING_STYLE"] = os.environ.get("AWS_S3_ADDRESSING_STYLE", "path")
-    
-    if missing:
-        raise EnvironmentError(f"Missing required environment variables: {', '.join(missing)}")
-    
-    return config
 
+    def __init__(self, cw_token: str = "", use_lota: bool = True):
+        self.use_lota = use_lota
+        self.region = os.environ.get("AWS_DEFAULT_REGION", "")
+        self._s3_client: S3Client | None = None
+        self._api_session: requests.Session | None = None
+        self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
 
-def _get_api_session():
-    """
-    Create an HTTP session for CoreWeave Object Storage API.
-    
-    Uses Bearer token authentication with API_ACCESS_TOKEN environment variable.
-    
-    Returns:
-        Tuple of (requests.Session, config dict)
-        
-    Raises:
-        EnvironmentError: If API_ACCESS_TOKEN is not set
-    """
-    import requests
-    
-    config = get_config()
-    
-    api_token = os.environ.get("API_ACCESS_TOKEN")
-    if not api_token:
-        raise EnvironmentError("Missing required environment variable: API_ACCESS_TOKEN")
-    
-    session = requests.Session()
-    session.headers.update({
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_token}",
-    })
-    
-    return session, config
-
-
-# CoreWeave Organization Policy API endpoint
-COREWEAVE_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
-
-
-def _get_api_base_url() -> str:
-    """
-    Get the base URL for the CoreWeave Object Storage API.
-    """
-    return COREWEAVE_API_BASE_URL
-
-
-# =============================================================================
-# Policy API
-# =============================================================================
-
-def list_policies() -> List[Dict[str, Any]]:
-    """
-    List all organization access policies.
-    
-    Returns:
-        List of policy objects
-        
-    Example:
-        policies = list_policies()
-        for p in policies:
-            print(p["policy"]["name"])
-    """
-    session, _ = _get_api_session()
-    base_url = _get_api_base_url()
-    
-    try:
-        response = session.get(f"{base_url}/access-policy")
-        response.raise_for_status()
-        return response.json().get("policies", [])
-    except Exception as e:
-        print(f"Error listing policies: {e}")
-        return []
-
-
-def apply_policy(policy: Union[str, Dict[str, Any]]) -> bool:
-    """
-    Apply (create/update) an organization access policy.
-    
-    Uses the CoreWeave API: POST https://api.coreweave.com/v1/cwobject/access-policy
-    
-    Args:
-        policy: Policy as JSON string or dict (must include "policy" wrapper)
-        
-    Returns:
-        True if successful, False otherwise
-        
-    Example:
-        apply_policy('''
-        {
-          "policy": {
-            "version": "v1alpha1",
-            "name": "my-policy",
-            "statements": [
-              {
-                "name": "allow-full-access",
-                "effect": "Allow",
-                "actions": ["s3:*"],
-                "resources": ["*"],
-                "principals": ["role/Admin"]
-              }
-            ]
-          }
-        }
-        ''')
-    """
-    session, _ = _get_api_session()
-    base_url = _get_api_base_url()
-    
-    # Parse JSON string if needed
-    if isinstance(policy, str):
-        try:
-            policy = json.loads(policy)
-        except json.JSONDecodeError as e:
-            print(f"Invalid JSON: {e}")
-            return False
-    
-    policy_name = policy.get("policy", {}).get("name", "unknown")
-    
-    try:
-        response = session.post(
-            f"{base_url}/access-policy",
-            json=policy,
+        style = os.environ.get("AWS_S3_ADDRESSING_STYLE", "path")
+        self.addressing_style: Literal["path", "virtual", "auto"] = (
+            style if style in ("path", "virtual", "auto") else "path"
         )
-        response.raise_for_status()
-        print(f"Successfully applied policy: {policy_name}")
-        return True
-    except Exception as e:
-        print(f"Error applying policy '{policy_name}': {e}")
-        return False
+
+        self.cw_token = cw_token if cw_token else os.environ.get("CW_TOKEN", "")
+
+    @staticmethod
+    def auto(region: str = "", use_lota: bool = True) -> "ObjectStorage":
+        """
+        Auto detect and create the ObjectStorage client
+        Tries pod identity first, and falls back to access keys
+        """
+
+        try:
+            client = PodIdentityObjectStorage(use_lota=use_lota)
+            client.s3_client.list_buckets()
+            print("Using pod identity authentication")
+            return client
+        except Exception:
+            print("Pod identity not available, using Access Keys")
+            return AccessKeyObjectStorage(use_lota=use_lota)
+
+    @staticmethod
+    def with_pod_identity(use_lota: bool = True) -> "PodIdentityObjectStorage":
+        """
+        Create ObjectStorage client using Pod Identity / Workload Identity authentication.
+        """
+        return PodIdentityObjectStorage(use_lota=use_lota)
+
+    @staticmethod
+    def with_access_keys(use_lota: bool = True) -> "AccessKeyObjectStorage":
+        """
+        Create ObjectStorage client using Access Key authentication.
+        """
+        return AccessKeyObjectStorage(use_lota=use_lota)
+
+    @property
+    @abstractmethod
+    def s3_client(self) -> S3Client:
+        "Get the boto3 s3 client. Must be implemented by subclasses."
+        pass
+
+    @property
+    @abstractmethod
+    def api_session(self) -> requests.Session:
+        "Get http session for cwobject api. Must be implemented by subclasses."
+        pass
+
+    def list_buckets(self) -> list[str]:
+        try:
+            response = self.s3_client.list_buckets()
+            buckets = response.get("Buckets", [])
+            result = []
+            for bucket in buckets:
+                if name := bucket.get("Name"):
+                    result.append(name)
+            return result
+        except Exception as e:
+            print(f"Error listing buckets: {e}")
+            return []
+
+    def create_bucket(self, bucket_name: str) -> bool:
+        try:
+            self.s3_client.create_bucket(Bucket=bucket_name)
+            print(f"Created bucket: '{bucket_name}'")
+            return True
+        except Exception as e:
+            print(f"Error creating bucket: {e}")
+            return False
+
+    def delete_bucket(self, bucket_name: str) -> bool:
+        try:
+            self.s3_client.delete_bucket(Bucket=bucket_name)
+            print(f"Deleted bucket '{bucket_name}'")
+            return True
+        except exception as e:
+            print(f"Error deleting bucket: {e}")
+            return False
+
+    def put_bucket_policy(self, bucket_name: str, policy: dict[str, Any]) -> bool:
+        policy_str = json.dumps(policy)
+
+        try:
+            self.s3_client.put_bucket_policy(Bucket=bucket_name, Policy=policy_str)
+            print(f"Put bucket policy for bucket '{bucket_name}'")
+            return True
+        except Exception as e:
+            print(f"Error putting bucket policy: {e}")
+            return False
+
+    def get_bucket_policy(self, bucket_name: str) -> dict[str, Any] | None:
+        try:
+            resp = self.s3_client.get_bucket_policy(Bucket=bucket_name)
+            return json.loads(resp["Policy"])
+        except Exception as e:
+            print(f"Error getting bucket policy: {e}")
+            return None
+
+    def list_org_policies(self) -> list[dict[str, Any]]:
+        try:
+            resp = self.api_session.get(f"{COREWEAVE_OBJECT_API_BASE_URL}/access-policy")
+            resp.raise_for_status()
+            return resp.json().get(
+                "policies",
+            )
+        except Exception as e:
+            print(f"Error listing org policies: {e}")
+            return []
+
+    def apply_org_policy(self, policy: dict[str, Any]) -> bool:
+        """
+        Example:
+            policy = {
+                "policy": {
+                    "version": "v1alpha1",
+                    "name": "my-policy",
+                    "statements": [{
+                        "name": "allow-full-access",
+                        "effect": "Allow",
+                        "actions": ["s3:*"],
+                        "resources": ["*"],
+                        "principals": ["role/Admin"]
+                    }]
+                }
+            }
+            storage.apply_organization_policy(policy)
+        """
+        policy_name = policy.get("policy", {}).get("name", "unknown")
+
+        try:
+            response = self.api_session.post(
+                f"{COREWEAVE_OBJECT_API_BASE_URL}/access-policy",
+                json=policy,
+            )
+            response.raise_for_status()
+            print(f"Applied organization policy: {policy_name}")
+            return True
+        except Exception as e:
+            print(f"Error applying organization policy '{policy_name}': {e}")
+            return False
 
 
-def delete_policy(policy_name: str) -> bool:
+class PodIdentityObjectStorage(ObjectStorage):
     """
-    Delete an organization access policy.
-    
-    Note: Delete endpoint not explicitly documented. Use Cloud Console if this fails.
-    
-    Args:
-        policy_name: Name of the policy to delete
-        
-    Returns:
-        True if successful, False otherwise
+    ObjectStorage client using Pod Identity / Workload Identity authentication.
     """
-    session, _ = _get_api_session()
-    base_url = _get_api_base_url()
-    
-    # Try DELETE on the policy endpoint - not explicitly documented
-    try:
-        response = session.delete(f"{base_url}/access-policy/{policy_name}")
-        response.raise_for_status()
-        print(f"Successfully deleted policy: {policy_name}")
-        return True
-    except Exception as e:
-        print(f"Error deleting policy '{policy_name}': {e}")
-        print("Note: Delete via API may not be supported. Use Cloud Console instead.")
-        return False
+
+    @property
+    def s3_client(self):
+        if self._s3_client is None:
+            s3_config = Config(s3={"addressing_style": self.addressing_style})
+            self._s3_client = boto3.client(
+                "s3",
+                region_name=self.region,
+                endpoint_url=self.endpoint_url,
+                config=s3_config,
+            )
+        return self._s3_client
+
+    @property
+    def api_session(self) -> requests.Session:
+        if self._api_session is None:
+            session = requests.Session()
+            session.headers.update(
+                {
+                    "Content-Type": "application/json",
+                }
+            )
+            self._api_session = session
+        return self._api_session
 
 
-# =============================================================================
-# S3 Client Helper
-# =============================================================================
+class AccessKeyObjectStorage(ObjectStorage):
+    """
+    ObjectStorage client using Access Key authentication.
+    Expects CW_TOKEN to be set in the environment.
+    If AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY is not set, uses the CW_TOKEN to create a temporary access key pair.
+    """
 
-def get_s3_client(use_lota: bool = False):
-    """
-    Create an S3 client using environment configuration.
-    
-    Args:
-        use_lota: If True, use LOTA_ENDPOINT_URL instead of S3_ENDPOINT_URL
-        
-    Returns:
-        boto3 S3 client
-    """
-    import boto3
-    from botocore.config import Config
-    
-    config = get_config()
-    
-    endpoint_url = config["LOTA_ENDPOINT_URL"] if use_lota else config["S3_ENDPOINT_URL"]
-    if not endpoint_url:
-        endpoint_url = config["S3_ENDPOINT_URL"]
-    
-    s3_config = Config(
-        s3={"addressing_style": config["AWS_S3_ADDRESSING_STYLE"]}
-    )
-    
-    return boto3.client(
-        "s3",
-        aws_access_key_id=config["AWS_ACCESS_KEY_ID"],
-        aws_secret_access_key=config["AWS_SECRET_ACCESS_KEY"],
-        region_name=config["AWS_DEFAULT_REGION"],
-        endpoint_url=endpoint_url,
-        config=s3_config,
-    )
+    def __init__(self, cw_token: str = "", use_lota: bool = True):
+        super().__init__(cw_token=cw_token, use_lota=use_lota)
+        self._access_key_id: str | None = None
+        self._secret_access_key: str | None = None
 
+    @property
+    def s3_client(self) -> S3Client:
+        if self._s3_client is None:
+            if not self.cw_token:
+                raise ValueError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
 
-def list_buckets(use_lota: bool = False) -> List[str]:
-    """
-    List all available S3 buckets.
-    
-    Args:
-        use_lota: If True, use LOTA endpoint
-        
-    Returns:
-        List of bucket names
-    """
-    s3 = get_s3_client(use_lota=use_lota)
-    
-    try:
-        response = s3.list_buckets()
-        return [bucket["Name"] for bucket in response.get("Buckets", [])]
-    except Exception as e:
-        print(f"Error listing buckets: {e}")
-        return []
+            access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
+            secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
+
+            # Create if not provided in env
+            if not (access_key_id and secret_access_key):
+                print("Creating access keys")
+                access_key_id, secret_access_key = self._get_temp_access_keys()
+                self._access_key_id = access_key_id
+                self._secret_access_key = secret_access_key
+
+            s3_config = Config(s3={"addressing_style": self.addressing_style})
+            self._s3_client = boto3.client(
+                "s3",
+                region_name=self.region,
+                endpoint_url=self.endpoint_url,
+                config=s3_config,
+                aws_access_key_id=access_key_id,
+                aws_secret_access_key=secret_access_key,
+            )
+        return self._s3_client
+
+    @property
+    def api_session(self) -> requests.Session:
+        if self._api_session is None:
+            if not self.cw_token:
+                raise ValueError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
+
+            session = requests.Session()
+            session.headers.update(
+                {
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.cw_token}",
+                }
+            )
+            self._api_session = session
+        return self._api_session
+
+    def _get_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
+        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
+        payload = {"durationSeconds": duration_seconds}
+
+        try:
+            resp = self.api_session.post(
+                endpoint,
+                json=payload,
+            )
+            resp.raise_for_status()
+
+            data = resp.json()
+            access_key_id = data.get("accessKeyId")
+            secret_access_key = data.get("secretKey")
+            if not access_key_id or not secret_access_key:
+                raise ValueError("Invalid response from access key endpoint, missing keys.")
+
+            print(f"Created access key: {access_key_id[:8]}")
+            return access_key_id, secret_access_key
+
+        except requests.exceptions.RequestException as e:
+            raise ValueError(f"Failed to create access key: {e}")
