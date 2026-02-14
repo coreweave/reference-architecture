@@ -50,7 +50,7 @@ class ObjectStorage(ABC):
         self.use_lota = use_lota
         self._s3_client: S3Client | None = None
         self._api_session: requests.Session | None = None
-        self.region = region
+        self.region = region if region else detect_region()
 
         style = os.environ.get("AWS_S3_ADDRESSING_STYLE")
         self.addressing_style: Literal["path", "virtual", "auto"] = (
@@ -76,21 +76,6 @@ class ObjectStorage(ABC):
         Tries pod identity first with both lota and cwobject endpoints, and falls back to access keys with both lota and cwobject endpoints
         """
         print("Initializing CoreWeave AI object storage")
-        # try a few ways to get the region we want to use if it isn't provided as an arg
-        if region:
-            pass
-        elif os.environ.get("AWS_DEFAULT_REGION"):
-            region = os.environ.get("AWS_DEFAULT_REGION", "")
-        else:
-            pod_region = K8s().get_pod_region()
-            if pod_region:
-                region = f"{pod_region}a"  # hacky shit since we can't tell what az we're in from in-cluster
-                print(f"Detected region from pod: {region}")
-            else:
-                raise MissingRegionError(
-                    "Unable to determine object storage region, provide as function input or env var 'AWS_DEFAULT_REGION'."
-                )
-
         # Choose our subclass with preference for PodIdentity if it works
         try:
             print(f"Attempting pod identity authentication with {'LOTA' if use_lota else 'CAIOS'}...")
@@ -105,7 +90,7 @@ class ObjectStorage(ABC):
             if use_lota and ("timeout" in e_msg or "connect" in e_msg):
                 print(f"LOTA endpoint failed ({e})\n  Does your cluster have GPUs? Trying CWObject endpoint...")
                 try:
-                    client = PodIdentityObjectStorage(cw_token, False, region)
+                    client = PodIdentityObjectStorage(cw_token, use_lota=False, region=region)
                     print("Testing pod identity credentials with CWObject endpoint...")
                     client.s3_client.list_buckets()
                     print("Initialized CAIOS client using pod identity authentication and CWObject endpoint.")
@@ -262,6 +247,9 @@ class PodIdentityObjectStorage(ObjectStorage):
     ObjectStorage client using Pod Identity / Workload Identity authentication.
     """
 
+    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
+        super().__init__(cw_token, use_lota, region)
+
     @property
     def s3_client(self) -> S3Client:
         if self._s3_client is None:
@@ -298,7 +286,7 @@ class AccessKeyObjectStorage(ObjectStorage):
     """
 
     def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
-        super().__init__(cw_token=cw_token, use_lota=use_lota, region=region)
+        super().__init__(cw_token, use_lota, region)
         self._access_key_id: str | None = None
         self._secret_access_key: str | None = None
         if not self.cw_token:
@@ -365,3 +353,22 @@ class AccessKeyObjectStorage(ObjectStorage):
 
         except requests.exceptions.RequestException as e:
             raise ValueError(f"Failed to create access key: {e}")
+
+
+def detect_region() -> str:
+    region = os.environ.get("AWS_DEFAULT_REGION", "")
+    if region:
+        print(f"Detected region from env var: {region}")
+    else:
+        pod_region = K8s().get_pod_region()
+        if pod_region:
+            region = (
+                f"{pod_region}a"  # suffix with 'a'; hacky shit since we can't tell what az we're in from in-cluster
+            )
+            print(f"Detected region from pod: {region}")
+        else:
+            raise MissingRegionError(
+                "Unable to determine object storage region, provide as function input or env var 'AWS_DEFAULT_REGION'."
+            )
+    print(f"Using region: {region}")
+    return region
