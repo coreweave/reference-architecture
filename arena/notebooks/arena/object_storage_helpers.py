@@ -181,7 +181,6 @@ class ObjectStorage(ABC):
 
     def put_bucket_policy(self, bucket_name: str, policy: dict[str, Any]) -> bool:
         policy_str = json.dumps(policy)
-
         try:
             self.s3_client.put_bucket_policy(Bucket=bucket_name, Policy=policy_str)
             print(f"Put bucket policy for bucket '{bucket_name}'")
@@ -240,6 +239,35 @@ class ObjectStorage(ABC):
         except Exception as e:
             print(f"Error applying organization policy '{policy_name}': {e}")
             return False
+
+    def list_objects(
+        self, bucket_name: str, prefix: str = "", max_keys: int = 1000, continuation_token: str | None = None
+    ) -> dict[str, Any]:
+        try:
+            params: dict[str, Any] = {
+                "Bucket": bucket_name,
+                "MaxKeys": min(max_keys, 1000),
+            }
+            if prefix:
+                params["Prefix"] = prefix
+            if continuation_token:
+                params["ContinuationToken"] = continuation_token
+
+            response = self.s3_client.list_objects_v2(**params)
+            return {
+                "objects": response.get("Contents", []),
+                "is_truncated": response.get("IsTruncated", False),
+                "next_continuation_token": response.get("NextContinuationToken"),
+                "key_count": response.get("KeyCount", 0),
+            }
+        except Exception as e:
+            print(f"Error listing objects in bucket '{bucket_name}': {e}")
+            return {
+                "objects": [],
+                "is_truncated": False,
+                "next_continuation_token": None,
+                "key_count": 0,
+            }
 
 
 class PodIdentityObjectStorage(ObjectStorage):
@@ -363,12 +391,11 @@ def detect_region() -> str:
         pod_region = K8s().get_pod_region()
         if pod_region:
             region = (
-                f"{pod_region}a"  # suffix with 'a'; hacky shit since we can't tell what az we're in from in-cluster
+                f"{pod_region}A"  # suffix with 'A'; hacky shit since we can't tell what az we're in from in-cluster
             )
             print(f"Detected region from pod: {region}")
         else:
             raise MissingRegionError(
                 "Unable to determine object storage region, provide as function input or env var 'AWS_DEFAULT_REGION'."
             )
-    print(f"Using region: {region}")
     return region
