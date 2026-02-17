@@ -145,27 +145,27 @@ def _():
     return
 
 
-# @app.cell(hide_code=True)
-# def _(storage: ObjectStorage):
-#     buckets = storage.list_buckets()
+@app.cell(hide_code=True)
+def _(storage: ObjectStorage):
+    buckets = storage.list_buckets()
 
-#     if buckets:
-#         bucket_dropdown = mo.ui.dropdown(options=buckets, label="Select Bucket")
-#         bucket_widget = bucket_dropdown
-# else:
-#     bucket_dropdown = None
-#     create_bucket_form = (
-#         mo.md("""
-#         **Bucket Name:** {bucket_name}
-#         """)
-#         .batch(
-#             bucket_name=mo.ui.text(placeholder="my-bucket-name", full_width=True)  # type: ignore
-#         )
-#         .form(submit_button_label="Create Bucket", clear_on_submit=False)
-#     )
-#     bucket_widget = create_bucket_form
+    if buckets:
+        bucket_dropdown = mo.ui.dropdown(options=buckets, label="Select Bucket")
+        bucket_widget = bucket_dropdown
+    else:
+        bucket_dropdown = None
+        create_bucket_form = (
+            mo.md("""
+            **Bucket Name:** {bucket_name}
+            """)
+            .batch(
+                bucket_name=mo.ui.text(placeholder="my-bucket-name", full_width=True)  # type: ignore
+            )
+            .form(submit_button_label="Create Bucket", clear_on_submit=False)
+        )
+        bucket_widget = create_bucket_form
 
-# return bucket_dropdown, bucket_widget, buckets
+    return bucket_dropdown, bucket_widget, buckets
 
 
 # @app.cell(hide_code=True)
