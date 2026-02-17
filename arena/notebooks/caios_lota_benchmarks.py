@@ -36,12 +36,12 @@ def _():
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    # CoreWeave AI Labs: Object Storage & LOTA
+    # CoreWeave ARENA: Object Storage & LOTA
 
     /// admonition | About This Notebook
         type: info
 
-    This notebook provides a walkthrough for setting up and benchmarking CoreWeave AI Object Storage (CAIOS) and LOTA.
+    This notebook provides a walkthrough for benchmarking CoreWeave AI Object Storage (CAIOS) and LOTA.
     ///
     """)
     return
@@ -147,7 +147,7 @@ def _():
 def _(storage: ObjectStorage):
     buckets = storage.list_buckets()
 
-    bucket_dropdown = mo.ui.dropdown(options=buckets)
+    bucket_dropdown = mo.ui.dropdown(options=buckets, value=buckets[0])
     create_bucket_form = (
         mo.md("""
         **Bucket Name:** {bucket_name}
@@ -253,11 +253,12 @@ def _(bucket_name):
             return
 
         test_dir = "/tmp/bandwidth-test"
+        test_filename = f"{test_file_size_gb}GB"
         os.makedirs(test_dir, exist_ok=True)
         file_size_bytes = int(test_file_size_gb * 1024 * 1024 * 1024)
-        test_file = f"{test_dir}/{test_file_size_gb}G"
+        test_file = f"{test_dir}/{test_filename}"
         if not os.path.exists(test_file):
-            print(f"Creating test file: {test_file_size_gb}G...")
+            print(f"Creating test file: {test_filename}...")
             chunk_size = 64 * 1024 * 1024  # 64 MB
             zero_chunk = b"\0" * chunk_size
             with open(test_file, "wb") as f:
@@ -269,7 +270,7 @@ def _(bucket_name):
                     progress = (file_size_bytes - remaining) / file_size_bytes * 100
                     print(f"Progress: {progress:.0f}%")
         else:
-            print(f"Test file '{test_file}' already exists locally, proceeding to upload.")
+            print(f"Test file '{test_filename}' already exists locally, proceeding to upload.")
 
         transfer_config = TransferConfig(
             multipart_threshold=multipart_threshold_mb * 1024 * 1024,
@@ -277,7 +278,7 @@ def _(bucket_name):
             max_concurrency=max_concurrency,
             use_threads=True,
         )
-        file_key = f"benchmark/{test_file_size_gb}G"
+        file_key = f"benchmark/{test_file_size_gb}GB"
 
         print(f"""
         --- S3 Upload Test (Boto3) ---
@@ -291,7 +292,6 @@ def _(bucket_name):
 
         start = time.time()
         try:
-            print("Starting upload...")
             storage.s3_client.upload_file(test_file, bucket_name, file_key, Config=transfer_config)
             elapsed = time.time() - start
 
@@ -318,11 +318,15 @@ def _(bucket_name):
 @app.cell(hide_code=True)
 def _(run_s3_upload_test, bucket_name: str, storage: ObjectStorage, upload_form):
     if upload_form.value:
-        run_s3_upload_test(
-            storage=storage,
-            bucket_name=bucket_name,
-            **upload_form.value,
-        )
+        with mo.status.spinner(
+            title="Running Upload Test",
+            subtitle=f"Uploading to {bucket_name}",
+        ):
+            run_s3_upload_test(
+                storage=storage,
+                bucket_name=bucket_name,
+                **upload_form.value,
+            )
     return
 
 
@@ -333,26 +337,10 @@ def _(storage: ObjectStorage, bucket_name):
         object_keys = [obj["Key"] for obj in objects_result["objects"]]
 
         if object_keys:
-            object_key_dropdown = mo.ui.dropdown(
-                options=object_keys, value=object_keys[0] if object_keys else "", label="Select Object Key"
-            )
-            _ui = mo.md(f"""
-            Available objects for download test in `{bucket_name}`:
-
-            {object_key_dropdown}
-
-            Found {len(object_keys)} object(s) with prefix 'benchmark/'
-            """)
+            object_key_dropdown = mo.ui.dropdown(options=object_keys, value=object_keys[0] if object_keys else "")
         else:
             object_key_dropdown = None
-            _ui = mo.md(f"""
-            /// admonition | No Objects Found
-                type: warning
-
-            No objects found in bucket `{bucket_name}` with prefix 'benchmark/'.
-            Upload a file first using the upload test above.
-            ///
-            """)
+            object_keys = []
     else:
         object_key_dropdown = None
         object_keys = []
@@ -365,7 +353,7 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
         download_form = (
             mo.md("""
             ### Configure S3 Download Test
-            - Object Key: {object_key}
+            - Object: {object_key}
             - Multipart Threshold (MB): {multipart_threshold_mb}
             - Chunk Size (MB): {multipart_chunksize_mb}
             - Max Concurrency: {max_concurrency}
@@ -393,79 +381,83 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
     return (download_form,)
 
 
-# @app.cell(hide_code=True)
-# def _(download_form, run_s3_download_test, storage: ObjectStorage):
-#     if download_form and download_form.value:
-#         run_s3_download_test(
-#             storage=storage,
-#             **download_form.value,
-#         )
-#     return
+@app.cell(hide_code=True)
+def _():
+    def run_s3_download_test(
+        storage: ObjectStorage,
+        bucket_name: str,
+        object_key: str,
+        multipart_threshold_mb: int = 8,
+        multipart_chunksize_mb: int = 8,
+        max_concurrency: int = 10,
+    ):
+        from boto3.s3.transfer import TransferConfig
+
+        if not bucket_name or not object_key:
+            print("bucket_name and object_key are required")
+            return
+
+        test_dir = "/tmp/bandwidth-test"
+        os.makedirs(test_dir, exist_ok=True)
+
+        # Extract filename from object_key for local storage
+        filename = os.path.basename(object_key)
+        output_path = f"{test_dir}/{filename}"
+
+        transfer_config = TransferConfig(
+            multipart_threshold=multipart_threshold_mb * 1024 * 1024,
+            multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
+            max_concurrency=max_concurrency,
+            use_threads=True,
+        )
+
+        print(f"""
+        --- S3 Download Test (Boto3) ---
+        Bucket: s3://{bucket_name}
+        Key: {object_key}
+        Multipart Threshold: {multipart_threshold_mb} MB
+        Chunk Size: {multipart_chunksize_mb} MB
+        Max Concurrency: {max_concurrency}
+        --- S3 Download Test (Boto3) ---
+        """)
+
+        start = time.time()
+        try:
+            storage.s3_client.download_file(bucket_name, object_key, output_path, Config=transfer_config)
+            elapsed = time.time() - start
+
+            size_bytes = os.path.getsize(output_path)
+            size_gb = size_bytes / (1024 * 1024 * 1024)
+            size_mb = size_bytes / (1024 * 1024)
+            bandwidth_mbs = size_mb / elapsed
+            bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
+
+            print(f"""
+        --- S3 Download Stats ---
+        Size: {size_gb:.2f} GB
+        Time: {elapsed:.2f} seconds
+        Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
+        --- S3 Download Stats ---
+        """)
+        except Exception as e:
+            print(f"Download failed: {e}")
+
+    return (run_s3_download_test,)
 
 
-# @app.cell(hide_code=True)
-# def _():
-#     def run_s3_download_test(
-#         storage: ObjectStorage,
-#         bucket_name: str,
-#         object_key: str,
-#         multipart_threshold_mb: int = 8,
-#         multipart_chunksize_mb: int = 8,
-#         max_concurrency: int = 10,
-#     ):
-#         from boto3.s3.transfer import TransferConfig
-
-#         if not bucket_name or not object_key:
-#             print("bucket_name and object_key are required")
-#             return
-
-#         test_dir = "/tmp/bandwidth-test"
-#         os.makedirs(test_dir, exist_ok=True)
-
-#         # Extract filename from object_key for local storage
-#         filename = os.path.basename(object_key)
-#         output_path = f"{test_dir}/{filename}"
-
-#         transfer_config = TransferConfig(
-#             multipart_threshold=multipart_threshold_mb * 1024 * 1024,
-#             multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
-#             max_concurrency=max_concurrency,
-#             use_threads=True,
-#         )
-
-#         print(f"""
-#         --- S3 Download Test (Boto3) ---
-#         Bucket: s3://{bucket_name}
-#         Key: {object_key}
-#         Multipart Threshold: {multipart_threshold_mb} MB
-#         Chunk Size: {multipart_chunksize_mb} MB
-#         Max Concurrency: {max_concurrency}
-#         --- S3 Download Test (Boto3) ---
-#         """)
-
-#         start = time.time()
-#         try:
-#             print("Starting download...")
-#             storage.s3_client.download_file(bucket_name, object_key, output_path, Config=transfer_config)
-#             elapsed = time.time() - start
-
-#             size_bytes = os.path.getsize(output_path)
-#             size_gb = size_bytes / (1024 * 1024 * 1024)
-#             size_mb = size_bytes / (1024 * 1024)
-#             bandwidth_mbs = size_mb / elapsed
-#             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
-
-#             print(f"""
-#         --- S3 Download Stats ---
-#         Size: {size_gb:.2f} GB
-#         Time: {elapsed:.2f} seconds
-#         Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-#         --- S3 Download Stats ---
-#         """)
-#         except Exception as e:
-#             print(f"Download failed: {e}")
-
-#     return (run_s3_download_test,)
+@app.cell(hide_code=True)
+def _(bucket_name: str, download_form, run_s3_download_test, storage: ObjectStorage):
+    if download_form.value:
+        with mo.status.spinner(
+            title="Running Download Test",
+            subtitle=f"Downloading from {bucket_name}",
+        ):
+            run_s3_download_test(
+                storage=storage,
+                bucket_name=bucket_name,
+                **download_form.value,
+            )
+    return
 
 
 if __name__ == "__main__":
