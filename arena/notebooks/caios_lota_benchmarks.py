@@ -147,7 +147,7 @@ def _():
 def _(storage: ObjectStorage):
     buckets = storage.list_buckets()
 
-    bucket_dropdown = mo.ui.dropdown(options=buckets, label="Select Bucket:")
+    bucket_dropdown = mo.ui.dropdown(options=buckets)
     create_bucket_form = (
         mo.md("""
         **Bucket Name:** {bucket_name}
@@ -163,28 +163,28 @@ def _(storage: ObjectStorage):
 
 @app.cell(hide_code=True)
 def _(create_bucket_form, storage: ObjectStorage):
+    _ui = None
     if create_bucket_form.value:
-        _name = create_bucket_form.value.get("bucket_name")
-        storage.create_bucket(_name)
-        mo.md(
-            f"Successfully created bucket {_name} (if it didn't already exist). Please refresh the bucket list dropdown to see the new bucket."
-        )
+        try:
+            _name = create_bucket_form.value.get("bucket_name")
+            storage.create_bucket(_name)
+            _ui = mo.md(
+                f"Successfully created bucket {_name}. Please refresh the bucket list dropdown to see the new bucket."
+            )
+        except Exception as _e:
+            _ui = mo.md(f"Failed to create bucket: {_e}")
+    _ui
     return
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown, create_bucket_form, buckets):
+def _(bucket_dropdown: mo.ui.dropdown, create_bucket_form: mo.ui.form, buckets: list[str]):
+    _ui = None
     if buckets:
         _ui = mo.md(f"""
         ### Create S3 Bucket
 
         {create_bucket_form}
-
-        ### Select S3 Bucket
-
-        Choose a bucket for upload and download tests:
-
-        {bucket_dropdown}
         """)
     else:
         _ui = mo.md(f"""
@@ -203,153 +203,117 @@ def _(bucket_dropdown, create_bucket_form, buckets):
     return
 
 
-# # @app.cell(hide_code=True)
-# # def _(bucket_widget, storage: ObjectStorage):
-# #     if hasattr(bucket_widget, "value") and bucket_widget.value and "bucket_name" in bucket_widget.value:
-# #         new_bucket_name = bucket_widget.value["bucket_name"]
-# #         if new_bucket_name:
-# #             try:
-# #                 success = storage.create_bucket(new_bucket_name)
-# #                 if success:
-# #                     mo.md(f"""
-# #                     /// admonition | Bucket Created
-# #                         type: success
-
-# #                     Successfully created bucket: `{new_bucket_name}`
-
-# #                     Please refresh or re-run the cells to see the new bucket.
-# #                     ///
-# #                     """)
-# #                 else:
-# #                     mo.md(f"""
-# #                     /// admonition | Creation Failed
-# #                         type: error
-
-# #                     Failed to create bucket: `{new_bucket_name}`
-# #                     ///
-# #                     """)
-# #             except Exception as e:
-# #                 mo.md(f"""
-# #                 /// admonition | Error
-# #                     type: error
-
-# #                 Error creating bucket: {str(e)}
-# #                 ///
-# #                 """)
-# #     return
+@app.cell(hide_code=True)
+def _(bucket_dropdown):
+    upload_form = (
+        mo.md("""
+        ### Configure S3 Upload Test
+        - Bucket: {bucket_name}
+        - Test File Size (GB): {test_file_size_gb}
+        - Multipart Threshold (MB): {multipart_threshold_mb}
+        - Chunk Size (MB): {multipart_chunksize_mb}
+        - Max Concurrency: {max_concurrency}
+        """)
+        .batch(
+            bucket_name=bucket_dropdown,
+            test_file_size_gb=mo.ui.number(start=0, stop=1000, step=10, value=10),  # type: ignore
+            multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
+            multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
+            max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
+        )
+        .form(submit_button_label="Run Upload Test", clear_on_submit=False)
+    )
+    upload_form
+    return (upload_form,)
 
 
-# @app.cell(hide_code=True)
-# def _(bucket_dropdown):
-#     upload_form = (
-#         mo.md("""
-#         ### Configure S3 Upload Test
-#         - Bucket: {bucket_name}
-#         - Test File Size (GB): {test_file_size_gb}
-#         - Multipart Threshold (MB): {multipart_threshold_mb}
-#         - Chunk Size (MB): {multipart_chunksize_mb}
-#         - Max Concurrency: {max_concurrency}
-#         """)
-#         .batch(
-#             bucket_name=bucket_dropdown,
-#             test_file_size_gb=mo.ui.number(start=0, stop=1000, step=10, value=10),  # type: ignore
-#             multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-#             multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-#             max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
-#         )
-#         .form(submit_button_label="Run Upload Test", clear_on_submit=False)
-#     )
-#     upload_form
-#     return (upload_form,)
+@app.cell(hide_code=True)
+def _(run_s3_upload_test, storage: ObjectStorage, upload_form):
+    if upload_form.value:
+        run_s3_upload_test(
+            storage=storage,
+            **upload_form.value,
+        )
+    return
 
 
-# @app.cell(hide_code=True)
-# def _(run_s3_upload_test, storage: ObjectStorage, upload_form):
-#     if upload_form.value:
-#         run_s3_upload_test(
-#             storage=storage,
-#             **upload_form.value,
-#         )
-#     return
+@app.cell(hide_code=True)
+def _(bucket_name):
+    def run_s3_upload_test(
+        storage: ObjectStorage,
+        bucket_name: str,
+        test_file_size_gb: int = 1,
+        multipart_threshold_mb: int = 8,
+        multipart_chunksize_mb: int = 8,
+        max_concurrency: int = 10,
+    ):
+        from boto3.s3.transfer import TransferConfig
 
+        if not bucket_name:
+            print("bucket_name is required")
+            return
 
-# @app.cell(hide_code=True)
-# def _(bucket_name):
-#     def run_s3_upload_test(
-#         storage: ObjectStorage,
-#         bucket_name: str,
-#         test_file_size_gb: float = 1.0,
-#         multipart_threshold_mb: int = 8,
-#         multipart_chunksize_mb: int = 8,
-#         max_concurrency: int = 10,
-#     ):
-#         from boto3.s3.transfer import TransferConfig
+        test_dir = "/tmp/bandwidth-test"
+        os.makedirs(test_dir, exist_ok=True)
+        file_size_bytes = int(test_file_size_gb * 1024 * 1024 * 1024)
+        test_file = f"{test_dir}/{test_file_size_gb}G"
+        if not os.path.exists(test_file):
+            print(f"Creating test file: {test_file_size_gb}G...")
+            chunk_size = 64 * 1024 * 1024  # 64 MB
+            zero_chunk = b"\0" * chunk_size
+            with open(test_file, "wb") as f:
+                remaining = file_size_bytes
+                while remaining > 0:
+                    write_size = min(chunk_size, remaining)
+                    f.write(zero_chunk[:write_size])
+                    remaining -= write_size
+                    progress = (file_size_bytes - remaining) / file_size_bytes * 100
+                    print(f"Progress: {progress:.0f}%")
+        else:
+            print(f"Test file '{test_file}' already exists locally, proceeding to upload.")
 
-#         if not bucket_name:
-#             print("bucket_name is required")
-#             return
+        transfer_config = TransferConfig(
+            multipart_threshold=multipart_threshold_mb * 1024 * 1024,
+            multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
+            max_concurrency=max_concurrency,
+            use_threads=True,
+        )
+        file_key = f"benchmark/{test_file_size_gb}G"
 
-#         test_dir = "/tmp/bandwidth-test"
-#         os.makedirs(test_dir, exist_ok=True)
-#         file_size_bytes = int(test_file_size_gb * 1024 * 1024 * 1024)
-#         test_file = f"{test_dir}/{test_file_size_gb}G"
-#         if not os.path.exists(test_file):
-#             print(f"Creating test file: {test_file_size_gb}G...")
-#             chunk_size = 64 * 1024 * 1024  # 64 MB
-#             zero_chunk = b"\0" * chunk_size
-#             with open(test_file, "wb") as f:
-#                 remaining = file_size_bytes
-#                 while remaining > 0:
-#                     write_size = min(chunk_size, remaining)
-#                     f.write(zero_chunk[:write_size])
-#                     remaining -= write_size
-#                     progress = (file_size_bytes - remaining) / file_size_bytes * 100
-#                     print(f"Progress: {progress:.0f}%")
-#         else:
-#             print(f"Test file '{test_file}' already exists locally, proceeding to upload.")
+        print(f"""
+        --- S3 Upload Test (Boto3) ---
+        Bucket: s3://{bucket_name}
+        Key: {file_key}
+        Multipart Threshold: {multipart_threshold_mb} MB
+        Chunk Size: {multipart_chunksize_mb} MB
+        Max Concurrency: {max_concurrency}
+        --- S3 Upload Test (Boto3) ---
+        """)
 
-#         transfer_config = TransferConfig(
-#             multipart_threshold=multipart_threshold_mb * 1024 * 1024,
-#             multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
-#             max_concurrency=max_concurrency,
-#             use_threads=True,
-#         )
-#         file_key = f"benchmark/{test_file_size_gb}G"
+        start = time.time()
+        try:
+            print("Starting upload...")
+            storage.s3_client.upload_file(test_file, bucket_name, file_key, Config=transfer_config)
+            elapsed = time.time() - start
 
-#         print(f"""
-#         --- S3 Upload Test (Boto3) ---
-#         Bucket: s3://{bucket_name}
-#         Key: {file_key}
-#         Multipart Threshold: {multipart_threshold_mb} MB
-#         Chunk Size: {multipart_chunksize_mb} MB
-#         Max Concurrency: {max_concurrency}
-#         --- S3 Upload Test (Boto3) ---
-#         """)
+            size_bytes = os.path.getsize(test_file)
+            size_gb = size_bytes / (1024 * 1024 * 1024)
+            size_mb = size_bytes / (1024 * 1024)
+            bandwidth_mbs = size_mb / elapsed
+            bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
 
-#         start = time.time()
-#         try:
-#             print("Starting upload...")
-#             storage.s3_client.upload_file(test_file, bucket_name, file_key, Config=transfer_config)
-#             elapsed = time.time() - start
+            print(f"""
+        --- S3 Upload Stats ---
+        Size: {size_gb:.2f} GB
+        Time: {elapsed:.2f} seconds
+        Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
+        --- S3 Upload Stats ---
+        """)
+        except Exception as e:
+            print(f"Upload failed: {e}")
+        return file_key
 
-#             size_bytes = os.path.getsize(test_file)
-#             size_gb = size_bytes / (1024 * 1024 * 1024)
-#             size_mb = size_bytes / (1024 * 1024)
-#             bandwidth_mbs = size_mb / elapsed
-#             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
-
-#             print(f"""
-#         --- S3 Upload Stats ---
-#         Size: {size_gb:.2f} GB
-#         Time: {elapsed:.2f} seconds
-#         Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-#         --- S3 Upload Stats ---
-#         """)
-#         except Exception as e:
-#             print(f"Upload failed: {e}")
-#         return file_key
-
-#     return (run_s3_upload_test,)
+    return (run_s3_upload_test,)
 
 
 # @app.cell(hide_code=True)
