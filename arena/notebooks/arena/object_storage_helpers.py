@@ -279,6 +279,56 @@ def get_s3_client(use_lota: bool = False):
     )
 
 
+def create_bucket(bucket_name: str, use_lota: bool = False) -> bool:
+    """
+    Create an S3 bucket (S3-compatible; e.g. CoreWeave CAIOS/LOTA).
+    
+    Args:
+        bucket_name: Name for the new bucket (must be globally unique).
+        use_lota: If True, use LOTA endpoint.
+        
+    Returns:
+        True if the bucket was created or already exists, False on error.
+    """
+    if not bucket_name or not bucket_name.strip():
+        print("Error: bucket name is required")
+        return False
+    bucket_name = bucket_name.strip()
+    config = get_config()
+    region = config.get("AWS_DEFAULT_REGION", "us-east-1")
+    s3 = get_s3_client(use_lota=use_lota)
+    try:
+        s3.create_bucket(
+            Bucket=bucket_name,
+            CreateBucketConfiguration={"LocationConstraint": region},
+        )
+        print(f"Created bucket: {bucket_name}")
+        return True
+    except s3.exceptions.ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in ("BucketAlreadyExists", "BucketAlreadyOwnedByYou"):
+            print(f"Bucket already exists: {bucket_name}")
+            return True
+        # Some S3-compatible endpoints don't support LocationConstraint; try without
+        if code in ("InvalidLocationConstraint", "IllegalLocationConstraintException"):
+            try:
+                s3.create_bucket(Bucket=bucket_name)
+                print(f"Created bucket: {bucket_name}")
+                return True
+            except s3.exceptions.ClientError as e2:
+                code2 = e2.response.get("Error", {}).get("Code", "")
+                if code2 in ("BucketAlreadyExists", "BucketAlreadyOwnedByYou"):
+                    print(f"Bucket already exists: {bucket_name}")
+                    return True
+                print(f"Error creating bucket: {e2}")
+                return False
+        print(f"Error creating bucket: {e}")
+        return False
+    except Exception as e:
+        print(f"Error creating bucket: {e}")
+        return False
+
+
 def list_buckets(use_lota: bool = False) -> List[str]:
     """
     List all available S3 buckets.
