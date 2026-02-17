@@ -8,23 +8,19 @@ Modules:
 Usage:
     from arena.remote_execution_helpers import ssh, run_remote
     from arena.object_storage_helpers import apply_policy, list_policies
-    
+
     # Or import modules
     from arena import remote_execution_helpers, object_storage_helpers
 """
 
-from arena import remote_execution_helpers
-from arena import object_storage_helpers
-
-# Expose commonly used functions at package level
-from arena.remote_execution_helpers import ssh, run_remote, run_remote_interactive
+# SSH functions
 from arena.object_storage_helpers import (
-    apply_policy,
-    list_policies,
-    delete_policy,
-    get_s3_client,
-    list_buckets,
+    MissingCredentialsError,
+    ObjectStorage,
 )
+from arena.remote_execution_helpers import run_remote, run_remote_interactive, ssh
+
+from . import object_storage_helpers, remote_execution_helpers
 
 __all__ = [
     # Modules
@@ -34,10 +30,7 @@ __all__ = [
     "ssh",
     "run_remote",
     "run_remote_interactive",
-    # Object storage functions
-    "apply_policy",
-    "list_policies",
-    "delete_policy",
-    "get_s3_client",
-    "list_buckets",
+    # Object Storage
+    "ObjectStorage",
+    "MissingCredentialsError",
 ]
