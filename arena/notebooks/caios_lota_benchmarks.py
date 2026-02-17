@@ -52,8 +52,6 @@ def _():
     mo.md(r"""
     /// details | Table of Contents
 
-    - **Access Keys** - Create credentials in the console
-    - **Organizational Policies** - Set S3 access policies
     - **Bucket Operations** - List and manage buckets
     - **Benchmarks** - Performance testing
     ///
@@ -84,7 +82,7 @@ def _():
     caios: ObjectStorage
     cw_token_required: bool = False
     try:
-        caios = ObjectStorage.auto(use_lota=False)
+        caios = ObjectStorage.auto(use_lota=False)  # TODO: remove when done testing
     except MissingCredentialsError:
         cw_token_required = True
     if cw_token_required:
@@ -134,7 +132,7 @@ def _(caios: ObjectStorage, form: mo.ui.form, region: str, use_lota: bool):
 def _():
     mo.md(r"""
     ---
-    ## 3. Bucket Operations
+    ## Bucket Operations
 
     /// admonition | S3 Buckets
         type: info
@@ -149,37 +147,47 @@ def _():
 def _(storage: ObjectStorage):
     buckets = storage.list_buckets()
 
-    if buckets:
-        bucket_dropdown = mo.ui.dropdown(options=buckets, label="Select Bucket:")
-        bucket_widget = bucket_dropdown
-    else:
-        bucket_dropdown = None
-        create_bucket_form = (
-            mo.md("""
-            **Bucket Name:** {bucket_name}
-            """)
-            .batch(
-                bucket_name=mo.ui.text(placeholder="my-bucket-name", full_width=True)  # type: ignore
-            )
-            .form(submit_button_label="Create Bucket", clear_on_submit=False)
+    bucket_dropdown = mo.ui.dropdown(options=buckets, label="Select Bucket:")
+    create_bucket_form = (
+        mo.md("""
+        **Bucket Name:** {bucket_name}
+        """)
+        .batch(
+            bucket_name=mo.ui.text(placeholder="my-bucket-name", full_width=True)  # type: ignore
         )
-        bucket_widget = create_bucket_form
+        .form(submit_button_label="Create Bucket", clear_on_submit=False)
+    )
 
-    return bucket_dropdown, bucket_widget, buckets
+    return bucket_dropdown, create_bucket_form, buckets
 
 
 @app.cell(hide_code=True)
-def _(bucket_widget, buckets):
+def _(create_bucket_form, storage: ObjectStorage):
+    if create_bucket_form.value:
+        _name = create_bucket_form.value.get("bucket_name")
+        storage.create_bucket(_name)
+        mo.md(
+            f"Successfully created bucket {_name} (if it didn't already exist). Please refresh the bucket list dropdown to see the new bucket."
+        )
+    return
+
+
+@app.cell(hide_code=True)
+def _(bucket_dropdown, create_bucket_form, buckets):
     if buckets:
-        mo.md(f"""
+        _ui = mo.md(f"""
+        ### Create S3 Bucket
+
+        {create_bucket_form}
+
         ### Select S3 Bucket
 
         Choose a bucket for upload and download tests:
 
-        {bucket_widget}
+        {bucket_dropdown}
         """)
     else:
-        mo.md(f"""
+        _ui = mo.md(f"""
         ### Create S3 Bucket
 
         /// admonition | No Buckets Found
@@ -188,8 +196,10 @@ def _(bucket_widget, buckets):
         No buckets found in your account. Create one to get started:
         ///
 
-        {bucket_widget}
+        {create_bucket_form}
         """)
+    bucket_name = bucket_dropdown.value
+    _ui
     return
 
 
