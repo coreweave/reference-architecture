@@ -2257,8 +2257,7 @@ dependencies = [
     { name = "evaluate" },
     { name = "httpx" },
     { name = "kubernetes" },
-    { name = "marimo", extra = ["lsp"] },
-    { name = "mypy-boto3-s3" },
+    { name = "marimo" },
     { name = "ray" },
     { name = "statistics" },
     { name = "torch" },
@@ -2269,6 +2268,8 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "boto3-stubs", extra = ["s3"] },
+    { name = "marimo", extra = ["lsp"] },
+    { name = "mypy-boto3-s3" },
     { name = "pre-commit" },
     { name = "ruff" },
     { name = "ty" },
@@ -2283,8 +2284,7 @@ requires-dist = [
     { name = "evaluate", specifier = ">=0.4.6" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "kubernetes", specifier = ">=35.0.0" },
-    { name = "marimo", extras = ["lsp"], specifier = ">=0.19.10" },
-    { name = "mypy-boto3-s3", specifier = ">=1.42.37" },
+    { name = "marimo", specifier = ">=0.19.11" },
     { name = "ray", specifier = ">=2.53.0" },
     { name = "statistics", specifier = ">=1.0.3.5" },
     { name = "torch", specifier = ">=2.10.0" },
@@ -2295,6 +2295,8 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "boto3-stubs", extras = ["s3"], specifier = ">=1.42.48" },
+    { name = "marimo", extras = ["lsp"], specifier = ">=0.19.11" },
+    { name = "mypy-boto3-s3", specifier = ">=1.42.37" },
     { name = "pre-commit", specifier = ">=4.5.1" },
     { name = "ruff", specifier = ">=0.15.0" },
     { name = "ty", specifier = ">=0.0.17" },

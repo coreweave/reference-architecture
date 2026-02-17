@@ -79,14 +79,35 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
+    use_lota_checkbox = mo.ui.checkbox(value=False, label="Use LOTA (GPU clusters only)")
+
+    mo.md(f"""
+    ### Storage Endpoint Configuration
+
+    {use_lota_checkbox}
+
+    /// admonition | About LOTA
+        type: info
+
+    [LOTA](https://docs.coreweave.com/products/storage/object-storage/lota/about#about-lota) provides faster access for GPU workloads by using a local cache but is only accessible from GPU clusters.
+    If you're running locally or on CPU-only clusters, keep this unchecked to use CAIOS.
+    ///
+    """)
+
+    return (use_lota_checkbox,)
+
+
+@app.cell(hide_code=True)
+def _(use_lota_checkbox):
+    use_lota = use_lota_checkbox.value
     caios: ObjectStorage
     cw_token_required: bool = False
     try:
-        caios = ObjectStorage.auto(use_lota=False)  # TODO: remove when done testing
+        caios = ObjectStorage.auto(use_lota=use_lota)
     except MissingCredentialsError:
         cw_token_required = True
     if cw_token_required:
-        form = (
+        token_form = (
             mo.md("{cw_token}")
             .batch(cw_token=mo.ui.text(kind="password", placeholder="CW-SECRET-...", full_width=True))  # type: ignore
             .form(submit_button_label="Connect", bordered=False)
@@ -99,15 +120,15 @@ def _():
             Automatic credentials not found. Please enter your [CoreWeave access token](https://console.coreweave.com/tokens) to initialize the ObjectStorage client.
             ///
 
-            {form}
+            {token_form}
             """
         )
     else:
-        form = None
+        token_form = None
         _ui = mo.md("ObjectStorage client initialized successfully")
 
     _ui
-    return caios, form
+    return caios, token_form, use_lota
 
 
 @app.cell(hide_code=True)
