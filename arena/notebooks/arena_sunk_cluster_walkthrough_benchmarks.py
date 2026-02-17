@@ -84,21 +84,21 @@ def _(mo):
 @app.cell
 def _(shell):
     # Slurm cluster info:
-    print(shell("sinfo"))
+    shell("sinfo")
     return
 
 
 @app.cell
 def _(shell):
     # Slurm user info:
-    print(shell("sacctmgr show users"))
+    shell("sacctmgr show users")
     return
 
 
 @app.cell
 def _(shell):
     # Slurm accounting info:
-    print(shell("sacctmgr show associations format=User,Account,Partition,QOS"))
+    shell("sacctmgr show associations format=User,Account,Partition,QOS")
     return
 
 
@@ -113,7 +113,7 @@ def _(mo):
 @app.cell
 def _(shell):
     # Node info
-    print(shell("scontrol show nodes"))
+    shell("scontrol show nodes")
     return
 
 
@@ -127,7 +127,7 @@ def _(mo):
 
 @app.cell
 def _(shell):
-    print(shell("scontrol show partition"))
+    shell("scontrol show partition")
     return
 
 
@@ -184,7 +184,7 @@ def _(num_nodes, shell, submit_btn):
     if submit_btn.value:
         cmd = f"cd /mnt/data/arena/benchmarks/nccl/nccl-tests/slurm && sbatch -N {num_nodes.value} nccl-test-distributed-h100-64.slurm"
         print(f"Running: sbatch -N {num_nodes.value} ...")
-        print(shell(cmd))
+        shell(cmd)
     else:
         print("Click 'Submit NCCL Test Job' to run the benchmark")
     return
@@ -192,13 +192,13 @@ def _(num_nodes, shell, submit_btn):
 
 @app.cell
 def _(shell):
-    print(shell("squeue"))
+    shell("squeue")
     return
 
 
 @app.cell
 def _(shell):
-    print(shell("ls /mnt/data/arena/benchmarks/nccl/nccl-tests/slurm/*.out"))
+    shell("ls /mnt/data/arena/benchmarks/nccl/nccl-tests/slurm/*.out")
     return
 
 
