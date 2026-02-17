@@ -36,12 +36,12 @@ def _():
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # CoreWeave AI Labs: W&B Model Training Demo
+    # CoreWeave ARENA: W&B Model Training Demo
 
     /// admonition | About This Notebook
         type: info
 
-    This notebook is a demo adaptation of [W&B HuggingFace artifacts](https://colab.research.google.com/drive/1WObS8JQnVODKG-gxtWVokCvSkKjIWUjt?usp=sharing#scrollTo=06gXuaF8HTBD) to provide an example of AILabs use with W&B integration.
+    This notebook is a demo adaptation of [W&B HuggingFace artifacts](https://colab.research.google.com/drive/1WObS8JQnVODKG-gxtWVokCvSkKjIWUjt?usp=sharing#scrollTo=06gXuaF8HTBD) to provide an example of ARENA use with W&B integration.
     ///
 
     /// details | Pipeline Steps
@@ -73,8 +73,10 @@ def _(mo):
 
 @app.cell
 def _(shell):
-    DEPENDENCIES = "wandb transformers datasets evaluate accelerate scikit-learn torch"
-    shell(f"pip install -q {DEPENDENCIES}")
+    import subprocess
+    import sys
+    DEPENDENCIES = ["wandb", "transformers", "datasets", "evaluate", "accelerate", "scikit-learn", "torch"]
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "-q"] + DEPENDENCIES)
     return
 
 
