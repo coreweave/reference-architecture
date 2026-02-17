@@ -178,7 +178,7 @@ def _(create_bucket_form, storage: ObjectStorage):
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown: mo.ui.dropdown, create_bucket_form: mo.ui.form, buckets: list[str]):
+def _(create_bucket_form: mo.ui.form, buckets: list[str]):
     _ui = None
     if buckets:
         _ui = mo.md(f"""
@@ -198,24 +198,33 @@ def _(bucket_dropdown: mo.ui.dropdown, create_bucket_form: mo.ui.form, buckets: 
 
         {create_bucket_form}
         """)
-    bucket_name = bucket_dropdown.value
     _ui
     return
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown):
+def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
+    _ui = None
+    if buckets:
+        _ui = mo.md(f"""
+            ### Select S3 Bucket for upload and download tests
+            {bucket_dropdown}
+            """)
+        bucket_name = bucket_dropdown.value
+    _ui
+
+
+@app.cell(hide_code=True)
+def _():
     upload_form = (
         mo.md("""
         ### Configure S3 Upload Test
-        - Bucket: {bucket_name}
         - Test File Size (GB): {test_file_size_gb}
         - Multipart Threshold (MB): {multipart_threshold_mb}
         - Chunk Size (MB): {multipart_chunksize_mb}
         - Max Concurrency: {max_concurrency}
         """)
         .batch(
-            bucket_name=bucket_dropdown,
             test_file_size_gb=mo.ui.number(start=0, stop=1000, step=10, value=10),  # type: ignore
             multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
             multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
@@ -225,16 +234,6 @@ def _(bucket_dropdown):
     )
     upload_form
     return (upload_form,)
-
-
-@app.cell(hide_code=True)
-def _(run_s3_upload_test, storage: ObjectStorage, upload_form):
-    if upload_form.value:
-        run_s3_upload_test(
-            storage=storage,
-            **upload_form.value,
-        )
-    return
 
 
 @app.cell(hide_code=True)
@@ -316,84 +315,82 @@ def _(bucket_name):
     return (run_s3_upload_test,)
 
 
-# @app.cell(hide_code=True)
-# def _(storage: ObjectStorage, bucket_dropdown: mo.ui.dropdown):
-#     selected_bucket = bucket_dropdown.value
-
-#     if selected_bucket:
-#         objects_result = storage.list_objects(selected_bucket, prefix="benchmark/")
-#         object_keys = [obj["Key"] for obj in objects_result["objects"]]
-
-#         if object_keys:
-#             object_key_dropdown = mo.ui.dropdown(
-#                 options=object_keys, value=object_keys[0] if object_keys else "", label="Select Object Key"
-#             )
-#             _ui = mo.md(f"""
-#             **Available objects in `{selected_bucket}`:**
-
-#             {object_key_dropdown}
-
-#             Found {len(object_keys)} object(s) with prefix 'benchmark/'
-#             """)
-#         else:
-#             object_key_dropdown = None
-#             _ui = mo.md(f"""
-#             /// admonition | No Objects Found
-#                 type: warning
-
-#             No objects found in bucket `{selected_bucket}` with prefix 'benchmark/'.
-#             Upload a file first using the upload test above.
-#             ///
-#             """)
-#     else:
-#         object_key_dropdown = None
-#         object_keys = []
-#         _ui = mo.md("""
-#         /// admonition | Select a Bucket
-#             type: info
-
-#         Please select a bucket above to view available objects for download testing.
-#         ///
-#         """)
-
-#     _ui
-#     return object_key_dropdown, object_keys, selected_bucket
+@app.cell(hide_code=True)
+def _(run_s3_upload_test, bucket_name: str, storage: ObjectStorage, upload_form):
+    if upload_form.value:
+        run_s3_upload_test(
+            storage=storage,
+            bucket_name=bucket_name,
+            **upload_form.value,
+        )
+    return
 
 
-# @app.cell(hide_code=True)
-# def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
-#     if object_key_dropdown is not None:
-#         download_form = (
-#             mo.md("""
-#             ### Configure S3 Download Test
-#             - Bucket: {bucket_name}
-#             - Object Key: {object_key}
-#             - Multipart Threshold (MB): {multipart_threshold_mb}
-#             - Chunk Size (MB): {multipart_chunksize_mb}
-#             - Max Concurrency: {max_concurrency}
-#             """)
-#             .batch(
-#                 bucket_name=bucket_dropdown,  # type: ignore
-#                 object_key=object_key_dropdown,  # type: ignore
-#                 multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-#                 multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-#                 max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
-#             )
-#             .form(submit_button_label="Run Download Test", clear_on_submit=False)
-#         )
-#         _ui = download_form
-#     else:
-#         download_form = None
-#         _ui = mo.md("""
-#         /// admonition | No Objects Available
-#             type: warning
+@app.cell(hide_code=True)
+def _(storage: ObjectStorage, bucket_name):
+    if bucket_name:
+        objects_result = storage.list_objects(bucket_name, prefix="benchmark/")
+        object_keys = [obj["Key"] for obj in objects_result["objects"]]
 
-#         No objects available for download. Please select a bucket and upload a file first using the upload test above.
-#         ///
-#         """)
+        if object_keys:
+            object_key_dropdown = mo.ui.dropdown(
+                options=object_keys, value=object_keys[0] if object_keys else "", label="Select Object Key"
+            )
+            _ui = mo.md(f"""
+            Available objects for download test in `{bucket_name}`:
 
-#     _ui
-#     return (download_form,)
+            {object_key_dropdown}
+
+            Found {len(object_keys)} object(s) with prefix 'benchmark/'
+            """)
+        else:
+            object_key_dropdown = None
+            _ui = mo.md(f"""
+            /// admonition | No Objects Found
+                type: warning
+
+            No objects found in bucket `{bucket_name}` with prefix 'benchmark/'.
+            Upload a file first using the upload test above.
+            ///
+            """)
+    else:
+        object_key_dropdown = None
+        object_keys = []
+    return object_key_dropdown, object_keys
+
+
+@app.cell(hide_code=True)
+def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
+    if object_key_dropdown is not None:
+        download_form = (
+            mo.md("""
+            ### Configure S3 Download Test
+            - Object Key: {object_key}
+            - Multipart Threshold (MB): {multipart_threshold_mb}
+            - Chunk Size (MB): {multipart_chunksize_mb}
+            - Max Concurrency: {max_concurrency}
+            """)
+            .batch(
+                object_key=object_key_dropdown,  # type: ignore
+                multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
+                multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
+                max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
+            )
+            .form(submit_button_label="Run Download Test", clear_on_submit=False)
+        )
+        _ui = download_form
+    else:
+        download_form = None
+        _ui = mo.md("""
+        /// admonition | No Objects Available
+            type: warning
+
+        No objects available for download. Please select a bucket and upload a file first using the upload test above.
+        ///
+        """)
+
+    _ui
+    return (download_form,)
 
 
 # @app.cell(hide_code=True)
