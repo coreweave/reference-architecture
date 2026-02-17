@@ -179,6 +179,38 @@ class ObjectStorage(ABC):
             print(f"Error deleting bucket: {e}")
             return False
 
+    def empty_bucket(self, bucket_name: str) -> bool:
+        try:
+            print(f"Emptying bucket '{bucket_name}'...")
+            total_deleted = 0
+            continuation_token = None
+
+            while True:
+                list_result = self.list_objects(
+                    bucket_name=bucket_name, continuation_token=continuation_token, max_keys=1000
+                )
+                objects = list_result.get("objects", [])
+                if not objects:
+                    break
+                delete_keys = [{"Key": obj["Key"]} for obj in objects]
+                resp = self.s3_client.delete_objects(Bucket=bucket_name, Delete={"Objects": delete_keys})
+                deleted = len(resp.get("Deleted", []))
+                total_deleted += deleted
+                errors = resp.get("Errors", [])
+                if errors:
+                    print(f"Warning: {len(errors)} objects failed to delete")
+                    for error in errors[:5]:
+                        print(f"  - {error.get('Key')}: {error.get('Message')}")
+                print(f"Deleted {deleted} objects (total: {total_deleted})")
+                if not list_result.get("is_truncated"):
+                    break
+                continuation_token = list_result.get("next_continuation_token")
+            print(f"Finished emptying bucket '{bucket_name}', total deleted: {total_deleted}")
+            return True
+        except Exception as e:
+            print(f"Error emptying bucket: {e}")
+            return False
+
     def put_bucket_policy(self, bucket_name: str, policy: dict[str, Any]) -> bool:
         policy_str = json.dumps(policy)
         try:

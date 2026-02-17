@@ -150,7 +150,7 @@ def _(storage: ObjectStorage):
     buckets = storage.list_buckets()
 
     if buckets:
-        bucket_dropdown = mo.ui.dropdown(options=buckets, label="Select Bucket")
+        bucket_dropdown = mo.ui.dropdown(options=buckets, label="Select Bucket:")
         bucket_widget = bucket_dropdown
     else:
         bucket_dropdown = None
@@ -168,29 +168,29 @@ def _(storage: ObjectStorage):
     return bucket_dropdown, bucket_widget, buckets
 
 
-# @app.cell(hide_code=True)
-# def _(bucket_widget, buckets):
-#     if buckets:
-#         mo.md(f"""
-#         ### Select S3 Bucket
+@app.cell(hide_code=True)
+def _(bucket_widget, buckets):
+    if buckets:
+        mo.md(f"""
+        ### Select S3 Bucket
 
-#         Choose a bucket for upload and download tests:
+        Choose a bucket for upload and download tests:
 
-#         {bucket_widget}
-#         """)
-#     else:
-#         mo.md(f"""
-#         ### Create S3 Bucket
+        {bucket_widget}
+        """)
+    else:
+        mo.md(f"""
+        ### Create S3 Bucket
 
-#         /// admonition | No Buckets Found
-#             type: warning
+        /// admonition | No Buckets Found
+            type: warning
 
-#         No buckets found in your account. Create one to get started:
-#         ///
+        No buckets found in your account. Create one to get started:
+        ///
 
-#         {bucket_widget}
-#         """)
-#     return
+        {bucket_widget}
+        """)
+    return
 
 
 # # @app.cell(hide_code=True)
