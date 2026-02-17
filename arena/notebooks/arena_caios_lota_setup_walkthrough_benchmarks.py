@@ -21,18 +21,21 @@ def _():
     import marimo as mo
     from arena.object_storage_helpers import (
         apply_policy,
+        create_bucket,
         list_buckets,
         list_policies,
     )
     from arena.remote_execution_helpers import shell
 
-    return apply_policy, json, list_buckets, list_policies, mo, os, shell, time
+    import secrets
+
+    return apply_policy, create_bucket, json, list_buckets, list_policies, mo, os, secrets, shell, time
 
 
 @app.cell(hide_code=True)
 def _(mo):
     mo.md(r"""
-    # CoreWeave AI Labs: Object Storage & LOTA
+    # CoreWeave ARENA: Object Storage & LOTA
 
     /// admonition | About This Notebook
         type: info
@@ -71,6 +74,15 @@ def _(mo):
     These credentials are used for S3 API access to CAIOS and LOTA.
     ///
     """)
+    return
+
+@app.cell
+def _(shell):
+    os.environ['AWS_ACCESS_KEY_ID'] = "your-key-here"
+    os.environ['AWS_SECRET_ACCESS_KEY'] = "your-secret-key-here"
+    os.environ['AWS_DEFAULT_REGION'] = "cw-region" # For example US-EAST-04
+    os.environ['S3_ENDPOINT_URL'] = "http://cwlota.com"
+    os.environ['API_ACCESS_TOKEN'] = "your-access-token-here"
     return
 
 
@@ -178,8 +190,47 @@ def _(mo):
     /// admonition | S3 Buckets
         type: info
 
-    List and manage your S3 buckets. Buckets are the top-level containers for your objects.
+    Create a bucket below, then list and manage your S3 buckets. Buckets are the top-level containers for your objects.
     ///
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### Create a bucket
+
+    Bucket names must be globally unique. A random suffix is pre-filled; you can change it.
+    """)
+    return
+
+
+@app.cell
+def _(secrets):
+    default_bucket_name = "my-test-bucket-" + secrets.token_hex(4)
+    return (default_bucket_name,)
+
+
+@app.cell
+def _(default_bucket_name, mo):
+    bucket_name = mo.ui.text(value=default_bucket_name, label="Bucket name")
+    create_bucket_btn = mo.ui.run_button(label="Create bucket")
+    mo.vstack([bucket_name, create_bucket_btn])
+    return (bucket_name, create_bucket_btn)
+
+
+@app.cell
+def _(create_bucket, create_bucket_btn, bucket_name):
+    if create_bucket_btn.value:
+        create_bucket(bucket_name.value)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ### List buckets
     """)
     return
 
