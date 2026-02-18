@@ -72,13 +72,6 @@ def _(mo):
 
 
 @app.cell
-def _(shell):
-    DEPENDENCIES = "wandb transformers datasets evaluate accelerate scikit-learn torch"
-    shell(f"pip install -q {DEPENDENCIES}")
-    return
-
-
-@app.cell
 def _():
     import os
 
