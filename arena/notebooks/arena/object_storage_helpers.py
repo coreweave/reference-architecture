@@ -29,28 +29,45 @@ class ObjectStorageError(Exception):
 
 
 class MissingCredentialsError(ObjectStorageError):
-    """Raised when required credentials are missing"""
+    """Raised when required credentials are missing."""
 
     pass
 
 
 class MissingRegionError(ObjectStorageError):
-    """Raised when unable to get a region"""
+    """Raised when unable to get a region."""
 
     pass
 
 
 class ObjectStorage(ABC):
-    """
-    Abstract base class for CAIOS operations.
-    Provides s3 access and org policy management.
+    """Abstract base class for CAIOS operations.
+
+    Provides s3 access and cw api org policy management.
+    It passes through commonly used s3_client functions.
+
+    Attributes:
+        use_lota (bool): Whether to use LOTA endpoint (GPU clusters) vs CAIOS endpoint.
+        region (str): CW region for bucket operations.
+        addressing_style (Literal["path","virtual","auto"]): S3 addressing style.
+        cw_token (str): CW api token for authentication.
+        s3_config (Config): S3 configuration for botocore
+        endpoint_url (str): The fully formed url to perform s3 operations against
     """
 
-    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
+    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = "", availability_zone: str = "A"):
+        """Initialize ObjectStorage base class.
+
+        Args:
+            cw_token (str, optional): CoreWeave API token. Defaults to CW_TOKEN env var.
+            use_lota (bool, optional): Use LOTA endpoint for GPU clusters. Defaults to True.
+            region (str, optional): CW region. Defaults to auto-detected region.
+            availability_zone (str, optional): CW availability zone, needed since we can't detect it from in-cluster. Defaults to 'A'.
+        """
         self.use_lota = use_lota
         self._s3_client: S3Client | None = None
         self._api_session: requests.Session | None = None
-        self.region = region if region else detect_region()
+        self.region = region if region else f"{detect_region()}{availability_zone}"
 
         style = os.environ.get("AWS_S3_ADDRESSING_STYLE")
         self.addressing_style: Literal["path", "virtual", "auto"] = (
@@ -71,9 +88,22 @@ class ObjectStorage(ABC):
 
     @staticmethod
     def auto(cw_token: str = "", use_lota: bool = True, region: str = "") -> "ObjectStorage":
-        """
-        Auto detect and create the ObjectStorage client
-        Tries pod identity first with both lota and cwobject endpoints, and falls back to access keys with both lota and cwobject endpoints
+        """Auto detect and create the ObjectStorage client.
+
+        Attempts authentication methods in order:
+        1. Pod Identity with LOTA (falls back to CAIOS on connection errors)
+        2. Access Keys with LOTA (falls back to CAIOS on connection errors)
+
+        Args:
+            cw_token (str, optional): CoreWeave API token.
+            use_lota (bool, optional): Prefer LOTA endpoint. Defaults to True.
+            region (str, optional): AWS region.
+
+        Returns:
+            ObjectStorage: Authenticated client instance (PodIdentityObjectStorage or AccessKeyObjectStorage).
+
+        Raises:
+            ObjectStorageError: If all authentication methods fail.
         """
         print("Initializing CoreWeave AI object storage")
         # Choose our subclass with preference for PodIdentity if it works
@@ -117,35 +147,65 @@ class ObjectStorage(ABC):
                 return client
             else:
                 # Re-raise if it's not a connection issue
-                raise
+                raise ObjectStorageError(f"Failed to create the ObjectStorage client: {e}")
 
     @staticmethod
     def with_pod_identity(cw_token: str = "", use_lota: bool = True, region: str = "") -> "PodIdentityObjectStorage":
-        """
-        Create ObjectStorage client using Pod Identity / Workload Identity authentication.
+        """Create ObjectStorage client using Pod Identity / Workload Identity.
+
+        Use this when running in a CoreWeave Kubernetes cluster with pod identity configured.
+
+        Args:
+            cw_token (str, optional): CoreWeave API token. Will attempt to read from pod secrets if not provided.
+            use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
+            region (str, optional): AWS region.
+
+        Returns:
+            PodIdentityObjectStorage: Authenticated client.
+
+        Raises:
+            MissingCredentialsError: If pod identity token is not available.
         """
         return PodIdentityObjectStorage(cw_token, use_lota, region)
 
     @staticmethod
     def with_access_keys(cw_token: str = "", use_lota: bool = True, region: str = "") -> "AccessKeyObjectStorage":
-        """
-        Create ObjectStorage client using Access Key authentication.
+        """Create ObjectStorage client using Access Key authentication.
+
+        Use this when running outside CoreWeave Kubernetes or with explicit credentials.
+        Uses AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY or automatically generates key via CW_TOKEN.
+
+        Args:
+            cw_token (str, optional): CoreWeave API token for generating temporary keys.
+            use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
+            region (str, optional): AWS region.
+
+        Returns:
+            AccessKeyObjectStorage: Authenticated client.
+
+        Raises:
+            MissingCredentialsError: If credentials cannot be obtained.
         """
         return AccessKeyObjectStorage(cw_token, use_lota, region)
 
     @property
     @abstractmethod
     def s3_client(self) -> S3Client:
-        "Get the boto3 s3 client"
+        """Get the boto3 S3 client. Must be implemented by subclasses."""
         pass
 
     @property
     @abstractmethod
     def api_session(self) -> requests.Session:
-        "Get http session for cwobject api"
+        """Get HTTP session for CoreWeave API calls. Must be implemented by subclasses."""
         pass
 
     def list_buckets(self) -> list[str]:
+        """List all S3 buckets.
+
+        Returns:
+            list[str]: List of bucket names. Returns empty list on error.
+        """
         try:
             response = self.s3_client.list_buckets()
             buckets = response.get("Buckets", [])
@@ -159,6 +219,14 @@ class ObjectStorage(ABC):
             return []
 
     def create_bucket(self, bucket_name: str) -> bool:
+        """Create a new S3 bucket.
+
+        Args:
+            bucket_name (str): Name of the bucket to create.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
         try:
             self.s3_client.create_bucket(
                 Bucket=bucket_name,
@@ -171,6 +239,17 @@ class ObjectStorage(ABC):
             return False
 
     def delete_bucket(self, bucket_name: str) -> bool:
+        """Delete an empty S3 bucket.
+
+        Args:
+            bucket_name (str): Name of the bucket to delete.
+
+        Returns:
+            bool: True if successful, False otherwise.
+
+        Note:
+            Bucket must be empty. Use empty_bucket() first if needed.
+        """
         try:
             self.s3_client.delete_bucket(Bucket=bucket_name)
             print(f"Deleted bucket '{bucket_name}'")
@@ -180,6 +259,17 @@ class ObjectStorage(ABC):
             return False
 
     def empty_bucket(self, bucket_name: str) -> bool:
+        """Delete all objects in a bucket.
+
+        Args:
+            bucket_name (str): Name of the bucket to empty.
+
+        Returns:
+            bool: True if successful, False otherwise.
+
+        Note:
+            Deletes objects in batches of up to 1000. Warns about individual deletion failures.
+        """
         try:
             print(f"Emptying bucket '{bucket_name}'...")
             total_deleted = 0
@@ -212,6 +302,15 @@ class ObjectStorage(ABC):
             return False
 
     def put_bucket_policy(self, bucket_name: str, policy: dict[str, Any]) -> bool:
+        """Apply an S3 bucket policy.
+
+        Args:
+            bucket_name (str): Name of the bucket.
+            policy (dict[str, Any]): S3 bucket policy document.
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
         policy_str = json.dumps(policy)
         try:
             self.s3_client.put_bucket_policy(Bucket=bucket_name, Policy=policy_str)
@@ -222,6 +321,14 @@ class ObjectStorage(ABC):
             return False
 
     def get_bucket_policy(self, bucket_name: str) -> dict[str, Any] | None:
+        """Retrieve an S3 bucket policy.
+
+        Args:
+            bucket_name (str): Name of the bucket.
+
+        Returns:
+            dict[str, Any] | None: Parsed policy document, or None if not set or on error.
+        """
         try:
             resp = self.s3_client.get_bucket_policy(Bucket=bucket_name)
             return json.loads(resp["Policy"])
@@ -230,6 +337,11 @@ class ObjectStorage(ABC):
             return None
 
     def list_org_policies(self) -> list[dict[str, Any]]:
+        """List organization-level access policies from CW API.
+
+        Returns:
+            list[dict[str, Any]]: List of policy documents. Returns empty list on error.
+        """
         try:
             resp = self.api_session.get(f"{COREWEAVE_OBJECT_API_BASE_URL}/access-policy")
             resp.raise_for_status()
@@ -241,22 +353,20 @@ class ObjectStorage(ABC):
             return []
 
     def apply_org_policy(self, policy: dict[str, Any]) -> bool:
-        """
-        Example:
-            policy = {
-                "policy": {
-                    "version": "v1alpha1",
-                    "name": "my-policy",
-                    "statements": [{
-                        "name": "allow-full-access",
-                        "effect": "Allow",
-                        "actions": ["s3:*"],
-                        "resources": ["*"],
-                        "principals": ["role/Admin"]
-                    }]
+        """Create or update an organization-level access policy.
+
+        Args:
+            policy (dict[str, Any]): Policy document with structure:
+                {
+                    "policy": {
+                        "version": "v1alpha1",
+                        "name": "policy-name",
+                        "statements": [...]
+                    }
                 }
-            }
-            storage.apply_organization_policy(policy)
+
+        Returns:
+            bool: True if successful, False otherwise.
         """
         policy_name = policy.get("policy", {}).get("name", "unknown")
 
@@ -275,6 +385,23 @@ class ObjectStorage(ABC):
     def list_objects(
         self, bucket_name: str, prefix: str = "", max_keys: int = 1000, continuation_token: str | None = None
     ) -> dict[str, Any]:
+        """List objects in a bucket with pagination support.
+
+        Expected for consumers to loop over the function while passing in the continuation token.
+
+        Args:
+            bucket_name (str): Name of the bucket.
+            prefix (str, optional): Filter objects by key prefix. Defaults to "".
+            max_keys (int, optional): Maximum objects per request (capped at 1000). Defaults to 1000.
+            continuation_token (str, optional): Token for paginated results.
+
+        Returns:
+            dict[str, Any]: Dictionary with keys:
+                - "objects": List of object metadata dicts
+                - "is_truncated": Whether more results exist
+                - "next_continuation_token": Token for next page
+                - "key_count": Number of objects in this response
+        """
         try:
             params: dict[str, Any] = {
                 "Bucket": bucket_name,
@@ -303,15 +430,41 @@ class ObjectStorage(ABC):
 
 
 class PodIdentityObjectStorage(ObjectStorage):
-    """
-    ObjectStorage client using Pod Identity / Workload Identity authentication.
+    """ObjectStorage client using Kubernetes Pod Identity / Workload Identity.
+
+    Automatically reads the pod identity token from the mounted secret and uses it
+    for authentication with CoreWeave services.
     """
 
     def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
+        """Initialize Pod Identity client.
+
+        Args:
+            cw_token (str, optional): CoreWeave API token. If not provided, attempts to read
+                from /var/run/secrets/cks.coreweave.com/serviceaccount/cks-pod-identity-token
+            use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
+            region (str, optional): AWS region.
+
+        Raises:
+            MissingCredentialsError: If token file not found and no token provided.
+        """
+        if not cw_token:
+            try:
+                with open("/var/run/secrets/cks.coreweave.com/serviceaccount/cks-pod-identity-token") as f:
+                    cw_token = f.read().strip()
+            except FileNotFoundError:
+                raise MissingCredentialsError(
+                    "Pod identity token file not found, are you running in a CoreWeave cluster?"
+                )
         super().__init__(cw_token, use_lota, region)
 
     @property
     def s3_client(self) -> S3Client:
+        """Get or create the boto3 S3 client with pod identity authentication.
+
+        Returns:
+            S3Client: Cached boto3 S3 client instance.
+        """
         if self._s3_client is None:
             self._s3_client = boto3.client(
                 "s3",
@@ -323,9 +476,11 @@ class PodIdentityObjectStorage(ObjectStorage):
 
     @property
     def api_session(self) -> requests.Session:
-        if not self.cw_token:
-            with open("/var/run/secrets/cks.coreweave.com/serviceaccount/cks-pod-identity-token") as f:
-                self.cw_token = f.read().strip()
+        """Get or create HTTP session for CW API with Bearer token auth.
+
+        Returns:
+            requests.Session: Cached session with Authorization header.
+        """
         if self._api_session is None:
             session = requests.Session()
             session.headers.update(
@@ -339,13 +494,23 @@ class PodIdentityObjectStorage(ObjectStorage):
 
 
 class AccessKeyObjectStorage(ObjectStorage):
-    """
-    ObjectStorage client using Access Key authentication.
-    Expects CW_TOKEN to be set in the environment.
-    If AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY is not set, uses the CW_TOKEN to create a temporary access key pair.
+    """ObjectStorage client using Access Key authentication.
+
+    Supports both static keys (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env vars)
+    and temporary key generation via CW API using a CW_TOKEN.
     """
 
     def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
+        """Initialize Access Key client.
+
+        Args:
+            cw_token (str, optional): CoreWeave API token for key generation. Defaults to CW_TOKEN env var.
+            use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
+            region (str, optional): AWS region.
+
+        Raises:
+            MissingCredentialsError: If no token provided and static keys not in environment.
+        """
         super().__init__(cw_token, use_lota, region)
         self._access_key_id: str | None = None
         self._secret_access_key: str | None = None
@@ -354,6 +519,11 @@ class AccessKeyObjectStorage(ObjectStorage):
 
     @property
     def s3_client(self) -> S3Client:
+        """Get or create the boto3 S3 client with access key authentication.
+
+        Returns:
+            S3Client: Cached boto3 S3 client instance.
+        """
         if self._s3_client is None:
             access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
             secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
@@ -377,6 +547,11 @@ class AccessKeyObjectStorage(ObjectStorage):
 
     @property
     def api_session(self) -> requests.Session:
+        """Get or create HTTP session for CoreWeave API with Bearer token auth.
+
+        Returns:
+            requests.Session: Cached session with Authorization header.
+        """
         if self._api_session is None:
             if not self.cw_token:
                 raise ValueError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
@@ -392,6 +567,17 @@ class AccessKeyObjectStorage(ObjectStorage):
         return self._api_session
 
     def _get_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
+        """Generate temporary S3 access keys via CoreWeave API.
+
+        Args:
+            duration_seconds (int, optional): Key validity duration in seconds. Defaults to 3600 (1 hour).
+
+        Returns:
+            tuple[str, str]: (access_key_id, secret_access_key)
+
+        Raises:
+            ObjectStorageError: If API request fails.
+        """
         endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
         payload = {"durationSeconds": duration_seconds}
 
@@ -406,25 +592,36 @@ class AccessKeyObjectStorage(ObjectStorage):
             access_key_id = data.get("accessKeyId")
             secret_access_key = data.get("secretKey")
             if not access_key_id or not secret_access_key:
-                raise ValueError("Invalid response from access key endpoint, missing keys.")
+                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
 
             print(f"Created access key: {access_key_id[:8]}")
             return access_key_id, secret_access_key
 
         except requests.exceptions.RequestException as e:
-            raise ValueError(f"Failed to create access key: {e}")
+            raise ObjectStorageError(f"Failed to create access key: {e}")
 
 
 def detect_region() -> str:
+    """Autodetect AWS region from environment or Kubernetes pod metadata.
+
+    Checks in order:
+    1. AWS_DEFAULT_REGION environment variable
+    2. Kubernetes pod region annotation (for CW clusters)
+    3. Defaults to empty string
+
+    Returns:
+        str: Detected region name, or empty string if not found.
+
+    Raises:
+        MissingRegionError: When none of the methods for getting a region work.
+    """
     region = os.environ.get("AWS_DEFAULT_REGION", "")
     if region:
         print(f"Detected region from env var: {region}")
     else:
         pod_region = K8s().get_pod_region()
         if pod_region:
-            region = (
-                f"{pod_region}A"  # suffix with 'A'; hacky shit since we can't tell what az we're in from in-cluster
-            )
+            region = f"{pod_region}"
             print(f"Detected region from pod: {region}")
         else:
             raise MissingRegionError(
