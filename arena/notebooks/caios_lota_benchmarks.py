@@ -10,6 +10,7 @@
 #     "shell==1.0.1"
 # ]
 # ///
+from typing import Callable
 
 import marimo
 
@@ -167,8 +168,8 @@ def _():
 @app.cell(hide_code=True)
 def _(storage: ObjectStorage):
     buckets = storage.list_buckets()
-
-    bucket_dropdown = mo.ui.dropdown(options=buckets, value=buckets[0])
+    _initial_bucket = buckets[0] if buckets else None
+    bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
     create_bucket_form = (
         mo.md("""
         **Bucket Name:** {bucket_name}
@@ -225,13 +226,11 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
 
 @app.cell(hide_code=True)
 def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
-    _ui = None
-    if buckets:
-        _ui = mo.md(f"""
-            ### Select S3 Bucket for upload and download tests
-            {bucket_dropdown}
-            """)
-        bucket_name = bucket_dropdown.value
+    _ui = mo.md(f"""
+        ### Select S3 Bucket for upload and download tests
+        {bucket_dropdown}
+        """)
+    bucket_name = bucket_dropdown.value
     _ui
 
 
@@ -258,7 +257,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(bucket_name):
+def _(bucket_name: str):
     def run_s3_upload_test(
         storage: ObjectStorage,
         bucket_name: str,
@@ -268,10 +267,6 @@ def _(bucket_name):
         max_concurrency: int = 10,
     ):
         from boto3.s3.transfer import TransferConfig
-
-        if not bucket_name:
-            print("bucket_name is required")
-            return
 
         test_dir = "/tmp/bandwidth-test"
         test_filename = f"{test_file_size_gb}GB"
@@ -337,7 +332,7 @@ def _(bucket_name):
 
 
 @app.cell(hide_code=True)
-def _(run_s3_upload_test, bucket_name: str, storage: ObjectStorage, upload_form):
+def _(run_s3_upload_test: Callable, bucket_name: str, storage: ObjectStorage, upload_form: mo.ui.form):
     if upload_form.value:
         with mo.status.spinner(
             title="Running Upload Test",
@@ -352,7 +347,7 @@ def _(run_s3_upload_test, bucket_name: str, storage: ObjectStorage, upload_form)
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage, bucket_name):
+def _(storage: ObjectStorage, bucket_name: str):
     if bucket_name:
         objects_result = storage.list_objects(bucket_name, prefix="benchmark/")
         object_keys = [obj["Key"] for obj in objects_result["objects"]]
@@ -467,8 +462,8 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(bucket_name: str, download_form, run_s3_download_test, storage: ObjectStorage):
-    if download_form.value:
+def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callable, storage: ObjectStorage):
+    if download_form and download_form.value:
         with mo.status.spinner(
             title="Running Download Test",
             subtitle=f"Downloading from {bucket_name}",
