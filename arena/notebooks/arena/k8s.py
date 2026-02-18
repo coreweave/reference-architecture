@@ -1,7 +1,8 @@
 import os
-from typing import Optional
+from typing import Any, Optional
 
 from kubernetes import client, config
+from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
 
 
@@ -87,7 +88,7 @@ class K8s:
         return self._batch_v1
 
     def get_pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> Optional[str]:
-        """Get the AWS region where a pod is running.
+        """Get the CW region where a pod is running.
 
         Reads the pod's node and retrieves the region from node labels. If pod_name and
         namespace are not provided, attempts to read them from POD_NAME and POD_NAMESPACE
@@ -140,3 +141,90 @@ class K8s:
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get pod region: {e}")
+
+    def get_cluster_region(self) -> Optional[str]:
+        """Get the region of the Kubernetes cluster.
+
+        Reads the region from the first node's labels.
+
+        Returns:
+            str | None: CW region label from the node (e.g., "us-east-04"), or None if no nodes are found.
+
+        Raises:
+            KubernetesError: If the Kubernetes API call fails or if node metadata/labels are missing.
+        """
+        try:
+            nodes = self.core_v1.list_node()
+            if not nodes.items:
+                return None
+
+            first_node = nodes.items[0]
+            if first_node.metadata is None or first_node.metadata.labels is None:
+                raise KubernetesError("First node metadata or labels are missing")
+
+            return first_node.metadata.labels.get("topology.kubernetes.io/region") or first_node.metadata.labels.get(
+                "failure-domain.beta.kubernetes.io/region"
+            )
+
+        except ApiException as e:
+            raise KubernetesError(f"Failed to get cluster region: {e}")
+
+    def get_nodes(self) -> dict[str, dict[Any, Any]]:
+        """Get the number and type of nodes in the cluster.
+
+        Counts nodes with nvidia.com/gpu resources as gpu nodes and
+        nodes without as cpu nodes. Groups by node type label and tracks
+        GPU count per node.
+
+        Returns:
+            dict: Dictionary with 'gpu' and 'cpu' keys, each containing
+                  a dict mapping node types to their counts and GPU info.
+                  Example: {
+                      'gpu': {
+                          'gd-8xh100ib-i128': {'node_count': 4, 'gpus_per_node': 8, 'total_gpus': 32},
+                      },
+                      'cpu': {
+                          'cd-gp-i64-erapids': {'node_count': 2, 'cpu_cores_per_node': 64, 'total_cpus': 128}
+                      }
+                  }
+
+        Raises:
+            KubernetesError: If the API call fails.
+        """
+        try:
+            nodes: V1NodeList = self.core_v1.list_node()
+
+            gpu_nodes: dict[str, dict[str, int]] = {}
+            cpu_nodes: dict[str, dict[str, int]] = {}
+            for node in nodes.items:
+                if int(node.status.capacity.get("nvidia.com/gpu", 0)) > 0:
+                    gpu_per_node = int(node.status.capacity.get("nvidia.com/gpu", 0))
+                    cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
+                    gpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
+
+                    if gpu_type not in gpu_nodes:
+                        gpu_nodes[gpu_type] = {
+                            "node_count": 0,
+                            "gpus_per_node": int(gpu_per_node),
+                            "total_gpus": 0,
+                            "cpu_cores_per_node": cpu_cores_per_node,
+                        }
+                    gpu_nodes[gpu_type]["node_count"] += 1
+                    gpu_nodes[gpu_type]["total_gpus"] += gpu_per_node
+
+                else:
+                    cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
+                    cpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
+
+                    if cpu_type not in cpu_nodes:
+                        cpu_nodes[cpu_type] = {
+                            "node_count": 0,
+                            "cpu_cores_per_node": cpu_cores_per_node,
+                            "total_cpus": 0,
+                        }
+                    cpu_nodes[cpu_type]["node_count"] += 1
+                    cpu_nodes[cpu_type]["total_cpus"] += cpu_cores_per_node
+
+            return {"gpu": gpu_nodes, "cpu": cpu_nodes}
+        except ApiException as e:
+            raise KubernetesError(f"Failed to get node details: {e}")
