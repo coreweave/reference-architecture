@@ -1,4 +1,16 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "marimo>==0.19.11",
+#     "moutils==0.4.3",
+#     "pandas==3.0.0",
+#     "altair==6.0.0",
+#     "numpy==2.4.2"
+# ]
+# ///
+#
 import marimo
+
 
 __generated_with = "0.19.11"
 app = marimo.App(width="medium")
