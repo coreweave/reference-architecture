@@ -36,15 +36,22 @@ reportUnusedExpression = false
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "C"]
+select = ["E", "F", "W", "I", "C", "D"]
+ignore = [
+    "D100", # docstring in public module
+    "D104", # docstring in public package
+]
 [tool.ruff.lint.per-file-ignores]
 # Ignore common notebook noise:
 "arena/notebooks/**/*.py" = [
  "F401", # unused import
  "F841", # unused variable
  "E999", # syntax errors
- "E501", # line length, since we have big multiline strings for markdown
+ "E501", # ine length, since we have big multiline strings for markdown
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
 # Language server configuration
 [tool.marimo.language_servers.pylsp]
