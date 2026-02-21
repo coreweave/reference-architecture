@@ -18,6 +18,7 @@ Deploy CoreWeave infrastructure as code: **VPC**, **CKS cluster**, optional **Ob
 - [CoreWeave](https://console.coreweave.com/) account
 - **CoreWeave API token** – [Create in Console → Tokens](https://console.coreweave.com/tokens)
 - (Optional) For **Object Storage bucket**: your user must be added to an **S3 policy** in CoreWeave Console that allows `ListBuckets` and `CreateBucket`; otherwise bucket creation returns 403.
+- (Optional) For **NodePool and DFS** (phase 2): **kubeconfig** for your CKS cluster. Download it from CoreWeave Console after the cluster is running; set `cks_kubeconfig_path` in `terraform.tfvars` before enabling `create_nodepool` or `create_dfs_pvc`.
 
 ## Quick start
 
