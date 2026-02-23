@@ -1,0 +1,106 @@
+# =============================================================================
+# CoreWeave Reference Architecture – Variable template
+# =============================================================================
+# 1. Copy this file to terraform.tfvars:
+#      cp terraform.tfvars.example terraform.tfvars
+# 2. Replace all placeholder values below with your own (zone, names, paths).
+# 3. Set your API token via environment variable (recommended):
+#      export TF_VAR_coreweave_api_token="<YOUR_API_TOKEN>"
+#    Or add coreweave_api_token = "<YOUR_API_TOKEN>" to terraform.tfvars
+#    (do not commit terraform.tfvars if it contains secrets).
+# =============================================================================
+
+# --- VPC ---
+zone     = "US-EAST-02A"   # Replace with your CoreWeave zone (e.g. US-EAST-02A, US-EAST-04A)
+vpc_name = "my-vpc"       # Replace with your VPC name
+
+# VPC prefixes – names must match pod_cidr_name, service_cidr_name, and internal_lb_cidr_names below.
+# CIDR sizes and examples: https://docs.coreweave.com/docs/products/networking/vpc/vpc-cidr
+# Use non-overlapping ranges if you have multiple clusters or connect to existing networks.
+vpc_prefixes = [
+  { name = "pod cidr", value = "10.0.0.0/13" },
+  { name = "service cidr", value = "10.16.0.0/22" },
+  { name = "internal lb cidr", value = "10.32.4.0/22" },
+]
+# Provider requires at least one host prefix
+host_prefixes = [
+  { name = "primary", type = "PRIMARY", prefixes = ["10.16.192.0/18"] }
+]
+
+# --- CKS cluster ---
+cluster_name       = "my-cks-cluster"   # Replace with your cluster name (max 30 chars)
+kubernetes_version = "v1.35"
+cks_public         = true
+pod_cidr_name      = "pod cidr"
+service_cidr_name  = "service cidr"
+internal_lb_cidr_names = ["internal lb cidr"]
+
+# Optional: OIDC and webhooks – uncomment and set if your cluster requires them
+# oidc_issuer_url     = "https://your-oidc-issuer/"
+# oidc_client_id      = "your-client-id"
+# authn_webhook_server = "https://..."
+# authz_webhook_server = "https://..."
+
+# --- CoreWeave AI Object Storage bucket (optional) ---
+# Uncomment and set to create a bucket. Your user must be added to an S3 policy that allows ListBuckets, CreateBucket in CoreWeave Console.
+# object_storage_bucket_name = "my-unique-bucket-name"
+# object_storage_bucket_zone = "US-EAST-02A"
+# object_storage_bucket_tags = { env = "dev" }
+
+# --- Kubeconfig (required for NodePool and DFS in phase 2) ---
+# Set after cluster exists. Download kubeconfig from CoreWeave Console for your cluster.
+# cks_kubeconfig_path = "~/.kube/config"
+
+# --- CKS NodePools (optional; created in phase 2 after cluster + kubeconfig) ---
+# Set create_nodepool = true only after cluster exists and cks_kubeconfig_path points at it
+create_nodepool = false
+
+# Option A: Single NodePool (leave nodepools empty and use these)
+nodepool_name          = "example-nodepool"
+nodepool_instance_type = "gd-8xh100ib-i128"
+nodepool_target_nodes  = 2
+nodepool_autoscaling   = false
+nodepool_min_nodes     = 0
+nodepool_max_nodes     = 0
+# nodepool_node_labels    = { "key" = "value" }
+# nodepool_node_annotations = { "key" = "value" }
+# nodepool_node_taints = [{ key = "key", value = "value", effect = "NoSchedule" }]
+
+# Option B: Multiple NodePools – set nodepools (each entry needs all 8 fields; use comma between entries)
+# nodepools = {
+#   "gpu-pool" = {
+#     instance_type    = "gd-8xh100ib-i128"
+#     target_nodes     = 2
+#     autoscaling      = false
+#     min_nodes        = 0
+#     max_nodes        = 0
+#     node_labels      = {}
+#     node_annotations = {}
+#     node_taints      = []
+#   },
+#   "cpu-pool" = {
+#     instance_type    = "cpu-4"
+#     target_nodes     = 1
+#     autoscaling      = true
+#     min_nodes        = 0
+#     max_nodes        = 4
+#     node_labels      = {}
+#     node_annotations = {}
+#     node_taints      = []
+#   }
+# }
+
+# --- CoreWeave DFS (Distributed File Storage) PVCs (optional; phase 2) ---
+# Set create_dfs_pvc = true after cluster exists and cks_kubeconfig_path points at it.
+create_dfs_pvc = false
+
+# Option A: Single PVC (leave dfs_pvcs empty and use these)
+dfs_pvc_name      = "dfs-shared"
+dfs_pvc_namespace = "default"
+dfs_pvc_size      = "100Gi"
+
+# Option B: Multiple PVCs – set dfs_pvcs and leave single-PVC vars as-is
+# dfs_pvcs = {
+#   "dfs-shared" = { namespace = "default", size = "100Gi" }
+#   "dfs-ml"     = { namespace = "ml",     size = "500Gi" }
+# }
