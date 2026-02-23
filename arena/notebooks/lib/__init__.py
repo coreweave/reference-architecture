@@ -2,25 +2,25 @@
 
 Modules:
     remote_execution_helpers: SSH helpers for running commands on remote hosts
-    object_storage_helpers: CoreWeave AI Object Storage policy management
+    object_storage: CoreWeave AI Object Storage management
 
 Usage:
-    from arena.remote_execution_helpers import ssh, run_remote
-    from arena.object_storage_helpers import apply_policy, list_policies
+    from lib.remote_execution_helpers import ssh, run_remote
+    from lib.object_storage import apply_policy, list_policies
 
     # Or import modules
-    from arena import remote_execution_helpers, object_storage_helpers
+    from lib import remote_execution_helpers, object_storage
 """
 
 # SSH functions
 from lib.remote_execution_helpers import run_remote, run_remote_interactive, ssh
-from lib.storage.object_storage_helpers import (
+from lib.storage.object_storage import (
     MissingCredentialsError,
     ObjectStorage,
 )
 
 from . import remote_execution_helpers
-from .storage import object_storage_helpers
+from .storage import object_storage
 
 __all__ = [
     # Modules

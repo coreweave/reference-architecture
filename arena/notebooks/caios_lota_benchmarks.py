@@ -7,7 +7,8 @@
 #     "marimo>=0.19.7",
 #     "marimo[lsp]>=0.19.7",
 #     "mypy-boto3-s3>=1.42.37",
-#     "shell==1.0.1"
+#     "shell==1.0.1",
+#     "ruamel-yaml>=0.19.1"
 # ]
 # ///
 from typing import Callable
@@ -23,7 +24,9 @@ with app.setup:
     import time
 
     import marimo as mo
-    from lib.storage.object_storage_helpers import MissingCredentialsError, ObjectStorage
+    from lib.k8s import K8s
+    from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
+    from lib.storage.warp import get_warp_benchmark_results, run_warp_benchmark
 
 
 @app.cell(hide_code=True)
@@ -474,6 +477,73 @@ def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callabl
                 **download_form.value,
             )
     return
+
+
+@app.cell(hide_code=True)
+def _(bucket_name: str, storage: ObjectStorage):
+    trigger_warp_benchmark = mo.ui.run_button(label=f"Run Warp Benchmark on {bucket_name}")
+
+    description = mo.md(r"""
+    ---
+    ## Warp Benchmark
+
+    /// admonition | About Warp
+        type: info
+
+    [Warp](https://github.com/minio/warp) is a benchmarking tool for S3-compatible object storage that runs comprehensive performance tests including GET, PUT, DELETE, and LIST operations. It provides detailed statistics on throughput, latency, and operations per second.
+
+    This benchmark will deploy Warp as a Kubernetes job on your cluster nodes to test the performance of your selected bucket.
+    ///
+    """)
+
+    button_section = mo.md(f"""
+    ### Run Warp Benchmark
+
+    Click the button below to start the Warp benchmark on bucket: **{bucket_name}**
+
+    {trigger_warp_benchmark}
+
+    /// admonition | Benchmark Details
+        type: note
+
+    The benchmark will:
+    - Automatically detect available GPU or CPU nodes
+    - Deploy Warp as a Kubernetes job across your nodes
+    - Run comprehensive S3 performance tests
+    - Measure throughput, latency, and operations per second
+    ///
+    """)
+
+    result_section = None
+    if trigger_warp_benchmark.value:
+        k8s = K8s()
+        with mo.status.spinner(
+            title="Running Warp Benchmark",
+            subtitle=f"Benchmarking bucket: {bucket_name}",
+        ):
+            results = run_warp_benchmark(k8s, storage, bucket_name)
+            result_section = mo.md(f"""
+            /// admonition | Benchmark Started
+                type: success
+
+            Warp benchmark job has been submitted successfully!
+
+            Results:
+            ```
+            {json.dumps(results, indent=2)}
+            ```
+            ///
+            """)
+
+    mo.vstack([description, button_section, result_section] if result_section else [description, button_section])
+    return (trigger_warp_benchmark,)
+
+
+@app.cell(hide_code=True)
+def _(trigger_warp_benchmark: mo.ui.run_button, storage: ObjectStorage, bucket_name: str):
+    if trigger_warp_benchmark.value:
+        k8s = K8s()
+        run_warp_benchmark(k8s, storage, bucket_name)
 
 
 if __name__ == "__main__":

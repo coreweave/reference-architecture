@@ -4,6 +4,7 @@ from typing import Any, Optional
 from kubernetes import client, config
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
+from ruamel import yaml
 
 
 class KubernetesError(Exception):
@@ -142,7 +143,7 @@ class K8s:
         except ApiException as e:
             raise KubernetesError(f"Failed to get pod region: {e}")
 
-    def get_cluster_region(self) -> Optional[str]:
+    def get_cluster_region(self) -> str:
         """Get the region of the Kubernetes cluster.
 
         Reads the region from the first node's labels.
@@ -156,7 +157,7 @@ class K8s:
         try:
             nodes = self.core_v1.list_node()
             if not nodes.items:
-                return None
+                raise KubernetesError("No nodes found")
 
             first_node = nodes.items[0]
             if first_node.metadata is None or first_node.metadata.labels is None:
@@ -228,3 +229,148 @@ class K8s:
             return {"gpu": gpu_nodes, "cpu": cpu_nodes}
         except ApiException as e:
             raise KubernetesError(f"Failed to get node details: {e}")
+
+    def _create_or_update_resource(self, kind: str, name: str, namespace: str, doc: dict, results: dict) -> None:
+        """Helper method to create or update a Kubernetes resource.
+
+        Args:
+            kind: Resource kind (e.g., 'ServiceAccount', 'ConfigMap')
+            name: Resource name
+            namespace: Target namespace
+            doc: Resource definition dictionary
+            results: Results dictionary to append to
+
+        Raises:
+            ApiException: If resource operation fails
+        """
+        match kind:
+            case "ServiceAccount":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.core_v1.read_namespaced_service_account,
+                    self.core_v1.create_namespaced_service_account,
+                    self.core_v1.patch_namespaced_service_account,
+                )
+
+            case "ConfigMap":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.core_v1.read_namespaced_config_map,
+                    self.core_v1.create_namespaced_config_map,
+                    self.core_v1.patch_namespaced_config_map,
+                )
+
+            case "Service":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.core_v1.read_namespaced_service,
+                    self.core_v1.create_namespaced_service,
+                    self.core_v1.patch_namespaced_service,
+                )
+
+            case "StatefulSet":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.apps_v1.read_namespaced_stateful_set,
+                    self.apps_v1.create_namespaced_stateful_set,
+                    self.apps_v1.patch_namespaced_stateful_set,
+                )
+
+            case "Job":
+                # Jobs cannot be updated
+                try:
+                    self.batch_v1.read_namespaced_job(name, namespace)
+                    results["unchanged"].append(f"{kind}/{name} (jobs cannot be updated)")
+                except ApiException as e:
+                    if e.status == 404:
+                        self.batch_v1.create_namespaced_job(namespace, doc)
+                        results["created"].append(f"{kind}/{name}")
+                    else:
+                        raise
+
+            case _:
+                results["unchanged"].append(f"{kind}/{name} (unsupported resource type)")
+
+    def _apply_resource(
+        self, name: str, namespace: str, doc: dict, kind: str, results: dict, read_fn, create_fn, patch_fn
+    ) -> None:
+        """Apply a resource by attempting to read, then update or create.
+
+        Supports serviceaccount, configmap, service, statefulset, and job
+
+        Args:
+            name: Resource name
+            namespace: Target namespace
+            doc: Resource definition dictionary
+            kind: Resource kind
+            results: Results dictionary to append to
+            read_fn: Function to read the resource
+            create_fn: Function to create the resource
+            patch_fn: Function to patch the resource
+        """
+        try:
+            read_fn(name, namespace)
+            patch_fn(name, namespace, doc)
+            results["updated"].append(f"{kind}/{name}")
+        except ApiException as e:
+            if e.status == 404:
+                create_fn(namespace, doc)
+                results["created"].append(f"{kind}/{name}")
+            else:
+                raise
+
+    def apply_yaml(self, yaml_content: str, namespace: str) -> dict[str, list[str]]:
+        """Apply YAML resources, creating or updating as needed.
+
+        Uses ruamel.yaml to preserve formatting and handle YAML parsing correctly.
+
+        Args:
+            yaml_content: YAML string with Kubernetes resources
+            namespace: Target namespace
+
+        Returns:
+            dict: Results of apply operations with keys 'created', 'updated', 'unchanged'
+
+        Raises:
+            KubernetesError: If parsing or applying YAML fails
+        """
+        results: dict[str, list[str]] = {"created": [], "updated": [], "unchanged": []}
+
+        try:
+            documents = list(yaml.load_all(yaml_content))
+
+            for doc in documents:
+                if not doc:
+                    continue
+
+                kind = doc.get("kind")
+                name = doc.get("metadata", {}).get("name")
+
+                if not kind or not name:
+                    continue
+
+                try:
+                    self._create_or_update_resource(kind, name, namespace, doc, results)
+                except ApiException as e:
+                    raise KubernetesError(f"Failed to apply {kind}/{name}: {e}")
+
+            return results
+
+        except Exception as e:
+            raise KubernetesError(f"Failed to parse or apply YAML: {e}")

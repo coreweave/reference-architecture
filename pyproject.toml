@@ -14,6 +14,7 @@ dependencies = [
     "marimo>=0.19.11",
     "moutils>=0.3.12",
     "ray>=2.53.0",
+    "ruamel-yaml>=0.19.1",
     "statistics>=1.0.3.5",
     "torch>=2.10.0",
     "transformers>=5.0.0",

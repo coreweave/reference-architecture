@@ -85,6 +85,10 @@ class ObjectStorage(ABC):
 
         self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
 
+        # S3 credentials set by subclasses
+        self.access_key_id: str = ""
+        self.secret_access_key: str = ""
+
     @staticmethod
     def auto(cw_token: str = "", use_lota: bool = True, region: str = "") -> "ObjectStorage":
         """Auto detect and create the ObjectStorage client.
@@ -216,6 +220,40 @@ class ObjectStorage(ABC):
         except Exception as e:
             print(f"Error listing buckets: {e}")
             return []
+
+    def _get_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
+        """Generate temporary S3 access keys via CoreWeave API.
+
+        Args:
+            duration_seconds (int, optional): Key validity duration in seconds. Defaults to 3600 (1 hour).
+
+        Returns:
+            tuple[str, str]: (access_key_id, secret_access_key)
+
+        Raises:
+            ObjectStorageError: If API request fails.
+        """
+        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
+        payload = {"durationSeconds": duration_seconds}
+
+        try:
+            resp = self.api_session.post(
+                endpoint,
+                json=payload,
+            )
+            resp.raise_for_status()
+
+            data = resp.json()
+            access_key_id = data.get("accessKeyId")
+            secret_access_key = data.get("secretKey")
+            if not access_key_id or not secret_access_key:
+                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
+
+            print(f"Created access key: {access_key_id[:8]}")
+            return access_key_id, secret_access_key
+
+        except requests.exceptions.RequestException as e:
+            raise ObjectStorageError(f"Failed to create access key: {e}")
 
     def create_bucket(self, bucket_name: str) -> bool:
         """Create a new S3 bucket.
@@ -456,6 +494,7 @@ class PodIdentityObjectStorage(ObjectStorage):
                     "Pod identity token file not found, are you running in a CoreWeave cluster?"
                 )
         super().__init__(cw_token, use_lota, region)
+        self.access_key_id, self.secret_access_key = self._get_temp_access_keys()
 
     @property
     def s3_client(self) -> S3Client:
@@ -511,9 +550,15 @@ class AccessKeyObjectStorage(ObjectStorage):
             MissingCredentialsError: If no token provided and static keys not in environment.
         """
         super().__init__(cw_token, use_lota, region)
-        self._access_key_id: str | None = None
-        self._secret_access_key: str | None = None
-        if not self.cw_token:
+        static_access_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        static_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+
+        if static_access_key and static_secret_key:
+            self.access_key_id = static_access_key
+            self.secret_access_key = static_secret_key
+        elif self.cw_token:
+            self.access_key_id, self.secret_access_key = self._get_temp_access_keys()
+        else:
             raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
 
     @property
@@ -523,25 +568,14 @@ class AccessKeyObjectStorage(ObjectStorage):
         Returns:
             S3Client: Cached boto3 S3 client instance.
         """
-        if self._s3_client is None:
-            access_key_id = os.environ.get("AWS_ACCESS_KEY_ID")
-            secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY")
-
-            # Create if not provided in env
-            if not (access_key_id and secret_access_key):
-                print("Creating access keys")
-                access_key_id, secret_access_key = self._get_temp_access_keys()
-                self._access_key_id = access_key_id
-                self._secret_access_key = secret_access_key
-
-            self._s3_client = boto3.client(
-                "s3",
-                region_name=self.region,
-                endpoint_url=self.endpoint_url,
-                config=self.s3_config,
-                aws_access_key_id=access_key_id,
-                aws_secret_access_key=secret_access_key,
-            )
+        self._s3_client = boto3.client(
+            "s3",
+            region_name=self.region,
+            endpoint_url=self.endpoint_url,
+            config=self.s3_config,
+            aws_access_key_id=self.access_key_id,
+            aws_secret_access_key=self.secret_access_key,
+        )
         return self._s3_client
 
     @property
@@ -565,43 +599,9 @@ class AccessKeyObjectStorage(ObjectStorage):
             self._api_session = session
         return self._api_session
 
-    def _get_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
-        """Generate temporary S3 access keys via CoreWeave API.
-
-        Args:
-            duration_seconds (int, optional): Key validity duration in seconds. Defaults to 3600 (1 hour).
-
-        Returns:
-            tuple[str, str]: (access_key_id, secret_access_key)
-
-        Raises:
-            ObjectStorageError: If API request fails.
-        """
-        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
-        payload = {"durationSeconds": duration_seconds}
-
-        try:
-            resp = self.api_session.post(
-                endpoint,
-                json=payload,
-            )
-            resp.raise_for_status()
-
-            data = resp.json()
-            access_key_id = data.get("accessKeyId")
-            secret_access_key = data.get("secretKey")
-            if not access_key_id or not secret_access_key:
-                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
-
-            print(f"Created access key: {access_key_id[:8]}")
-            return access_key_id, secret_access_key
-
-        except requests.exceptions.RequestException as e:
-            raise ObjectStorageError(f"Failed to create access key: {e}")
-
 
 def detect_region() -> str:
-    """Autodetect AWS region from environment or Kubernetes pod metadata.
+    """Autodetect CoreWeave region from environment or Kubernetes pod metadata.
 
     Checks in order:
     1. AWS_DEFAULT_REGION environment variable
