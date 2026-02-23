@@ -12,7 +12,7 @@ from lib.k8s import K8s
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
 LOTA_ENDPOINT_URL = "https://cwlota.com"
 CAIOS_ENDPOINT_URL = "https://cwobject.com"
-DEFAULT_ACCESS_TOKEN_DURATION = 3600  # 1 hour
+DEFAULT_ACCESS_TOKEN_DURATION = 86400  # 1 day
 DEFAULT_ADDRESSING_STYLE = "virtual"
 
 if TYPE_CHECKING:
@@ -85,9 +85,8 @@ class ObjectStorage(ABC):
 
         self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
 
-        # S3 credentials set by subclasses
-        self.access_key_id: str = ""
-        self.secret_access_key: str = ""
+        self.access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
+        self.secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
 
     @staticmethod
     def auto(cw_token: str = "", use_lota: bool = True, region: str = "") -> "ObjectStorage":
@@ -203,24 +202,6 @@ class ObjectStorage(ABC):
         """Get HTTP session for CoreWeave API calls. Must be implemented by subclasses."""
         pass
 
-    def list_buckets(self) -> list[str]:
-        """List all S3 buckets.
-
-        Returns:
-            list[str]: List of bucket names. Returns empty list on error.
-        """
-        try:
-            response = self.s3_client.list_buckets()
-            buckets = response.get("Buckets", [])
-            result = []
-            for bucket in buckets:
-                if name := bucket.get("Name"):
-                    result.append(name)
-            return result
-        except Exception as e:
-            print(f"Error listing buckets: {e}")
-            return []
-
     def _get_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
         """Generate temporary S3 access keys via CoreWeave API.
 
@@ -254,6 +235,24 @@ class ObjectStorage(ABC):
 
         except requests.exceptions.RequestException as e:
             raise ObjectStorageError(f"Failed to create access key: {e}")
+
+    def list_buckets(self) -> list[str]:
+        """List all S3 buckets.
+
+        Returns:
+            list[str]: List of bucket names. Returns empty list on error.
+        """
+        try:
+            response = self.s3_client.list_buckets()
+            buckets = response.get("Buckets", [])
+            result = []
+            for bucket in buckets:
+                if name := bucket.get("Name"):
+                    result.append(name)
+            return result
+        except Exception as e:
+            print(f"Error listing buckets: {e}")
+            return []
 
     def create_bucket(self, bucket_name: str) -> bool:
         """Create a new S3 bucket.
@@ -494,7 +493,11 @@ class PodIdentityObjectStorage(ObjectStorage):
                     "Pod identity token file not found, are you running in a CoreWeave cluster?"
                 )
         super().__init__(cw_token, use_lota, region)
-        self.access_key_id, self.secret_access_key = self._get_temp_access_keys()
+        if not (self.access_key_id and self.secret_access_key):
+            print("Creating access keys")
+            access_key_id, secret_access_key = self._get_temp_access_keys()
+            self.access_key_id = access_key_id
+            self.secret_access_key = secret_access_key
 
     @property
     def s3_client(self) -> S3Client:
@@ -550,16 +553,14 @@ class AccessKeyObjectStorage(ObjectStorage):
             MissingCredentialsError: If no token provided and static keys not in environment.
         """
         super().__init__(cw_token, use_lota, region)
-        static_access_key = os.environ.get("AWS_ACCESS_KEY_ID", "")
-        static_secret_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
-
-        if static_access_key and static_secret_key:
-            self.access_key_id = static_access_key
-            self.secret_access_key = static_secret_key
-        elif self.cw_token:
-            self.access_key_id, self.secret_access_key = self._get_temp_access_keys()
-        else:
+        if not self.cw_token:
             raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
+
+        if not (self.access_key_id and self.secret_access_key):
+            print("Creating access keys")
+            access_key_id, secret_access_key = self._get_temp_access_keys()
+            self.access_key_id = access_key_id
+            self.secret_access_key = secret_access_key
 
     @property
     def s3_client(self) -> S3Client:
@@ -568,14 +569,15 @@ class AccessKeyObjectStorage(ObjectStorage):
         Returns:
             S3Client: Cached boto3 S3 client instance.
         """
-        self._s3_client = boto3.client(
-            "s3",
-            region_name=self.region,
-            endpoint_url=self.endpoint_url,
-            config=self.s3_config,
-            aws_access_key_id=self.access_key_id,
-            aws_secret_access_key=self.secret_access_key,
-        )
+        if self._s3_client is None:
+            self._s3_client = boto3.client(
+                "s3",
+                region_name=self.region,
+                endpoint_url=self.endpoint_url,
+                config=self.s3_config,
+                aws_access_key_id=self.access_key_id,
+                aws_secret_access_key=self.secret_access_key,
+            )
         return self._s3_client
 
     @property
