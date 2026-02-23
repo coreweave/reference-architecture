@@ -74,7 +74,7 @@ data:
         lookup: host
         region: {region}
         secret-key: {secret_key}
-      warp-client: warp-0...{host_count}.warp.argocd
+      warp-client: warp-{{0...{host_count - 2}}}.warp
 ---
 apiVersion: v1
 kind: Service
@@ -103,7 +103,7 @@ metadata:
 spec:
   serviceName: warp
   podManagementPolicy: Parallel
-  replicas: {host_count}
+  replicas: {host_count - 1}
   selector:
     matchLabels:
       app.kubernetes.io/name: warp

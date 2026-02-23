@@ -541,7 +541,6 @@ class PodIdentityObjectStorage(ObjectStorage):
             if not access_key_id or not secret_access_key:
                 raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
 
-            print(f"Created access key: {access_key_id[:8]}...")
             return access_key_id, secret_access_key
 
         except requests.exceptions.RequestException as e:
