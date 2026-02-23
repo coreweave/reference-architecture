@@ -12,6 +12,7 @@ def generate_warp_yaml(
     access_key: str,
     secret_key: str,
     host_count: int,
+    namespace: str = "tenant-slurm",
     compute_class: str = "gpu",
     endpoint: str = "cwlota.com",
     benchmark_type: str = "get",
@@ -75,7 +76,7 @@ data:
         lookup: host
         region: {region}
         secret-key: {secret_key}
-      warp-client: warp-{{0...{host_count - 2}}}.warp
+      warp-client: warp-{{0...{host_count - 2}}}.warp.{namespace}.svc.cluster.local
 ---
 apiVersion: v1
 kind: Service
@@ -184,7 +185,7 @@ spec:
                 - |
                     echo "Waiting for warp clients to be ready..."
                     for i in $(seq 0 {host_count - 2}); do
-                    until nslookup warp-$i.warp; do
+                    until nslookup warp-$i.warp.{namespace}.svc.cluster.local; do
                         echo "Waiting for warp-$i.warp..."
                         sleep 2
                     done
@@ -269,6 +270,7 @@ def run_warp_benchmark(k8s: K8s, object_storage: ObjectStorage, bucket_name: str
         host_count=node_count,
         compute_class=compute_class,
         endpoint=object_storage.endpoint_url,
+        namespace=(os.getenv("POD_NAMESPACE", None)),
     )
 
     results = k8s.apply_yaml(warp_yaml, namespace)

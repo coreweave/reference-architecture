@@ -529,11 +529,10 @@ def _(warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
 
         result_section = mo.md(f"""
 /// admonition | Benchmark Started
-    type: success
 
 Warp benchmark job submitted successfully.
 
-- **Operation:** {warp_operation}
+**Operation:** {warp_operation}
 
 Submit Results:
 ```json
