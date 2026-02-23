@@ -1,4 +1,5 @@
 import os
+import uuid
 
 from lib.k8s import K8s
 from lib.storage.object_storage import ObjectStorage
@@ -14,15 +15,8 @@ def generate_warp_yaml(
     endpoint: str = "cwlota.com",
 ) -> str:
     """Convert the warp yaml template into complete applicable yaml."""
+    suffix = str(uuid.uuid4())[:8]
     return f"""
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: arena
-  labels:
-    app.kubernetes.io/name: arena
-    app.kubernetes.io/instance: arena
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -167,7 +161,7 @@ spec:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: warp-1
+  name: warp-{suffix}
   labels:
     app.kubernetes.io/name: warp
     app.kubernetes.io/instance: warp

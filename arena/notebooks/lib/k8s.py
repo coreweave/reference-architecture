@@ -374,3 +374,19 @@ class K8s:
 
         except Exception as e:
             raise KubernetesError(f"Failed to parse or apply YAML: {e}")
+
+    @property
+    def org_id(self) -> str:
+        """Detect the CoreWeave org ID by checking the first node's cks.coreweave.com/org-id label. cks.coreweave.com/org-id=cw623e."""
+        try:
+            nodes = self.core_v1.list_node()
+            if not nodes.items:
+                raise KubernetesError("No nodes found")
+
+            first_node = nodes.items[0]
+            if first_node.metadata is None or first_node.metadata.labels is None:
+                raise KubernetesError("First node metadata or labels are missing")
+
+            return first_node.metadata.labels.get("cks.coreweave.com/org-id")
+        except Exception as e:
+            raise KubernetesError(f"Failed to get org ID from node labels: {e}")

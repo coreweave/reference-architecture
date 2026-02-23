@@ -13,7 +13,7 @@ from lib.k8s import K8s
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
 LOTA_ENDPOINT_URL = "https://cwlota.com"
 CAIOS_ENDPOINT_URL = "https://cwobject.com"
-DEFAULT_ACCESS_TOKEN_DURATION = 86400  # 1 day
+DEFAULT_ACCESS_TOKEN_DURATION = 43200  # 12h
 DEFAULT_ADDRESSING_STYLE = "virtual"
 
 if TYPE_CHECKING:
@@ -127,39 +127,10 @@ class ObjectStorage(ABC):
         access_key_id, secret_access_key = self._fetch_temp_access_keys(self._credential_duration)
         self._set_credentials(access_key_id, secret_access_key, self._credential_duration)
 
+    @abstractmethod
     def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
-        """Generate temporary S3 access keys via CoreWeave API.
-
-        Args:
-            duration_seconds (int, optional): Key validity duration in seconds.
-
-        Returns:
-            tuple[str, str]: (access_key_id, secret_access_key)
-
-        Raises:
-            ObjectStorageError: If API request fails.
-        """
-        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
-        payload = {"durationSeconds": duration_seconds}
-
-        try:
-            resp = self.api_session.post(
-                endpoint,
-                json=payload,
-            )
-            resp.raise_for_status()
-
-            data = resp.json()
-            access_key_id = data.get("accessKeyId")
-            secret_access_key = data.get("secretKey")
-            if not access_key_id or not secret_access_key:
-                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
-
-            print(f"Created access key: {access_key_id[:8]}...")
-            return access_key_id, secret_access_key
-
-        except requests.exceptions.RequestException as e:
-            raise ObjectStorageError(f"Failed to create access key: {e}")
+        """Generate temporary S3 access keys via CoreWeave API."""
+        pass
 
     def _set_credentials(self, access_key_id: str, secret_access_key: str, duration_seconds: int) -> None:
         """Set credentials and track expiry time.
@@ -600,7 +571,8 @@ class PodIdentityObjectStorage(ObjectStorage):
             ObjectStorageError: If API request fails.
         """
         endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/temporary-credentials/oidc"
-        payload = {"durationSeconds": duration_seconds}
+        org_id = K8s().org_id
+        payload = {"durationSeconds": duration_seconds, "orgId": org_id, "oidcToken": self.cw_token}
 
         try:
             resp = self.api_session.post(
