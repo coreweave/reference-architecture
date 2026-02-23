@@ -488,7 +488,7 @@ def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callabl
 
 @app.cell(hide_code=True)
 def _(bucket_name: str, storage: ObjectStorage):
-    trigger_warp_benchmark = mo.ui.run_button(label=f"Run Warp Benchmark on {bucket_name}")
+    trigger_warp_benchmark = mo.ui.button(label=f"Run Warp Benchmark on {bucket_name}")
 
     description = mo.md(r"""
     ---
@@ -526,7 +526,7 @@ def _(bucket_name: str, storage: ObjectStorage):
 
 
 @app.cell(hide_code=True)
-def _(trigger_warp_benchmark: mo.ui.run_button, storage: ObjectStorage, bucket_name: str):
+def _(trigger_warp_benchmark: mo.ui.button, storage: ObjectStorage, bucket_name: str):
     if trigger_warp_benchmark.value:
         k8s = K8s()
         with mo.status.spinner(

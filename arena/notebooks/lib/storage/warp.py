@@ -14,6 +14,7 @@ def generate_warp_yaml(
     host_count: int,
     compute_class: str = "gpu",
     endpoint: str = "cwlota.com",
+    benchmark_type: str = "get",
 ) -> str:
     """Convert the warp yaml template into complete applicable yaml."""
     suffix = str(uuid.uuid4())[:8]
@@ -41,7 +42,7 @@ data:
       analyze:
         verbose: false
       api: v1
-      benchmark: get
+      benchmark: {benchmark_type}
       io:
         disable-multipart: false
         md5: false
@@ -174,6 +175,22 @@ spec:
         rollme: "1"
     spec:
       restartPolicy: Never
+      initContainers:
+          - name: wait-for-clients
+            image: busybox:1.37
+            command:
+                - sh
+                - -c
+                - |
+                    echo "Waiting for warp clients to be ready..."
+                    for i in $(seq 0 {host_count - 1}); do
+                    until nslookup warp-$i.warp; do
+                        echo "Waiting for warp-$i.warp..."
+                        sleep 2
+                    done
+                    echo "warp-$i.warp is ready"
+                    done
+                    echo "All warp clients are ready!"
       containers:
         - name: warp
           image: "minio/warp:v1.0.8"
