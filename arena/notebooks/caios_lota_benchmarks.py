@@ -565,7 +565,7 @@ def _(k8s: K8s, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.for
 
                 _current_logs = warp_results.get("logs", [])
                 if len(_current_logs) > len(_log_lines):
-                    log_lines = _current_logs
+                    _log_lines = _current_logs
                     _recent_logs = "\n".join(_log_lines[-30:])
                     mo.output.replace(
                         mo.vstack(
@@ -580,17 +580,12 @@ def _(k8s: K8s, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.for
                     break
                 time.sleep(5)
 
-        _full_logs = "\n".join(log_lines)
+        _full_logs = "\n".join(_log_lines)
         _final_output = mo.md(f"""
 ### Benchmark Complete
 
 **Status:** {_status}
-**Total Lines:** {len(log_lines)}
-
-<details>
-<summary>View Full Logs</summary>
-{_full_logs}
-</details>
+```\n{_full_logs}\n```
 """)
         mo.output.replace(_final_output)
     return (warp_results,)
