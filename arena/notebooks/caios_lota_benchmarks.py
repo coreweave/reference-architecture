@@ -491,10 +491,10 @@ def _(bucket_name: str, storage: ObjectStorage):
     warp_form = (
         mo.md("""
             ### Configure Warp Benchmark
-            - Operation: {operation}
+            - {operation}
             """)
         .batch(
-            operation=mo.ui.dropdown(options=["get", "put", "delete", "list", "stat"], value="get", label="Operation"),
+            operation=mo.ui.dropdown(options=["get", "put", "delete", "list", "stat"], value="get", label="Operation:"),
         )
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
     )
