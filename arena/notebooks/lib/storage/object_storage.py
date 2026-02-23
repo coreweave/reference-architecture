@@ -712,7 +712,7 @@ def detect_region() -> str:
     if region:
         print(f"Detected region from env var: {region}")
     else:
-        pod_region = K8s().get_pod_region()
+        pod_region = K8s().pod_region
         if pod_region:
             region = f"{pod_region}"
             print(f"Detected region from pod: {region}")

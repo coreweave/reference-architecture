@@ -1,4 +1,5 @@
 import os
+import string
 import uuid
 
 from lib.k8s import K8s
@@ -68,7 +69,7 @@ data:
         access-key: {access_key}
         bucket: {bucket_name}
         host:
-        - {endpoint}
+        - {endpoint.lstrip("https://").lstrip("http://")}
         insecure: true
         lookup: host
         region: {region}
@@ -102,7 +103,7 @@ metadata:
 spec:
   serviceName: warp
   podManagementPolicy: Parallel
-  replicas: {host_count + 1}
+  replicas: {host_count}
   selector:
     matchLabels:
       app.kubernetes.io/name: warp

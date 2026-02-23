@@ -88,7 +88,8 @@ class K8s:
             self._batch_v1 = client.BatchV1Api()
         return self._batch_v1
 
-    def get_pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> Optional[str]:
+    @property
+    def pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> str:
         """Get the CW region where a pod is running.
 
         Reads the pod's node and retrieves the region from node labels. If pod_name and
@@ -130,11 +131,11 @@ class K8s:
 
             pod = self.core_v1.read_namespaced_pod(name=pod_name, namespace=namespace)
             if pod.spec is None or pod.spec.node_name is None:
-                return None
+                raise KubernetesError("Unable to get pod spec or name")
 
             node = self.core_v1.read_node(name=pod.spec.node_name)
             if node.metadata is None or node.metadata.labels is None:
-                return None
+                raise KubernetesError("Unable to get node metadata")
 
             return node.metadata.labels.get("topology.kubernetes.io/region") or node.metadata.labels.get(
                 "failure-domain.beta.kubernetes.io/region"
@@ -143,7 +144,8 @@ class K8s:
         except ApiException as e:
             raise KubernetesError(f"Failed to get pod region: {e}")
 
-    def get_cluster_region(self) -> str:
+    @property
+    def cluster_region(self) -> str:
         """Get the region of the Kubernetes cluster.
 
         Reads the region from the first node's labels.
