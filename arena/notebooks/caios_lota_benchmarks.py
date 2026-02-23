@@ -23,7 +23,7 @@ with app.setup:
     import time
 
     import marimo as mo
-    from arena.object_storage_helpers import MissingCredentialsError, ObjectStorage
+    from lib.storage.object_storage_helpers import MissingCredentialsError, ObjectStorage
 
 
 @app.cell(hide_code=True)

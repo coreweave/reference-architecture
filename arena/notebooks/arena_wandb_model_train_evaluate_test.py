@@ -28,7 +28,7 @@ def _(mo):
 @app.cell(hide_code=True)
 def _():
     import marimo as mo
-    from arena.remote_execution_helpers import shell
+    from lib.remote_execution_helpers import shell
 
     return mo, shell
 

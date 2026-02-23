@@ -7,8 +7,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import boto3
 import requests
 from botocore.config import Config
-
-from arena.k8s import K8s
+from lib.k8s import K8s
 
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
 LOTA_ENDPOINT_URL = "https://cwlota.com"

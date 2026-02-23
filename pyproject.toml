@@ -12,6 +12,7 @@ dependencies = [
     "httpx>=0.28.1",
     "kubernetes>=35.0.0",
     "marimo>=0.19.11",
+    "moutils>=0.3.12",
     "ray>=2.53.0",
     "statistics>=1.0.3.5",
     "torch>=2.10.0",

@@ -1,5 +1,4 @@
-"""
-Remote Execution Helpers for running commands on remote hosts via SSH.
+"""Remote Execution Helpers for running commands on remote hosts via SSH.
 
 Usage:
     from arena.remote_execution_helpers import run_remote, ssh_command, ssh, shell
@@ -33,8 +32,7 @@ def ssh_command(
     interactive: bool = True,
     allocate_tty: bool = True,
 ) -> str:
-    """
-    Build an SSH command string for the remote host.
+    """Build an SSH command string for the remote host.
 
     Args:
         command: The command to run on the remote host
@@ -64,8 +62,7 @@ def run_remote(
     timeout: Optional[int] = None,
     check: bool = False,
 ) -> subprocess.CompletedProcess:
-    """
-    Run a command on the remote host via SSH.
+    """Run a command on the remote host via SSH.
 
     Args:
         command: The command to run on the remote host
@@ -94,8 +91,7 @@ def run_remote(
 
 
 def run_remote_interactive(command: str) -> int:
-    """
-    Run a command interactively on the remote host (with full TTY).
+    """Run a command interactively on the remote host (with full TTY).
 
     This is useful for commands that require user interaction like
     editors, htop, or anything that needs a proper terminal.
@@ -116,8 +112,7 @@ def run_remote_stream(
     command: str,
     interactive: bool = False,
 ) -> subprocess.Popen:
-    """
-    Run a command on the remote host and stream output in real-time.
+    """Run a command on the remote host and stream output in real-time.
 
     Args:
         command: The command to run on the remote host
@@ -143,8 +138,7 @@ def run_remote_stream(
 
 
 def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
-    """
-    Quick helper to run a command and return stdout.
+    """Quick helper to run a command and return stdout.
     Handles errors gracefully by printing them instead of raising exceptions.
 
     Args:
@@ -164,7 +158,6 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
         # Stream long-running commands
         ssh("tail -f /var/log/syslog", stream=True)
     """
-
     if stream:
         # Set unbuffered mode for better streaming
         os.environ["PYTHONUNBUFFERED"] = "1"
@@ -213,8 +206,7 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
 
 
 def shell(command: Union[str, list], quiet: bool = False, check: bool = False, stream: bool = False) -> str:  # noqa: C901
-    """
-    Run a local shell command with clean output.
+    """Run a local shell command with clean output.
 
     Args:
         command: Command string or list of arguments
@@ -233,7 +225,6 @@ def shell(command: Union[str, list], quiet: bool = False, check: bool = False, s
         shell(["kubectl", "get", "pods"])
         shell("s5cmd cp ...", stream=True)  # Stream output in real-time
     """
-
     if isinstance(command, str):
         cmd_display = command
         shell_mode = True
@@ -308,8 +299,7 @@ def shell(command: Union[str, list], quiet: bool = False, check: bool = False, s
 
 
 def bash(command: str, quiet: bool = False, stream: bool = False) -> str:
-    """
-    Alias for shell() - run a bash command.
+    """Alias for shell() - run a bash command.
 
     Example:
         bash("echo Hello")

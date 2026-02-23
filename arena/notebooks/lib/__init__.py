@@ -1,5 +1,4 @@
-"""
-Arena - Helper utilities for CoreWeave infrastructure.
+"""Arena - Helper utilities for CoreWeave infrastructure.
 
 Modules:
     remote_execution_helpers: SSH helpers for running commands on remote hosts
@@ -14,13 +13,14 @@ Usage:
 """
 
 # SSH functions
-from arena.object_storage_helpers import (
+from lib.remote_execution_helpers import run_remote, run_remote_interactive, ssh
+from lib.storage.object_storage_helpers import (
     MissingCredentialsError,
     ObjectStorage,
 )
-from arena.remote_execution_helpers import run_remote, run_remote_interactive, ssh
 
-from . import object_storage_helpers, remote_execution_helpers
+from . import remote_execution_helpers
+from .storage import object_storage_helpers
 
 __all__ = [
     # Modules
