@@ -473,7 +473,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callable, storage: ObjectStorage):
-    if download_form and download_form.value:
+    if download_form.value:
         with mo.status.spinner(
             title="Running Download Test",
             subtitle=f"Downloading from {bucket_name}",
@@ -545,7 +545,7 @@ Results will be viewable below shortly or in the pod logs in-cluster.
         mo.output.replace(result_section)
 
 
-@app.cell()
+@app.cell(hide_code=True)
 def _(k8s: K8s, warp_submit_results: dict[str : list[str]]):
     # this is a bit risky since it assumes we only submit the one job and it is always in the 'created' dict
     warp_job_name = warp_submit_results["created"][0].split("/")[1]

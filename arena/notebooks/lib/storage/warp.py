@@ -3,6 +3,7 @@ import re
 import string
 import uuid
 
+from kubernetes.client.models.v1_pod_list import V1PodList
 from lib.k8s import K8s
 from lib.storage.object_storage import ObjectStorage
 
@@ -304,7 +305,7 @@ def get_warp_benchmark_results(k8s: K8s, job_name: str, namespace: str) -> dict:
     Returns:
         dict: Parsed benchmark results with metrics
     """
-    pods = k8s.core_v1.list_namespaced_pod(namespace=namespace, label_selector=f"job-name={job_name}")
+    pods: V1PodList = k8s.core_v1.list_namespaced_pod(namespace=namespace, label_selector=f"job-name={job_name}")
 
     if not pods.items:
         return {"status": "no_pods_found", "error": "Job pods not found"}
@@ -316,6 +317,7 @@ def get_warp_benchmark_results(k8s: K8s, job_name: str, namespace: str) -> dict:
         return {"status": pod_status.lower(), "pod_name": pod_name, "message": f"Pod is in {pod_status} state"}
 
     try:
-        logs = k8s.core_v1.read_namespaced_pod_log(name=pod_name, namespace=namespace, container="warp")
+        logs = k8s.core_v1.read_namespaced_pod_log(name=pod_name, namespace=namespace, container="warp").split("\n")
+        return logs
     except Exception as e:
         return {"status": "error", "error": f"Failed to fetch logs: {str(e)}", "pod_name": pod_name}
