@@ -525,21 +525,21 @@ def _(warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
             title="Running Warp Benchmark",
             subtitle=f"Benchmarking bucket: {bucket_name}",
         ):
-            results = run_warp_benchmark(k8s, storage, bucket_name)
+            _results = run_warp_benchmark(k8s, storage, bucket_name)
 
         result_section = mo.md(f"""
-            /// admonition | Benchmark Started
-                type: success
+/// admonition | Benchmark Started
+    type: success
 
-            Warp benchmark job submitted successfully.
+Warp benchmark job submitted successfully.
 
-            - **Operation:** {warp_operation}
+- **Operation:** {warp_operation}
 
-            Submit Results:
-            ```json
-            {json.dumps(results, indent=2)}
-            ```
-            ///
+Submit Results:
+```json
+{json.dumps(_results, indent=2)}
+```
+///
         """)
         mo.output.replace(result_section)
 
