@@ -1,8 +1,9 @@
 import json
 import os
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime, timedelta
 from logging import exception
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 import boto3
 import requests
@@ -85,8 +86,95 @@ class ObjectStorage(ABC):
 
         self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
 
-        self.access_key_id = os.environ.get("AWS_ACCESS_KEY_ID", "")
-        self.secret_access_key = os.environ.get("AWS_SECRET_ACCESS_KEY", "")
+        self._access_key_id: Optional[str] = None
+        self._secret_access_key: Optional[str] = None
+        self._credentials_expiry: Optional[datetime] = None
+        self._credential_duration: int = DEFAULT_ACCESS_TOKEN_DURATION
+
+    @property
+    def access_key_id(self) -> str:
+        """Get access key ID, refreshing if necessary."""
+        if self._should_refresh_credentials():
+            self._refresh_credentials()
+        return self._access_key_id or ""
+
+    @property
+    def secret_access_key(self) -> str:
+        """Get secret access key, refreshing if necessary."""
+        if self._should_refresh_credentials():
+            self._refresh_credentials()
+        return self._secret_access_key or ""
+
+    def _should_refresh_credentials(self) -> bool:
+        """Check if credentials need to be refreshed.
+
+        Returns:
+            bool: True if credentials should be refreshed.
+        """
+        if not self._access_key_id or not self._secret_access_key:
+            return True
+        if self._credentials_expiry is None:
+            return False
+        # Refresh 5 minutes before expiry
+        return datetime.now(UTC) >= (self._credentials_expiry - timedelta(minutes=5))
+
+    def _refresh_credentials(self) -> None:
+        """Refresh temporary credentials."""
+        if not self.cw_token:
+            raise ObjectStorageError("Cannot refresh credentials without CW token")
+
+        print("Refreshing credentials using CW token...")
+        access_key_id, secret_access_key = self._fetch_temp_access_keys(self._credential_duration)
+        self._set_credentials(access_key_id, secret_access_key, self._credential_duration)
+
+    def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
+        """Generate temporary S3 access keys via CoreWeave API.
+
+        Args:
+            duration_seconds (int, optional): Key validity duration in seconds.
+
+        Returns:
+            tuple[str, str]: (access_key_id, secret_access_key)
+
+        Raises:
+            ObjectStorageError: If API request fails.
+        """
+        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
+        payload = {"durationSeconds": duration_seconds}
+
+        try:
+            resp = self.api_session.post(
+                endpoint,
+                json=payload,
+            )
+            resp.raise_for_status()
+
+            data = resp.json()
+            access_key_id = data.get("accessKeyId")
+            secret_access_key = data.get("secretKey")
+            if not access_key_id or not secret_access_key:
+                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
+
+            print(f"Created access key: {access_key_id[:8]}...")
+            return access_key_id, secret_access_key
+
+        except requests.exceptions.RequestException as e:
+            raise ObjectStorageError(f"Failed to create access key: {e}")
+
+    def _set_credentials(self, access_key_id: str, secret_access_key: str, duration_seconds: int) -> None:
+        """Set credentials and track expiry time.
+
+        Args:
+            access_key_id: AWS access key ID
+            secret_access_key: AWS secret access key
+            duration_seconds: How long the credentials are valid for
+        """
+        self._access_key_id = access_key_id
+        self._secret_access_key = secret_access_key
+        self._credentials_expiry = datetime.now(UTC) + timedelta(seconds=duration_seconds)
+        self._credential_duration = duration_seconds
+        # Invalidate cached S3 client so it gets recreated with new credentials
+        self._s3_client = None
 
     @staticmethod
     def auto(cw_token: str = "", use_lota: bool = True, region: str = "") -> "ObjectStorage":
@@ -493,11 +581,6 @@ class PodIdentityObjectStorage(ObjectStorage):
                     "Pod identity token file not found, are you running in a CoreWeave cluster?"
                 )
         super().__init__(cw_token, use_lota, region)
-        if not (self.access_key_id and self.secret_access_key):
-            print("Creating access keys")
-            access_key_id, secret_access_key = self._get_temp_access_keys()
-            self.access_key_id = access_key_id
-            self.secret_access_key = secret_access_key
 
     @property
     def s3_client(self) -> S3Client:
@@ -555,12 +638,6 @@ class AccessKeyObjectStorage(ObjectStorage):
         super().__init__(cw_token, use_lota, region)
         if not self.cw_token:
             raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
-
-        if not (self.access_key_id and self.secret_access_key):
-            print("Creating access keys")
-            access_key_id, secret_access_key = self._get_temp_access_keys()
-            self.access_key_id = access_key_id
-            self.secret_access_key = secret_access_key
 
     @property
     def s3_client(self) -> S3Client:

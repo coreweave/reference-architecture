@@ -514,7 +514,12 @@ def _(bucket_name: str, storage: ObjectStorage):
     ///
     """)
 
-    result_section = None
+    mo.vstack([description, button_section])
+    return (trigger_warp_benchmark,)
+
+
+@app.cell(hide_code=True)
+def _(trigger_warp_benchmark: mo.ui.run_button, storage: ObjectStorage, bucket_name: str):
     if trigger_warp_benchmark.value:
         k8s = K8s()
         with mo.status.spinner(
@@ -523,27 +528,17 @@ def _(bucket_name: str, storage: ObjectStorage):
         ):
             results = run_warp_benchmark(k8s, storage, bucket_name)
             result_section = mo.md(f"""
-            /// admonition | Benchmark Started
-                type: success
+                /// admonition | Benchmark Started
+                    type: success
 
-            Warp benchmark job has been submitted successfully!
+                Warp benchmark job has been submitted successfully!
 
-            Results:
-            ```
-            {json.dumps(results, indent=2)}
-            ```
-            ///
-            """)
-
-    mo.vstack([description, button_section, result_section] if result_section else [description, button_section])
-    return (trigger_warp_benchmark,)
-
-
-@app.cell(hide_code=True)
-def _(trigger_warp_benchmark: mo.ui.run_button, storage: ObjectStorage, bucket_name: str):
-    if trigger_warp_benchmark.value:
-        k8s = K8s()
-        run_warp_benchmark(k8s, storage, bucket_name)
+                Results:
+                ```
+                {json.dumps(results, indent=2)}
+                ```
+                ///
+                """)
 
 
 if __name__ == "__main__":
