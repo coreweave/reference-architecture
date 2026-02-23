@@ -278,6 +278,11 @@ class ObjectStorage(ABC):
         """
         return AccessKeyObjectStorage(cw_token, use_lota, region)
 
+    @abstractmethod
+    def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
+        """Generate temporary S3 access keys via CoreWeave API."""
+        pass
+
     @property
     @abstractmethod
     def s3_client(self) -> S3Client:
@@ -289,40 +294,6 @@ class ObjectStorage(ABC):
     def api_session(self) -> requests.Session:
         """Get HTTP session for CoreWeave API calls. Must be implemented by subclasses."""
         pass
-
-    def _get_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
-        """Generate temporary S3 access keys via CoreWeave API.
-
-        Args:
-            duration_seconds (int, optional): Key validity duration in seconds. Defaults to 3600 (1 hour).
-
-        Returns:
-            tuple[str, str]: (access_key_id, secret_access_key)
-
-        Raises:
-            ObjectStorageError: If API request fails.
-        """
-        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
-        payload = {"durationSeconds": duration_seconds}
-
-        try:
-            resp = self.api_session.post(
-                endpoint,
-                json=payload,
-            )
-            resp.raise_for_status()
-
-            data = resp.json()
-            access_key_id = data.get("accessKeyId")
-            secret_access_key = data.get("secretKey")
-            if not access_key_id or not secret_access_key:
-                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
-
-            print(f"Created access key: {access_key_id[:8]}")
-            return access_key_id, secret_access_key
-
-        except requests.exceptions.RequestException as e:
-            raise ObjectStorageError(f"Failed to create access key: {e}")
 
     def list_buckets(self) -> list[str]:
         """List all S3 buckets.
@@ -616,6 +587,40 @@ class PodIdentityObjectStorage(ObjectStorage):
             self._api_session = session
         return self._api_session
 
+    def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
+        """Generate temporary S3 access keys via CoreWeave API.
+
+        Args:
+            duration_seconds (int, optional): Key validity duration in seconds.
+
+        Returns:
+            tuple[str, str]: (access_key_id, secret_access_key)
+
+        Raises:
+            ObjectStorageError: If API request fails.
+        """
+        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/temporary-credentials/oidc"
+        payload = {"durationSeconds": duration_seconds}
+
+        try:
+            resp = self.api_session.post(
+                endpoint,
+                json=payload,
+            )
+            resp.raise_for_status()
+
+            data = resp.json()
+            access_key_id = data.get("accessKeyId")
+            secret_access_key = data.get("secretKey")
+            if not access_key_id or not secret_access_key:
+                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
+
+            print(f"Created access key: {access_key_id[:8]}...")
+            return access_key_id, secret_access_key
+
+        except requests.exceptions.RequestException as e:
+            raise ObjectStorageError(f"Failed to create access key: {e}")
+
 
 class AccessKeyObjectStorage(ObjectStorage):
     """ObjectStorage client using Access Key authentication.
@@ -677,6 +682,40 @@ class AccessKeyObjectStorage(ObjectStorage):
             )
             self._api_session = session
         return self._api_session
+
+    def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
+        """Generate temporary S3 access keys via CoreWeave API.
+
+        Args:
+            duration_seconds (int, optional): Key validity duration in seconds.
+
+        Returns:
+            tuple[str, str]: (access_key_id, secret_access_key)
+
+        Raises:
+            ObjectStorageError: If API request fails.
+        """
+        endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/access-key"
+        payload = {"durationSeconds": duration_seconds}
+
+        try:
+            resp = self.api_session.post(
+                endpoint,
+                json=payload,
+            )
+            resp.raise_for_status()
+
+            data = resp.json()
+            access_key_id = data.get("accessKeyId")
+            secret_access_key = data.get("secretKey")
+            if not access_key_id or not secret_access_key:
+                raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
+
+            print(f"Created access key: {access_key_id[:8]}...")
+            return access_key_id, secret_access_key
+
+        except requests.exceptions.RequestException as e:
+            raise ObjectStorageError(f"Failed to create access key: {e}")
 
 
 def detect_region() -> str:

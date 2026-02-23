@@ -25,7 +25,7 @@ class K8s:
         _batch_v1 (client.BatchV1Api | None): Cached BatchV1Api client.
     """
 
-    def __init__(self, in_cluster: bool = True, kubeconfig_path: Optional[str] = None):
+    def __init__(self, in_cluster: bool = True, kubeconfig_path: str = "~/.kube/config"):
         """Initialize Kubernetes client.
 
         Args:

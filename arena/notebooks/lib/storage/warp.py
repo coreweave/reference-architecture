@@ -19,10 +19,10 @@ def generate_warp_yaml(
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: warp
+  name: arena
   labels:
-    app.kubernetes.io/name: warp
-    app.kubernetes.io/instance: warp
+    app.kubernetes.io/name: arena
+    app.kubernetes.io/instance: arena
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -131,7 +131,7 @@ spec:
               containerPort: 7761
           securityContext:
             readOnlyRootFilesystem: true
-      serviceAccountName: warp
+      serviceAccountName: arena
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true
@@ -192,7 +192,7 @@ spec:
             - name: config
               mountPath: /config
               readOnly: true
-      serviceAccountName: warp
+      serviceAccountName: arena
       securityContext:
         fsGroup: 1001
         runAsNonRoot: true

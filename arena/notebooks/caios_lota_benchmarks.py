@@ -170,7 +170,9 @@ def _():
 
 @app.cell(hide_code=True)
 def _(storage: ObjectStorage):
-    buckets = storage.list_buckets()
+    get_buckets, set_buckets = mo.state(storage.list_buckets())
+    buckets = get_buckets()
+
     _initial_bucket = buckets[0] if buckets else None
     bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
     create_bucket_form = (
@@ -182,12 +184,13 @@ def _(storage: ObjectStorage):
         )
         .form(submit_button_label="Create Bucket", clear_on_submit=False)
     )
+    bucket_refresh = mo.ui.button(label="Refresh Bucket List")
 
-    return bucket_dropdown, create_bucket_form, buckets
+    return bucket_dropdown, create_bucket_form, buckets, set_buckets, bucket_refresh
 
 
 @app.cell(hide_code=True)
-def _(create_bucket_form, storage: ObjectStorage):
+def _(create_bucket_form: mo.ui.form, set_buckets, bucket_refresh: mo.ui.button, storage: ObjectStorage):
     _ui = None
     if create_bucket_form.value:
         try:
@@ -198,6 +201,10 @@ def _(create_bucket_form, storage: ObjectStorage):
             )
         except Exception as _e:
             _ui = mo.md(f"Failed to create bucket: {_e}")
+
+    if bucket_refresh.value:
+        set_buckets(storage.list_buckets())
+        _ui = mo.md("Bucket list refreshed")
     _ui
     return
 
@@ -508,7 +515,7 @@ def _(bucket_name: str, storage: ObjectStorage):
 
     The benchmark will:
     - Automatically detect available GPU or CPU nodes
-    - Deploy Warp as a Kubernetes job across your nodes
+    - Deploy Warp as a Kubernetes job across all your nodes
     - Run comprehensive S3 performance tests
     - Measure throughput, latency, and operations per second
     ///
@@ -531,9 +538,9 @@ def _(trigger_warp_benchmark: mo.ui.run_button, storage: ObjectStorage, bucket_n
                 /// admonition | Benchmark Started
                     type: success
 
-                Warp benchmark job has been submitted successfully!
+                Warp benchmark job submitted successfully.
 
-                Results:
+                Submit Results:
                 ```
                 {json.dumps(results, indent=2)}
                 ```
