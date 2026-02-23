@@ -402,52 +402,6 @@ class ObjectStorage(ABC):
             print(f"Error getting bucket policy: {e}")
             return None
 
-    def list_org_policies(self) -> list[dict[str, Any]]:
-        """List organization-level access policies from CW API.
-
-        Returns:
-            list[dict[str, Any]]: List of policy documents. Returns empty list on error.
-        """
-        try:
-            resp = self.api_session.get(f"{COREWEAVE_OBJECT_API_BASE_URL}/access-policy")
-            resp.raise_for_status()
-            return resp.json().get(
-                "policies",
-            )
-        except Exception as e:
-            print(f"Error listing org policies: {e}")
-            return []
-
-    def apply_org_policy(self, policy: dict[str, Any]) -> bool:
-        """Create or update an organization-level access policy.
-
-        Args:
-            policy (dict[str, Any]): Policy document with structure:
-                {
-                    "policy": {
-                        "version": "v1alpha1",
-                        "name": "policy-name",
-                        "statements": [...]
-                    }
-                }
-
-        Returns:
-            bool: True if successful, False otherwise.
-        """
-        policy_name = policy.get("policy", {}).get("name", "unknown")
-
-        try:
-            response = self.api_session.post(
-                f"{COREWEAVE_OBJECT_API_BASE_URL}/access-policy",
-                json=policy,
-            )
-            response.raise_for_status()
-            print(f"Applied organization policy: {policy_name}")
-            return True
-        except Exception as e:
-            print(f"Error applying organization policy '{policy_name}': {e}")
-            return False
-
     def list_objects(
         self, bucket_name: str, prefix: str = "", max_keys: int = 1000, continuation_token: str | None = None
     ) -> dict[str, Any]:
@@ -688,6 +642,56 @@ class AccessKeyObjectStorage(ObjectStorage):
 
         except requests.exceptions.RequestException as e:
             raise ObjectStorageError(f"Failed to create access key: {e}")
+
+    def list_org_policies(self) -> list[dict[str, Any]]:
+        """List organization-level access policies from CW API.
+
+            Can only be done with the non-oidc cw endpoints
+
+        Returns:
+            list[dict[str, Any]]: List of policy documents. Returns empty list on error.
+        """
+        try:
+            resp = self.api_session.get(f"{COREWEAVE_OBJECT_API_BASE_URL}/access-policy")
+            resp.raise_for_status()
+            return resp.json().get(
+                "policies",
+            )
+        except Exception as e:
+            print(f"Error listing org policies: {e}")
+            return []
+
+    def apply_org_policy(self, policy: dict[str, Any]) -> bool:
+        """Create or update an organization-level access policy.
+
+        Can only be done with the non-oidc cw endpoints
+
+        Args:
+            policy (dict[str, Any]): Policy document with structure:
+                {
+                    "policy": {
+                        "version": "v1alpha1",
+                        "name": "policy-name",
+                        "statements": [...]
+                    }
+                }
+
+        Returns:
+            bool: True if successful, False otherwise.
+        """
+        policy_name = policy.get("policy", {}).get("name", "unknown")
+
+        try:
+            response = self.api_session.post(
+                f"{COREWEAVE_OBJECT_API_BASE_URL}/access-policy",
+                json=policy,
+            )
+            response.raise_for_status()
+            print(f"Applied organization policy: {policy_name}")
+            return True
+        except Exception as e:
+            print(f"Error applying organization policy '{policy_name}': {e}")
+            return False
 
 
 def detect_region() -> str:

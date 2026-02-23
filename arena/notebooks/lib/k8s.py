@@ -4,7 +4,7 @@ from typing import Any, Optional
 from kubernetes import client, config
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
-from ruamel import yaml
+from ruamel.yaml import YAML
 
 
 class KubernetesError(Exception):
@@ -353,6 +353,7 @@ class K8s:
         results: dict[str, list[str]] = {"created": [], "updated": [], "unchanged": []}
 
         try:
+            yaml = YAML(typ="safe")
             documents = list(yaml.load_all(yaml_content))
 
             for doc in documents:
