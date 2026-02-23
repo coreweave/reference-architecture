@@ -183,7 +183,7 @@ spec:
                 - -c
                 - |
                     echo "Waiting for warp clients to be ready..."
-                    for i in $(seq 0 {host_count - 1}); do
+                    for i in $(seq 0 {host_count - 2}); do
                     until nslookup warp-$i.warp; do
                         echo "Waiting for warp-$i.warp..."
                         sleep 2
