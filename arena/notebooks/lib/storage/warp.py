@@ -318,6 +318,6 @@ def get_warp_benchmark_results(k8s: K8s, job_name: str, namespace: str) -> dict:
 
     try:
         logs = k8s.core_v1.read_namespaced_pod_log(name=pod_name, namespace=namespace, container="warp").split("\n")
-        return logs
+        return {"status": pod_status.lower(), "pod_name": pod_name, "logs": logs}
     except Exception as e:
         return {"status": "error", "error": f"Failed to fetch logs: {str(e)}", "pod_name": pod_name}

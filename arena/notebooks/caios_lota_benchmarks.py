@@ -538,8 +538,8 @@ Submit Results:
 ```json
 {json.dumps(warp_submit_results, indent=2)}
 
-Results will be viewable below shortly or in the pod logs in-cluster.
 ```
+Results will be viewable below shortly or in the pod logs in-cluster.
 ///
         """)
         mo.output.replace(result_section)
@@ -551,7 +551,21 @@ def _(k8s: K8s, warp_submit_results: dict[str : list[str]]):
     warp_job_name = warp_submit_results["created"][0].split("/")[1]
     namespace = os.getenv("POD_NAMESPACE", "tenant-slurm")
 
-    get_warp_benchmark_results(k8s, warp_job_name, namespace)
+    _timeout_seconds = 600
+    _start_time = time.time()
+    with mo.status.spinner(title="Waiting for Warp benchmark to complete") as spinner:
+        while time.time() - _start_time < _timeout_seconds:
+            warp_results = get_warp_benchmark_results(k8s, warp_job_name, namespace)
+            _status = warp_results.get("status", "unknown")
+            elapsed = int(time.time() - _start_time)
+
+            spinner.update(subtitle=f"{_status} - {elapsed}s")
+
+            if _status in ["succeeded", "failed", "completed"]:
+                break
+
+            time.sleep(5)
+    warp_results
 
 
 if __name__ == "__main__":
