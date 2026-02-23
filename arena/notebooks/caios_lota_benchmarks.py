@@ -546,26 +546,54 @@ Results will be viewable below shortly or in the pod logs in-cluster.
 
 
 @app.cell(hide_code=True)
-def _(k8s: K8s, warp_submit_results: dict[str : list[str]]):
-    # this is a bit risky since it assumes we only submit the one job and it is always in the 'created' dict
-    warp_job_name = warp_submit_results["created"][0].split("/")[1]
-    namespace = os.getenv("POD_NAMESPACE", "tenant-slurm")
+def _(k8s: K8s, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.form):
+    if warp_form.value:
+        warp_job_name = warp_submit_results["created"][0].split("/")[1]
+        namespace = os.getenv("POD_NAMESPACE", "tenant-slurm")
 
-    _timeout_seconds = 600
-    _start_time = time.time()
-    with mo.status.spinner(title="Waiting for Warp benchmark to complete") as spinner:
-        while time.time() - _start_time < _timeout_seconds:
-            warp_results = get_warp_benchmark_results(k8s, warp_job_name, namespace)
-            _status = warp_results.get("status", "unknown")
-            elapsed = int(time.time() - _start_time)
+        _timeout_seconds = 600
+        _start_time = time.time()
+        _log_lines = []
 
-            spinner.update(subtitle=f"{_status} - {elapsed}s")
+        with mo.status.spinner(title="Waiting for Warp benchmark to complete") as _spinner:
+            while time.time() - _start_time < _timeout_seconds:
+                warp_results = get_warp_benchmark_results(k8s, warp_job_name, namespace)
+                _status = warp_results.get("status", "unknown")
+                _elapsed = int(time.time() - _start_time)
 
-            if _status in ["succeeded", "failed", "completed"]:
-                break
+                _spinner.update(subtitle=f"{_status} - {_elapsed}s")
 
-            time.sleep(5)
-    warp_results
+                _current_logs = warp_results.get("logs", [])
+                if len(_current_logs) > len(_log_lines):
+                    log_lines = _current_logs
+                    _recent_logs = "\n".join(_log_lines[-30:])
+                    mo.output.replace(
+                        mo.vstack(
+                            [
+                                mo.md(f"**Status:** {_status} | **Elapsed:** {_elapsed}s"),
+                                mo.md(f"```\n{_recent_logs}\n```"),
+                            ]
+                        )
+                    )
+
+                if _status in ["succeeded", "failed", "completed"]:
+                    break
+                time.sleep(5)
+
+        _full_logs = "\n".join(log_lines)
+        _final_output = mo.md(f"""
+### Benchmark Complete
+
+**Status:** {_status}
+**Total Lines:** {len(log_lines)}
+
+<details>
+<summary>View Full Logs</summary>
+{_full_logs}
+</details>
+""")
+        mo.output.replace(_final_output)
+    return (warp_results,)
 
 
 if __name__ == "__main__":
