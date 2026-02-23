@@ -123,7 +123,6 @@ class ObjectStorage(ABC):
         if not self.cw_token:
             raise ObjectStorageError("Cannot refresh credentials without CW token")
 
-        print("Refreshing credentials using CW token...")
         access_key_id, secret_access_key = self._fetch_temp_access_keys(self._credential_duration)
         self._set_credentials(access_key_id, secret_access_key, self._credential_duration)
 
