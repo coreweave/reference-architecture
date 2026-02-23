@@ -506,7 +506,7 @@ def _(bucket_name: str, storage: ObjectStorage):
     /// admonition | About Warp
         type: info
 
-    [Warp](https://github.com/minio/warp) is a benchmarking tool for S3-compatible object storage that runs comprehensive performance tests on GET, PUT, DELETE, and LIST operations.
+    [Warp](https://github.com/minio/warp) is a benchmarking tool for S3-compatible object storage that runs comprehensive performance tests on GET, PUT, DELETE, LIST, and STAT operations.
     ///
     """)
 
@@ -525,7 +525,7 @@ def _(warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
             title="Running Warp Benchmark",
             subtitle=f"Benchmarking bucket: {bucket_name}",
         ):
-            _results = run_warp_benchmark(k8s, storage, bucket_name)
+            warp_submit_results = run_warp_benchmark(k8s, storage, bucket_name)
 
         result_section = mo.md(f"""
 /// admonition | Benchmark Started
@@ -536,11 +536,22 @@ Warp benchmark job submitted successfully.
 
 Submit Results:
 ```json
-{json.dumps(_results, indent=2)}
+{json.dumps(warp_submit_results, indent=2)}
+
+Results will be viewable below shortly or in the pod logs in-cluster.
 ```
 ///
         """)
         mo.output.replace(result_section)
+
+
+@app.cell()
+def _(k8s: K8s, warp_submit_results: dict[str : list[str]]):
+    # this is a bit risky since it assumes we only submit the one job and it is always in the 'created' dict
+    warp_job_name = warp_submit_results["created"][0].split("/")[1]
+    namespace = os.getenv("POD_NAMESPACE", "tenant-slurm")
+
+    get_warp_benchmark_results(k8s, warp_job_name, namespace)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import os
+import re
 import string
 import uuid
 
@@ -189,7 +190,7 @@ spec:
                         echo "Waiting for warp-$i.warp..."
                         sleep 2
                     done
-                    echo "warp-$i.warp is ready"
+                    echo "warp-$i is ready"
                     done
                     echo "All warp clients are ready!"
       containers:
@@ -246,7 +247,22 @@ spec:
 
 
 def run_warp_benchmark(k8s: K8s, object_storage: ObjectStorage, bucket_name: str) -> dict[str, list[str]]:
-    """Run the warp benchmark on GPUs if possible, and CPUs if there aren't GPUs and return results of yaml application."""
+    """Run the warp benchmark on GPUs if possible, and CPUs if there aren't GPUs and return results of yaml application.
+
+    Returns:
+        dict: Results of applying the warp benchmark yaml to the cluster
+            {
+            "created": [
+                "Job/warp-00206435"
+            ],
+            "updated": [
+                "ConfigMap/warp-config",
+                "Service/warp",
+                "StatefulSet/warp"
+            ],
+            "unchanged": []
+            }
+    """
     namespace = os.getenv("POD_NAMESPACE", "tenant-slurm")
 
     nodes = k8s.get_nodes()
@@ -277,6 +293,29 @@ def run_warp_benchmark(k8s: K8s, object_storage: ObjectStorage, bucket_name: str
     return results
 
 
-def get_warp_benchmark_results(namespace: str):
-    """Query, format, and return the results of the warp benchmark job."""
-    pass
+def get_warp_benchmark_results(k8s: K8s, job_name: str, namespace: str) -> dict:
+    """Query, format, and return the results of the warp benchmark job.
+
+    Args:
+        k8s: K8s client instance
+        job_name: Name of the warp job
+        namespace: Kubernetes namespace
+
+    Returns:
+        dict: Parsed benchmark results with metrics
+    """
+    pods = k8s.core_v1.list_namespaced_pod(namespace=namespace, label_selector=f"job-name={job_name}")
+
+    if not pods.items:
+        return {"status": "no_pods_found", "error": "Job pods not found"}
+
+    pod_name = pods.items[0].metadata.name
+
+    pod_status = pods.items[0].status.phase
+    if pod_status not in ["Succeeded", "Running"]:
+        return {"status": pod_status.lower(), "pod_name": pod_name, "message": f"Pod is in {pod_status} state"}
+
+    try:
+        logs = k8s.core_v1.read_namespaced_pod_log(name=pod_name, namespace=namespace, container="warp")
+    except Exception as e:
+        return {"status": "error", "error": f"Failed to fetch logs: {str(e)}", "pod_name": pod_name}
