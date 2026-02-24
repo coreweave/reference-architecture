@@ -14,13 +14,8 @@ Usage:
 
 # SSH functions
 from lib.remote_execution_helpers import run_remote, run_remote_interactive, ssh
-from lib.storage.object_storage import (
-    MissingCredentialsError,
-    ObjectStorage,
-)
 
 from . import remote_execution_helpers
-from .storage import object_storage
 
 __all__ = [
     # Modules
@@ -30,7 +25,4 @@ __all__ = [
     "ssh",
     "run_remote",
     "run_remote_interactive",
-    # Object Storage
-    "ObjectStorage",
-    "MissingCredentialsError",
 ]

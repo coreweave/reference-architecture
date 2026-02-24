@@ -1,5 +1,5 @@
 import os
-from typing import Any, Optional
+from typing import Optional
 
 from kubernetes import client, config
 from kubernetes.client.models.v1_node_list import V1NodeList
@@ -172,7 +172,7 @@ class K8s:
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster region: {e}")
 
-    def get_nodes(self) -> dict[str, dict[Any, Any]]:
+    def get_nodes(self) -> dict[str, dict[str, dict]]:
         """Get the number and type of nodes in the cluster.
 
         Counts nodes with nvidia.com/gpu resources as gpu nodes and

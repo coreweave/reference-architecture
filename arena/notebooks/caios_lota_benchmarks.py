@@ -26,7 +26,7 @@ with app.setup:
     import marimo as mo
     from lib.k8s import K8s
     from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
-    from lib.storage.warp import get_warp_benchmark_results, run_warp_benchmark
+    from lib.storage.warp import WarpRunner
 
 
 @app.cell(hide_code=True)
@@ -242,6 +242,8 @@ def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
         """)
     bucket_name = bucket_dropdown.value
     _ui
+
+    return (bucket_name,)
 
 
 @app.cell(hide_code=True)
@@ -488,6 +490,12 @@ def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callabl
 
 @app.cell(hide_code=True)
 def _(bucket_name: str, storage: ObjectStorage):
+    k8s = K8s()
+    warp_runner = WarpRunner(
+        k8s,
+        bucket_name,
+        storage,
+    )
     warp_form = (
         mo.md("""
             ### Configure Warp Benchmark
@@ -511,21 +519,21 @@ def _(bucket_name: str, storage: ObjectStorage):
     """)
 
     mo.vstack([description, warp_form])
-    return (warp_form,)
+    return (warp_form, warp_runner)
 
 
 @app.cell(hide_code=True)
-def _(warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
+def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
     if warp_form.value:
         warp_config = warp_form.value
         warp_operation = warp_config.get("operation", "get")
-
-        k8s = K8s()
         with mo.status.spinner(
             title="Running Warp Benchmark",
             subtitle=f"Benchmarking bucket: {bucket_name}",
         ):
-            warp_submit_results = run_warp_benchmark(k8s, storage, bucket_name)
+            warp_submit_results = warp_runner.run_benchmark(
+                warp_operation,
+            )
 
         result_section = mo.md(f"""
 /// admonition | Benchmark Started
@@ -546,18 +554,15 @@ Results will be viewable below shortly or in the pod logs in-cluster.
 
 
 @app.cell(hide_code=True)
-def _(k8s: K8s, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.form):
+def _(warp_runner: WarpRunner, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.form):
     if warp_form.value:
-        warp_job_name = warp_submit_results["created"][0].split("/")[1]
-        namespace = os.getenv("POD_NAMESPACE", "tenant-slurm")
-
         _timeout_seconds = 600
         _start_time = time.time()
         _log_lines = []
 
         with mo.status.spinner(title="Waiting for Warp benchmark to complete") as _spinner:
             while time.time() - _start_time < _timeout_seconds:
-                warp_results = get_warp_benchmark_results(k8s, warp_job_name, namespace)
+                warp_results = warp_runner.get_results()
                 _status = warp_results.get("status", "unknown")
                 _elapsed = int(time.time() - _start_time)
 
@@ -580,12 +585,11 @@ def _(k8s: K8s, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.for
                     break
                 time.sleep(5)
 
-        _full_logs = "\n".join(_log_lines)
         _final_output = mo.md(f"""
 ### Benchmark Complete
 
 **Status:** {_status}
-```\n{_full_logs}\n```
+```\n{_log_lines}\n```
 """)
         mo.output.replace(_final_output)
     return (warp_results,)

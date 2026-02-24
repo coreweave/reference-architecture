@@ -2,7 +2,6 @@ import json
 import os
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
-from logging import exception
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
 import boto3
@@ -635,7 +634,7 @@ class AccessKeyObjectStorage(ObjectStorage):
             if not access_key_id or not secret_access_key:
                 raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
 
-            print(f"Created access key: {access_key_id[:8]}...")
+            print(f"Created access key: {access_key_id[:8]}")
             return access_key_id, secret_access_key
 
         except requests.exceptions.RequestException as e:

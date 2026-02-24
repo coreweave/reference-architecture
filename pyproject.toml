@@ -49,7 +49,7 @@ ignore = [
  "F401", # unused import
  "F841", # unused variable
  "E999", # syntax errors
- "E501", # ine length, since we have big multiline strings for markdown
+ "E501", # line length, since we have big multiline strings for markdown
 ]
 
 [tool.ruff.lint.pydocstyle]
