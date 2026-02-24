@@ -13,13 +13,11 @@ variable "name" {
 variable "instance_type" {
   type        = string
   description = "CKS instance type (e.g. gd-8xh100ib-i128)"
-  default     = "gd-8xh100ib-i128"
 }
 
 variable "target_nodes" {
   type        = number
   description = "Desired number of nodes"
-  default     = 2
 }
 
 variable "autoscaling" {

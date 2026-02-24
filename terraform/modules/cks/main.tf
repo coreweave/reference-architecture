@@ -13,26 +13,10 @@ resource "coreweave_cks_cluster" "main" {
   service_cidr_name      = var.service_cidr_name
   internal_lb_cidr_names = var.internal_lb_cidr_names
 
-  oidc = var.oidc_issuer_url != null ? {
-    issuer_url = var.oidc_issuer_url
-    client_id  = var.oidc_client_id
-    ca         = var.oidc_ca
-  } : null
-
-  authn_webhook = var.authn_webhook_server != null ? {
-    server = var.authn_webhook_server
-    ca     = var.authn_webhook_ca
-  } : null
-
-  authz_webhook = var.authz_webhook_server != null ? {
-    server = var.authz_webhook_server
-    ca     = var.authz_webhook_ca
-  } : null
-
-  node_port_range = var.node_port_start != null && var.node_port_end != null ? {
-    start = var.node_port_start
-    end   = var.node_port_end
-  } : null
+  oidc           = var.oidc
+  authn_webhook  = var.authn_webhook
+  authz_webhook  = var.authz_webhook
+  node_port_range = var.node_port_range
 
   audit_policy = var.audit_policy
 }

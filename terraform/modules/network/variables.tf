@@ -15,7 +15,6 @@ variable "host_prefixes" {
     prefixes = list(string)
   }))
   description = "Host prefix definitions; provider requires at least one (e.g. PRIMARY with /18 CIDR)"
-  default     = []
 }
 
 variable "vpc_prefixes" {

@@ -7,7 +7,6 @@ variable "create" {
 variable "pvc_name" {
   type        = string
   description = "Name of the DFS PersistentVolumeClaim"
-  default     = "dfs-shared"
 }
 
 variable "namespace" {
@@ -19,5 +18,4 @@ variable "namespace" {
 variable "size" {
   type        = string
   description = "Storage size (e.g. 100Gi, 1Ti)"
-  default     = "100Gi"
 }

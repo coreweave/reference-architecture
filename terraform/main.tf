@@ -1,37 +1,38 @@
-# Network (VPC) – created first; vpc_prefixes names must match CKS module
+# CKS prefix names derived from vpc_prefixes (single source of truth)
+# Convention: vpc_prefixes[0] = pod, [1] = service, [2..] = internal LB(s). Requires at least 3 entries.
+locals {
+  cks_pod_cidr_name         = var.vpc_prefixes[0].name
+  cks_service_cidr_name     = var.vpc_prefixes[1].name
+  cks_internal_lb_cidr_names = toset([for i in range(2, length(var.vpc_prefixes)) : var.vpc_prefixes[i].name])
+}
+
+# Network (VPC) – created first
 module "network" {
   source = "./modules/network"
 
-  name         = var.vpc_name
-  zone         = var.zone
-  vpc_prefixes = var.vpc_prefixes
+  name          = var.vpc_name
+  zone          = var.zone
+  vpc_prefixes  = var.vpc_prefixes
   host_prefixes = var.host_prefixes
 }
 
-# CKS cluster – depends on VPC; CIDR names must match VPC vpc_prefixes
+# CKS cluster – depends on VPC; uses VPC's zone and prefix names derived from vpc_prefixes
 module "cks" {
   source = "./modules/cks"
 
-  cluster_name         = var.cluster_name
-  kubernetes_version   = var.kubernetes_version
-  zone                 = var.zone
-  vpc_id               = module.network.vpc_id
-  public               = var.cks_public
-  pod_cidr_name        = var.pod_cidr_name
-  service_cidr_name    = var.service_cidr_name
-  internal_lb_cidr_names = var.internal_lb_cidr_names
+  cluster_name           = var.cluster_name
+  kubernetes_version     = var.kubernetes_version
+  zone                   = module.network.vpc_zone
+  vpc_id                 = module.network.vpc_id
+  public                 = var.cks_public
+  pod_cidr_name          = local.cks_pod_cidr_name
+  service_cidr_name      = local.cks_service_cidr_name
+  internal_lb_cidr_names = local.cks_internal_lb_cidr_names
 
-  oidc_issuer_url = var.oidc_issuer_url
-  oidc_client_id  = var.oidc_client_id
-  oidc_ca         = var.oidc_ca
-
-  authn_webhook_server = var.authn_webhook_server
-  authn_webhook_ca     = var.authn_webhook_ca
-  authz_webhook_server = var.authz_webhook_server
-  authz_webhook_ca     = var.authz_webhook_ca
-
-  node_port_start = var.node_port_start
-  node_port_end   = var.node_port_end
+  oidc            = var.oidc
+  authn_webhook   = var.authn_webhook
+  authz_webhook   = var.authz_webhook
+  node_port_range = var.node_port_range
   audit_policy    = var.audit_policy
 }
 

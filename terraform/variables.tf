@@ -10,13 +10,13 @@ variable "vpc_name" {
   description = "VPC name"
 }
 
-# VPC prefixes – names must match pod_cidr_name, service_cidr_name, internal_lb_cidr_names
+# VPC prefixes – order defines CKS usage: [0]=pod, [1]=service, [2..]=internal LB(s). At least 3 entries required.
 variable "vpc_prefixes" {
   type = list(object({
     name  = string
     value = string
   }))
-  description = "Named VPC CIDR prefixes for CKS (pod, service, internal lb)"
+  description = "Named VPC CIDR prefixes for CKS. Order: first=pod, second=service, rest=internal LB(s). Names are reused for CKS (no separate vars)."
 }
 
 variable "host_prefixes" {
@@ -46,70 +46,40 @@ variable "cks_public" {
   default     = true
 }
 
-variable "pod_cidr_name" {
-  type        = string
-  description = "Name of VPC prefix for pod CIDR (must match vpc_prefixes[].name)"
-}
-
-variable "service_cidr_name" {
-  type        = string
-  description = "Name of VPC prefix for service CIDR (must match vpc_prefixes[].name)"
-}
-
-variable "internal_lb_cidr_names" {
-  type        = set(string)
-  description = "Names of VPC prefixes for internal LB CIDRs (must match vpc_prefixes[].name)"
-}
-
-variable "oidc_issuer_url" {
-  type        = string
-  description = "OIDC issuer URL for the cluster"
+variable "oidc" {
+  type = object({
+    issuer_url = string
+    client_id  = string
+    ca         = optional(string)
+  })
+  description = "OIDC config for the CKS cluster (external IdP). Omit or set to null to leave unset."
   default     = null
 }
 
-variable "oidc_client_id" {
-  type        = string
-  description = "OIDC client ID"
+variable "authn_webhook" {
+  type = object({
+    server = string
+    ca     = optional(string)
+  })
+  description = "Authentication webhook config for the CKS cluster. Omit or set to null to leave unset."
   default     = null
 }
 
-variable "oidc_ca" {
-  type        = string
-  description = "Base64-encoded PEM CA for OIDC issuer"
+variable "authz_webhook" {
+  type = object({
+    server = string
+    ca     = optional(string)
+  })
+  description = "Authorization webhook config for the CKS cluster. Omit or set to null to leave unset."
   default     = null
 }
 
-variable "authn_webhook_server" {
-  type        = string
-  description = "Authentication webhook server URL"
-  default     = null
-}
-
-variable "authn_webhook_ca" {
-  type        = string
-  default     = null
-}
-
-variable "authz_webhook_server" {
-  type        = string
-  description = "Authorization webhook server URL"
-  default     = null
-}
-
-variable "authz_webhook_ca" {
-  type        = string
-  default     = null
-}
-
-variable "node_port_start" {
-  type        = number
-  description = "NodePort range start"
-  default     = null
-}
-
-variable "node_port_end" {
-  type        = number
-  description = "NodePort range end"
+variable "node_port_range" {
+  type = object({
+    start = number
+    end   = number
+  })
+  description = "NodePort range (start/end) for the CKS cluster. Omit or set to null to use cluster default."
   default     = null
 }
 

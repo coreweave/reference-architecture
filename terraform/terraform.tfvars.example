@@ -14,9 +14,8 @@
 zone     = "US-EAST-02A"   # Replace with your CoreWeave zone (e.g. US-EAST-02A, US-EAST-04A)
 vpc_name = "my-vpc"       # Replace with your VPC name
 
-# VPC prefixes – names must match pod_cidr_name, service_cidr_name, and internal_lb_cidr_names below.
+# VPC prefixes – order matters: [0]=pod, [1]=service, [2..]=internal LB(s). At least 3 entries. Same names are used for CKS (no duplicate vars).
 # CIDR sizes and examples: https://docs.coreweave.com/docs/products/networking/vpc/vpc-cidr
-# Use non-overlapping ranges if you have multiple clusters or connect to existing networks.
 vpc_prefixes = [
   { name = "pod cidr", value = "10.0.0.0/13" },
   { name = "service cidr", value = "10.16.0.0/22" },
@@ -30,16 +29,13 @@ host_prefixes = [
 # --- CKS cluster ---
 cluster_name       = "my-cks-cluster"   # Replace with your cluster name (max 30 chars)
 kubernetes_version = "v1.35"
-cks_public         = true
-pod_cidr_name      = "pod cidr"
-service_cidr_name  = "service cidr"
-internal_lb_cidr_names = ["internal lb cidr"]
+cks_public         = true  # set to false for a private CKS cluster (not accessible from internet)
 
 # Optional: OIDC and webhooks – uncomment and set if your cluster requires them
-# oidc_issuer_url     = "https://your-oidc-issuer/"
-# oidc_client_id      = "your-client-id"
-# authn_webhook_server = "https://..."
-# authz_webhook_server = "https://..."
+# oidc = { issuer_url = "https://your-oidc-issuer/", client_id = "your-client-id", ca = null }
+# authn_webhook = { server = "https://authn-webhook.example/", ca = null }
+# authz_webhook = { server = "https://authz-webhook.example/", ca = null }
+# node_port_range = { start = 30000, end = 32767 }
 
 # --- CoreWeave AI Object Storage bucket (optional) ---
 # Uncomment and set to create a bucket. Your user must be added to an S3 policy that allows ListBuckets, CreateBucket in CoreWeave Console.
@@ -101,6 +97,6 @@ dfs_pvc_size      = "100Gi"
 
 # Option B: Multiple PVCs – set dfs_pvcs and leave single-PVC vars as-is
 # dfs_pvcs = {
-#   "dfs-shared" = { namespace = "default", size = "100Gi" }
+#   "dfs-shared" = { namespace = "default", size = "100Gi" },
 #   "dfs-ml"     = { namespace = "ml",     size = "500Gi" }
 # }

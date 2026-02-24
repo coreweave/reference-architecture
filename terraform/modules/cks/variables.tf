@@ -1,6 +1,7 @@
 variable "cluster_name" {
   type        = string
   description = "CKS cluster name (max 30 characters)"
+  default     = "my-cks-cluster"
 }
 
 variable "kubernetes_version" {
@@ -21,7 +22,7 @@ variable "vpc_id" {
 variable "public" {
   type        = bool
   description = "Whether the cluster API is publicly accessible"
-  default     = false
+  default     = true
 }
 
 variable "pod_cidr_name" {
@@ -39,57 +40,40 @@ variable "internal_lb_cidr_names" {
   description = "Names of VPC prefixes for internal load balancer CIDRs (must exist in cluster VPC)"
 }
 
-variable "oidc_issuer_url" {
-  type        = string
-  description = "OIDC issuer URL for the cluster"
+variable "oidc" {
+  type = object({
+    issuer_url = string
+    client_id  = string
+    ca         = optional(string)
+  })
+  description = "OIDC config for the cluster (external IdP). Omit or set to null to leave unset."
   default     = null
 }
 
-variable "oidc_client_id" {
-  type        = string
-  description = "OIDC client ID"
+variable "authn_webhook" {
+  type = object({
+    server = string
+    ca     = optional(string)
+  })
+  description = "Authentication webhook config. Omit or set to null to leave unset."
   default     = null
 }
 
-variable "oidc_ca" {
-  type        = string
-  description = "Base64-encoded PEM CA certificate for OIDC issuer"
+variable "authz_webhook" {
+  type = object({
+    server = string
+    ca     = optional(string)
+  })
+  description = "Authorization webhook config. Omit or set to null to leave unset."
   default     = null
 }
 
-variable "authn_webhook_server" {
-  type        = string
-  description = "Authentication webhook server URL"
-  default     = null
-}
-
-variable "authn_webhook_ca" {
-  type        = string
-  description = "Base64-encoded PEM CA for authn webhook"
-  default     = null
-}
-
-variable "authz_webhook_server" {
-  type        = string
-  description = "Authorization webhook server URL"
-  default     = null
-}
-
-variable "authz_webhook_ca" {
-  type        = string
-  description = "Base64-encoded PEM CA for authz webhook"
-  default     = null
-}
-
-variable "node_port_start" {
-  type        = number
-  description = "Start of NodePort range"
-  default     = null
-}
-
-variable "node_port_end" {
-  type        = number
-  description = "End of NodePort range"
+variable "node_port_range" {
+  type = object({
+    start = number
+    end   = number
+  })
+  description = "NodePort range (start/end). Omit or set to null to use cluster default."
   default     = null
 }
 

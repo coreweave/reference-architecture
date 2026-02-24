@@ -3,6 +3,11 @@ output "vpc_id" {
   description = "Created VPC ID"
 }
 
+output "vpc_zone" {
+  value       = module.network.vpc_zone
+  description = "VPC zone (cluster uses this); useful for other resources in the same zone"
+}
+
 output "cks_cluster_id" {
   value       = module.cks.cluster_id
   description = "CKS cluster ID"

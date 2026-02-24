@@ -7,6 +7,6 @@ resource "coreweave_networking_vpc" "main" {
   # Optional: host_prefixes for compute; leave empty to use zone default
   host_prefixes = var.host_prefixes
 
-  # CKS cluster requires these named prefixes – names must match CKS module vars
+  # Named prefixes for CKS; root derives pod/service/internal_lb names from order
   vpc_prefixes = var.vpc_prefixes
 }
