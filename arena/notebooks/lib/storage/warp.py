@@ -6,6 +6,12 @@ from lib.k8s import K8s
 from lib.storage.object_storage import ObjectStorage
 
 
+class WarpRunnerError(Exception):
+    """Base exception for WarpRunner errors."""
+
+    pass
+
+
 class WarpRunner:
     """Runner for Warp S3 CoreWeave benchmarks on Kubernetes.
 
@@ -30,7 +36,11 @@ class WarpRunner:
         self.job_suffix: Optional[str] = None
 
     def run_benchmark(
-        self, benchmark_type: str = "get", duration: str = "10m", compute_class: Optional[str] = None
+        self,
+        benchmark_type: str = "get",
+        duration: str = "10m",
+        warp_objects: int = 1000,
+        compute_class: Optional[str] = None,
     ) -> dict[str, list[str]]:
         """Run the warp benchmark on GPUs if possible, and CPUs if there aren't GPUs and return results of yaml application.
 
@@ -68,6 +78,7 @@ class WarpRunner:
             compute_class=compute_class,
             benchmark_type=benchmark_type,
             duration=duration,
+            objects=warp_objects,
         )
 
         results = self.k8s.apply_yaml(warp_yaml, self.namespace)
@@ -118,21 +129,25 @@ class WarpRunner:
         pass
 
     def _generate_warp_yaml(
-        self, host_count: int, compute_class: str = "gpu", benchmark_type: str = "get", duration: str = "10m"
+        self,
+        host_count: int,
+        objects: int = 1000,
+        compute_class: str = "gpu",
+        benchmark_type: str = "get",
+        duration: str = "10m",
     ) -> str:
         """Convert the warp yaml template into complete applicable yaml."""
         self.job_suffix = str(uuid.uuid4())[:8]
 
         endpoint = self.object_storage.endpoint_url.lstrip("https://").strip("http://")
 
+        objects_str = str(objects)
         # warp seems to be oddly picky about this key
         match benchmark_type:
             case "put":
-                objects = ""
-            case "delete":
-                objects = "objects: 120000"
+                objects_str = ""
             case _:
-                objects = "objects: 1000"
+                objects_str = f"objects: {objects}"
         return f"""
 ---
 apiVersion: v1
@@ -179,7 +194,7 @@ data:
         obj:
           rand-size: false
           size: 50MiB
-        {objects}
+        {objects_str}
       quiet: false
       remote:
         access-key: {self.object_storage.access_key_id}
@@ -355,5 +370,5 @@ spec:
         - name: config
           configMap:
             name: warp-config
-  backoffLimit: 4
+  backoffLimit: 0 # never retry on error, let the user resubmit since we can't have multiple warp jobs at once
 """

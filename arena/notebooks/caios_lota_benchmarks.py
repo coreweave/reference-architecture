@@ -501,6 +501,7 @@ def _(bucket_name: str, storage: ObjectStorage):
             ### Configure Warp Benchmark
             - {operation}
             - {duration}
+            - {objects}
             """)
         .batch(
             operation=mo.ui.dropdown(  # type: ignore
@@ -508,7 +509,8 @@ def _(bucket_name: str, storage: ObjectStorage):
                 value="get",
                 label="Operation:",
             ),
-            duration=mo.ui.slider(1, 30, value=10, show_value=True, label="Duration (min):"),  # type: ignore
+            duration=mo.ui.number(1, 60, step=1, value=10, label="Duration (min):"),  # type: ignore
+            objects=mo.ui.number(1000, 1_000_000, step=1, value=1000, label="Objects:"),  # type: ignore
         )
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
     )
@@ -529,11 +531,12 @@ def _(bucket_name: str, storage: ObjectStorage):
 
 
 @app.cell(hide_code=True)
-def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
+def _(warp_objects: int, warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
     if warp_form.value:
         warp_config = warp_form.value
         warp_duration = f"{warp_config.get('duration', 10)}m"
         warp_operation = warp_config.get("operation", "get")
+        warp_objects = warp_config.get("objects", "1000")
         with mo.status.spinner(
             title="Running Warp Benchmark",
             subtitle=f"Benchmarking bucket: {bucket_name}",
@@ -541,6 +544,7 @@ def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bu
             warp_submit_results = warp_runner.run_benchmark(
                 warp_operation,
                 warp_duration,
+                warp_objects,
             )
 
         result_section = mo.md(f"""
@@ -549,6 +553,7 @@ def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bu
 Warp benchmark job submitted successfully.
 
 **Operation:** {warp_operation}
+**Objects:** {warp_objects}
 **Duration:** {warp_duration}
 
 Submit Results:
@@ -571,18 +576,15 @@ def _(
     warp_form: mo.ui.form,
 ):
     if warp_form.value:
-        _timeout_seconds = int(warp_duration.rstrip("m")) * 60 * (1.2)  # 20% buffer on timeout
-        _expected_duration_s_int = int(warp_duration.rstrip("m")) * 60  # convert min string to second int
         _start_time = time.time()
         _log_text = ""
+        _recent_logs = ""
+        _status = ""
 
         with mo.status.spinner(title="Running Warp Benchmark") as _spinner:
-            while time.time() - _start_time < _timeout_seconds:
+            while _status not in ["succeeded", "failed", "completed"]:
                 warp_results = warp_runner.get_results()
                 _status = warp_results.get("status", "unknown")
-                _elapsed = int(time.time() - _start_time)
-
-                _progress_pct = min((_elapsed / _expected_duration_s_int) * 100, 100)
 
                 _current_logs = warp_results.get("logs", [])
                 if len(_current_logs) > len(_log_text):
@@ -590,25 +592,19 @@ def _(
                     _log_lines = _log_text.split("\n") if _log_text else []
                     _recent_logs = "\n".join(_log_lines[-30:])
 
-                    _progress_bar = "█" * int(_progress_pct / 5) + "░" * (20 - int(_progress_pct / 5))
-
-                    mo.output.replace(
-                        mo.vstack(
-                            [
-                                mo.md(f"""
+                mo.output.replace(
+                    mo.vstack(
+                        [
+                            mo.md(f"""
 ### Warp Benchmark Progress
 
 **Status:** {_status}
 **Operation:** {warp_operation}
-**Progress:** {_progress_pct:.1f}% `{_progress_bar}`
                             """),
-                                mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
-                            ]
-                        )
+                            mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
+                        ]
                     )
-
-                if _status in ["succeeded", "failed", "completed"]:
-                    break
+                )
                 time.sleep(5)
 
         _total_time = int(time.time() - _start_time)
