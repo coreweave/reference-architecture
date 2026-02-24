@@ -558,6 +558,7 @@ def _(warp_objects: int, warp_runner: WarpRunner, warp_form: mo.ui.form, storage
 Warp benchmark job submitted successfully.
 
 **Operation:** {warp_operation}
+**Endpoint:** {storage.endpoint_url}
 **Objects:** {warp_objects}
 **Duration:** {warp_duration}
 
@@ -574,6 +575,7 @@ Results will be viewable below shortly or in the pod logs in-cluster.
 
 @app.cell(hide_code=True)
 def _(
+    storage: ObjectStorage,
     warp_runner: WarpRunner,
     warp_operation: str,
     warp_duration: str,
@@ -605,6 +607,7 @@ def _(
 
 **Status:** {_status}
 **Operation:** {warp_operation}
+**Endpoint:** {storage.endpoint_url}
                             """),
                             mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
                         ]
@@ -619,6 +622,7 @@ def _(
 
 **Total Time:** {_total_time}s
 **Operation:** {warp_operation}
+**Endpoint:** {storage.endpoint_url}
 **Status:** {_status}
 ```\n{_log_text}\n```
 """)
