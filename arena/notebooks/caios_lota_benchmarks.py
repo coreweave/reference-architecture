@@ -83,7 +83,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    use_lota_checkbox = mo.ui.checkbox(value=False, label="Use LOTA (GPU clusters only)")
+    use_lota_checkbox = mo.ui.checkbox(value=True, label="Use LOTA (GPU clusters only)")
 
     mo.md(f"""
     ### Storage Endpoint Configuration
@@ -503,10 +503,12 @@ def _(bucket_name: str, storage: ObjectStorage):
             - {duration}
             """)
         .batch(
-            operation=mo.ui.dropdown(
-                options=["get", "put", "delete", "list", "stat", "mixed"], value="get", label="Operation:"
+            operation=mo.ui.dropdown(  # type: ignore
+                options=["get", "put", "delete", "list", "stat", "mixed"],
+                value="get",
+                label="Operation:",
             ),
-            duration=mo.ui.slider(1, 30, value=10, show_value=True, label="Duration (min):"),
+            duration=mo.ui.slider(1, 30, value=10, show_value=True, label="Duration (min):"),  # type: ignore
         )
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
     )
@@ -530,7 +532,7 @@ def _(bucket_name: str, storage: ObjectStorage):
 def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
     if warp_form.value:
         warp_config = warp_form.value
-        warp_duration = warp_config.get("duration", "10m")
+        warp_duration = f"{warp_config.get('duration', 10)}m"
         warp_operation = warp_config.get("operation", "get")
         with mo.status.spinner(
             title="Running Warp Benchmark",
@@ -561,12 +563,18 @@ Results will be viewable below shortly or in the pod logs in-cluster.
 
 
 @app.cell(hide_code=True)
-def _(warp_runner: WarpRunner, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.form):
+def _(
+    warp_runner: WarpRunner,
+    warp_operation: str,
+    warp_duration: str,
+    warp_submit_results: dict[str, list[str]],
+    warp_form: mo.ui.form,
+):
     if warp_form.value:
-        _timeout_seconds = 900
-        _expected_duration = 600  # 10m, set in warp job config
+        _timeout_seconds = int(warp_duration.rstrip("m")) * 60 * (1.2)  # 20% buffer on timeout
+        _expected_duration_s_int = int(warp_duration.rstrip("m")) * 60  # convert min string to second int
         _start_time = time.time()
-        _log_lines = []
+        _log_text = ""
 
         with mo.status.spinner(title="Running Warp Benchmark") as _spinner:
             while time.time() - _start_time < _timeout_seconds:
@@ -574,27 +582,14 @@ def _(warp_runner: WarpRunner, warp_submit_results: dict[str : list[str]], warp_
                 _status = warp_results.get("status", "unknown")
                 _elapsed = int(time.time() - _start_time)
 
-                # Calculate progress and ETA
-                _progress_pct = min((_elapsed / _expected_duration) * 100, 100)
-                _eta_seconds = max(_expected_duration - _elapsed, 0)
-                _eta_minutes = _eta_seconds // 60
-                _eta_secs = _eta_seconds % 60
-
-                # Format elapsed time
-                _elapsed_mins = _elapsed // 60
-                _elapsed_secs = _elapsed % 60
-
-                # Update spinner with progress
-                _spinner.update(
-                    subtitle=f"{_status} | {_elapsed_mins}m {_elapsed_secs}s elapsed | ~{_eta_minutes}m {_eta_secs}s remaining"
-                )
+                _progress_pct = min((_elapsed / _expected_duration_s_int) * 100, 100)
 
                 _current_logs = warp_results.get("logs", [])
-                if len(_current_logs) > len(_log_lines):
-                    _log_lines = _current_logs
+                if len(_current_logs) > len(_log_text):
+                    _log_text = _current_logs
+                    _log_lines = _log_text.split("\n") if _log_text else []
                     _recent_logs = "\n".join(_log_lines[-30:])
 
-                    # Create progress bar
                     _progress_bar = "█" * int(_progress_pct / 5) + "░" * (20 - int(_progress_pct / 5))
 
                     mo.output.replace(
@@ -604,9 +599,8 @@ def _(warp_runner: WarpRunner, warp_submit_results: dict[str : list[str]], warp_
 ### Warp Benchmark Progress
 
 **Status:** {_status}
+**Operation:** {warp_operation}
 **Progress:** {_progress_pct:.1f}% `{_progress_bar}`
-**Elapsed:** {_elapsed_mins}m {_elapsed_secs}s / {_expected_duration // 60}m expected
-**ETA:** ~{_eta_minutes}m {_eta_secs}s remaining
                             """),
                                 mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
                             ]
@@ -617,17 +611,15 @@ def _(warp_runner: WarpRunner, warp_submit_results: dict[str : list[str]], warp_
                     break
                 time.sleep(5)
 
-        # Final output
         _total_time = int(time.time() - _start_time)
-        _total_mins = _total_time // 60
-        _total_secs = _total_time % 60
-        _full_logs = "\n".join(_log_lines)
 
         _final_output = mo.md(f"""
 ### Benchmark Complete
 
+**Total Time:** {_total_time}s
+**Operation:** {warp_operation}
 **Status:** {_status}
-```\n{_log_lines}\n```
+```\n{_log_text}\n```
 """)
         mo.output.replace(_final_output)
     return (warp_results,)

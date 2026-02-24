@@ -10,7 +10,7 @@ from botocore.config import Config
 from lib.k8s import K8s
 
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
-LOTA_ENDPOINT_URL = "https://cwlota.com"
+LOTA_ENDPOINT_URL = "http://cwlota.com"
 CAIOS_ENDPOINT_URL = "https://cwobject.com"
 DEFAULT_ACCESS_TOKEN_DURATION = 43200  # 12h
 DEFAULT_ADDRESSING_STYLE = "virtual"

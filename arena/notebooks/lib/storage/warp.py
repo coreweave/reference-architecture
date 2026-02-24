@@ -113,7 +113,7 @@ class WarpRunner:
         except Exception as e:
             return {"status": "error", "error": f"Failed to fetch logs: {str(e)}", "pod_name": pod_name}
 
-    def _parse_logs(self, logs: str) -> dict:
+    def _parse_logs(self, logs: str):
         """Parse warp benchmark output logs to get only the results."""
         pass
 
@@ -122,7 +122,17 @@ class WarpRunner:
     ) -> str:
         """Convert the warp yaml template into complete applicable yaml."""
         self.job_suffix = str(uuid.uuid4())[:8]
+
         endpoint = self.object_storage.endpoint_url.lstrip("https://").strip("http://")
+
+        # warp seems to be oddly picky about this key
+        match benchmark_type:
+            case "put":
+                objects = ""
+            case "delete":
+                objects = "objects: 120000"
+            case _:
+                objects = "objects: 1000"
         return f"""
 ---
 apiVersion: v1
@@ -169,7 +179,7 @@ data:
         obj:
           rand-size: false
           size: 50MiB
-        objects: 1000
+        {objects}
       quiet: false
       remote:
         access-key: {self.object_storage.access_key_id}
