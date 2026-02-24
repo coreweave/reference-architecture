@@ -500,9 +500,13 @@ def _(bucket_name: str, storage: ObjectStorage):
         mo.md("""
             ### Configure Warp Benchmark
             - {operation}
+            - {duration}
             """)
         .batch(
-            operation=mo.ui.dropdown(options=["get", "put", "delete", "list", "stat"], value="get", label="Operation:"),
+            operation=mo.ui.dropdown(
+                options=["get", "put", "delete", "list", "stat", "mixed"], value="get", label="Operation:"
+            ),
+            duration=mo.ui.slider(1, 30, value=10, show_value=True, label="Duration (min):"),
         )
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
     )
@@ -526,6 +530,7 @@ def _(bucket_name: str, storage: ObjectStorage):
 def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
     if warp_form.value:
         warp_config = warp_form.value
+        warp_duration = warp_config.get("duration", "10m")
         warp_operation = warp_config.get("operation", "get")
         with mo.status.spinner(
             title="Running Warp Benchmark",
@@ -533,6 +538,7 @@ def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bu
         ):
             warp_submit_results = warp_runner.run_benchmark(
                 warp_operation,
+                warp_duration,
             )
 
         result_section = mo.md(f"""
@@ -541,6 +547,7 @@ def _(warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bu
 Warp benchmark job submitted successfully.
 
 **Operation:** {warp_operation}
+**Duration:** {warp_duration}
 
 Submit Results:
 ```json
@@ -556,27 +563,52 @@ Results will be viewable below shortly or in the pod logs in-cluster.
 @app.cell(hide_code=True)
 def _(warp_runner: WarpRunner, warp_submit_results: dict[str : list[str]], warp_form: mo.ui.form):
     if warp_form.value:
-        _timeout_seconds = 600
+        _timeout_seconds = 900
+        _expected_duration = 600  # 10m, set in warp job config
         _start_time = time.time()
         _log_lines = []
 
-        with mo.status.spinner(title="Waiting for Warp benchmark to complete") as _spinner:
+        with mo.status.spinner(title="Running Warp Benchmark") as _spinner:
             while time.time() - _start_time < _timeout_seconds:
                 warp_results = warp_runner.get_results()
                 _status = warp_results.get("status", "unknown")
                 _elapsed = int(time.time() - _start_time)
 
-                _spinner.update(subtitle=f"{_status} - {_elapsed}s")
+                # Calculate progress and ETA
+                _progress_pct = min((_elapsed / _expected_duration) * 100, 100)
+                _eta_seconds = max(_expected_duration - _elapsed, 0)
+                _eta_minutes = _eta_seconds // 60
+                _eta_secs = _eta_seconds % 60
+
+                # Format elapsed time
+                _elapsed_mins = _elapsed // 60
+                _elapsed_secs = _elapsed % 60
+
+                # Update spinner with progress
+                _spinner.update(
+                    subtitle=f"{_status} | {_elapsed_mins}m {_elapsed_secs}s elapsed | ~{_eta_minutes}m {_eta_secs}s remaining"
+                )
 
                 _current_logs = warp_results.get("logs", [])
                 if len(_current_logs) > len(_log_lines):
                     _log_lines = _current_logs
                     _recent_logs = "\n".join(_log_lines[-30:])
+
+                    # Create progress bar
+                    _progress_bar = "█" * int(_progress_pct / 5) + "░" * (20 - int(_progress_pct / 5))
+
                     mo.output.replace(
                         mo.vstack(
                             [
-                                mo.md(f"**Status:** {_status} | **Elapsed:** {_elapsed}s"),
-                                mo.md(f"```\n{_recent_logs}\n```"),
+                                mo.md(f"""
+### Warp Benchmark Progress
+
+**Status:** {_status}
+**Progress:** {_progress_pct:.1f}% `{_progress_bar}`
+**Elapsed:** {_elapsed_mins}m {_elapsed_secs}s / {_expected_duration // 60}m expected
+**ETA:** ~{_eta_minutes}m {_eta_secs}s remaining
+                            """),
+                                mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
                             ]
                         )
                     )
@@ -584,6 +616,12 @@ def _(warp_runner: WarpRunner, warp_submit_results: dict[str : list[str]], warp_
                 if _status in ["succeeded", "failed", "completed"]:
                     break
                 time.sleep(5)
+
+        # Final output
+        _total_time = int(time.time() - _start_time)
+        _total_mins = _total_time // 60
+        _total_secs = _total_time % 60
+        _full_logs = "\n".join(_log_lines)
 
         _final_output = mo.md(f"""
 ### Benchmark Complete

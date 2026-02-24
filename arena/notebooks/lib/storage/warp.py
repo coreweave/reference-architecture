@@ -29,7 +29,9 @@ class WarpRunner:
         self.job_name: Optional[str] = None
         self.job_suffix: Optional[str] = None
 
-    def run_benchmark(self, benchmark_type: str = "get", compute_class: Optional[str] = None) -> dict[str, list[str]]:
+    def run_benchmark(
+        self, benchmark_type: str = "get", duration: str = "10m", compute_class: Optional[str] = None
+    ) -> dict[str, list[str]]:
         """Run the warp benchmark on GPUs if possible, and CPUs if there aren't GPUs and return results of yaml application.
 
         Returns:
@@ -65,6 +67,7 @@ class WarpRunner:
             host_count=node_count,
             compute_class=compute_class,
             benchmark_type=benchmark_type,
+            duration=duration,
         )
 
         results = self.k8s.apply_yaml(warp_yaml, self.namespace)
@@ -115,10 +118,7 @@ class WarpRunner:
         pass
 
     def _generate_warp_yaml(
-        self,
-        host_count: int,
-        compute_class: str = "gpu",
-        benchmark_type: str = "get",
+        self, host_count: int, compute_class: str = "gpu", benchmark_type: str = "get", duration: str = "10m"
     ) -> str:
         """Convert the warp yaml template into complete applicable yaml."""
         self.job_suffix = str(uuid.uuid4())[:8]
@@ -163,7 +163,7 @@ data:
           enabled: false
           pct: 7.5
         concurrent: 300
-        duration: 5m
+        duration: {duration}
         keep-data: false
         no-clear: false
         obj:
