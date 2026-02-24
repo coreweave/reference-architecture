@@ -40,6 +40,7 @@ class WarpRunner:
         benchmark_type: str = "get",
         duration: str = "10m",
         warp_objects: int = 1000,
+        concurrency: int = 300,
         compute_class: Optional[str] = None,
     ) -> dict[str, list[str]]:
         """Run the warp benchmark on GPUs if possible, and CPUs if there aren't GPUs and return results of yaml application.
@@ -79,6 +80,7 @@ class WarpRunner:
             benchmark_type=benchmark_type,
             duration=duration,
             objects=warp_objects,
+            concurrency=concurrency,
         )
 
         results = self.k8s.apply_yaml(warp_yaml, self.namespace)
@@ -135,6 +137,7 @@ class WarpRunner:
         compute_class: str = "gpu",
         benchmark_type: str = "get",
         duration: str = "10m",
+        concurrency: int = 300,
     ) -> str:
         """Convert the warp yaml template into complete applicable yaml."""
         self.job_suffix = str(uuid.uuid4())[:8]
@@ -148,6 +151,8 @@ class WarpRunner:
                 objects_str = ""
             case _:
                 objects_str = f"objects: {objects}"
+
+        concurrency_str = str(concurrency)
         return f"""
 ---
 apiVersion: v1
@@ -187,7 +192,7 @@ data:
           dur: 10s
           enabled: false
           pct: 7.5
-        concurrent: 300
+        concurrent: {concurrency_str}
         duration: {duration}
         keep-data: false
         no-clear: false
