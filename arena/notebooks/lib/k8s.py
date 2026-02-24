@@ -25,7 +25,7 @@ class K8s:
         _batch_v1 (client.BatchV1Api | None): Cached BatchV1Api client.
     """
 
-    def __init__(self, in_cluster: bool = True, kubeconfig_path: str = "~/.kube/config"):
+    def __init__(self, kubeconfig_path: str = "~/.kube/config"):
         """Initialize Kubernetes client.
 
         Args:
@@ -42,12 +42,14 @@ class K8s:
         self._batch_v1: client.BatchV1Api | None = None
 
         try:
-            if in_cluster:
-                config.load_incluster_config()
-            else:
+            config.load_incluster_config()
+            print("Loaded in-cluster Kubernetes config")
+        except Exception:
+            try:
                 config.load_kube_config(config_file=kubeconfig_path)
-        except Exception as e:
-            raise KubernetesError(f"Failed to load Kubernetes config: {e}")
+                print(f"Loaded kubeconfig from file {kubeconfig_path}")
+            except Exception as e:
+                raise KubernetesError(f"Failed to load Kubernetes config: {e}")
 
     @property
     def core_v1(self) -> client.CoreV1Api:

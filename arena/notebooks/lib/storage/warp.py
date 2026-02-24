@@ -2,8 +2,8 @@ import os
 import uuid
 from typing import Optional
 
-from lib.k8s import K8s
-from lib.storage.object_storage import ObjectStorage
+from arena.notebooks.lib.k8s import K8s
+from arena.notebooks.lib.storage.object_storage import ObjectStorage
 
 
 class WarpRunnerError(Exception):
@@ -38,12 +38,20 @@ class WarpRunner:
     def run_benchmark(
         self,
         benchmark_type: str = "get",
-        duration: str = "10m",
+        duration: int = 10,
         warp_objects: int = 1000,
         concurrency: int = 300,
         compute_class: Optional[str] = None,
     ) -> dict[str, list[str]]:
         """Run the warp benchmark on GPUs if possible, and CPUs if there aren't GPUs and return results of yaml application.
+
+        Args:
+            benchmark_type: The s3 operation to benchmark: ["list", "get", "put", "delete", "stat", "mixed"]
+            duration: How long to run the benchmark in minutes
+            warp_objects: How many objects to spawn for the benchmark
+            concurrency: The number of workers to use
+            compute_class: What type of node to run on ["gpu", "cpu"].
+                If None, will attempt to run on gpu nodes and fall back to cpu if no gpu nodes are available.
 
         Returns:
             dict: Results of applying the warp benchmark yaml to the cluster
@@ -136,7 +144,7 @@ class WarpRunner:
         objects: int = 1000,
         compute_class: str = "gpu",
         benchmark_type: str = "get",
-        duration: str = "10m",
+        duration: int = 10,
         concurrency: int = 300,
     ) -> str:
         """Convert the warp yaml template into complete applicable yaml."""
@@ -193,7 +201,7 @@ data:
           enabled: false
           pct: 7.5
         concurrent: {concurrency_str}
-        duration: {duration}
+        duration: {duration}m
         keep-data: false
         no-clear: false
         obj:

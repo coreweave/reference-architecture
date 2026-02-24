@@ -13,9 +13,8 @@ Usage:
 """
 
 # SSH functions
-from lib.remote_execution_helpers import run_remote, run_remote_interactive, ssh
-
 from . import remote_execution_helpers
+from .remote_execution_helpers import run_remote, run_remote_interactive, ssh
 
 __all__ = [
     # Modules

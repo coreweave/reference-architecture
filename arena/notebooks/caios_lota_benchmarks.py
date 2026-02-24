@@ -103,11 +103,12 @@ def _():
 
 @app.cell(hide_code=True)
 def _(use_lota_checkbox):
+    k8s = K8s()
     use_lota = use_lota_checkbox.value
     caios: ObjectStorage
     cw_token_required: bool = False
     try:
-        caios = ObjectStorage.auto(use_lota=use_lota)
+        caios = ObjectStorage.auto(k8s, use_lota=use_lota)
     except MissingCredentialsError:
         cw_token_required = True
     if cw_token_required:
@@ -489,8 +490,7 @@ def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callabl
 
 
 @app.cell(hide_code=True)
-def _(bucket_name: str, storage: ObjectStorage):
-    k8s = K8s()
+def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
     warp_runner = WarpRunner(
         k8s,
         bucket_name,
@@ -536,7 +536,7 @@ def _(bucket_name: str, storage: ObjectStorage):
 def _(warp_objects: int, warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
     if warp_form.value:
         warp_config = warp_form.value
-        warp_duration = f"{warp_config.get('duration', 10)}m"
+        warp_duration = warp_config.get("duration", 10)
         warp_operation = warp_config.get("operation", "get")
         warp_objects = warp_config.get("objects", "1000")
         warp_concurrency = warp_config.get("concurrency", 300)
@@ -560,7 +560,7 @@ Warp benchmark job submitted successfully.
 **Operation:** {warp_operation}
 **Endpoint:** {storage.endpoint_url}
 **Objects:** {warp_objects}
-**Duration:** {warp_duration}
+**Duration:** {warp_duration}m
 
 Submit Results:
 ```json

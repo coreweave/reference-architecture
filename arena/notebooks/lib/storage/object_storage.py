@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Any, Literal, Optional
 import boto3
 import requests
 from botocore.config import Config
-from lib.k8s import K8s
+
+from arena.notebooks.lib.k8s import K8s
 
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
 LOTA_ENDPOINT_URL = "http://cwlota.com"
@@ -54,10 +55,18 @@ class ObjectStorage(ABC):
         endpoint_url (str): The fully formed url to perform s3 operations against
     """
 
-    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = "", availability_zone: str = "A"):
+    def __init__(
+        self,
+        k8s: K8s,
+        cw_token: str = "",
+        use_lota: bool = True,
+        region: str = "",
+        availability_zone: str = "A",
+    ):
         """Initialize ObjectStorage base class.
 
         Args:
+            k8s (K8s): Kubernetes client for interacting with the cluster
             cw_token (str, optional): CoreWeave API token. Defaults to CW_TOKEN env var.
             use_lota (bool, optional): Use LOTA endpoint for GPU clusters. Defaults to True.
             region (str, optional): CW region. Defaults to auto-detected region.
@@ -66,7 +75,8 @@ class ObjectStorage(ABC):
         self.use_lota = use_lota
         self._s3_client: S3Client | None = None
         self._api_session: requests.Session | None = None
-        self.region = region if region else f"{detect_region()}{availability_zone}"
+        self.k8s = k8s
+        self.region = region if region else f"{detect_region(self.k8s)}{availability_zone}"
 
         style = os.environ.get("AWS_S3_ADDRESSING_STYLE")
         self.addressing_style: Literal["path", "virtual", "auto"] = (
@@ -146,7 +156,7 @@ class ObjectStorage(ABC):
         self._s3_client = None
 
     @staticmethod
-    def auto(cw_token: str = "", use_lota: bool = True, region: str = "") -> "ObjectStorage":
+    def auto(k8s: K8s, cw_token: str = "", use_lota: bool = True, region: str = "") -> "ObjectStorage":
         """Auto detect and create the ObjectStorage client.
 
         Attempts authentication methods in order:
@@ -154,9 +164,10 @@ class ObjectStorage(ABC):
         2. Access Keys with LOTA (falls back to CAIOS on connection errors)
 
         Args:
+            k8s (K8s): Kubernetes client for interacting with the cluster
             cw_token (str, optional): CoreWeave API token.
             use_lota (bool, optional): Prefer LOTA endpoint. Defaults to True.
-            region (str, optional): AWS region.
+            region (str, optional): CoreWeave region.
 
         Returns:
             ObjectStorage: Authenticated client instance (PodIdentityObjectStorage or AccessKeyObjectStorage).
@@ -168,7 +179,7 @@ class ObjectStorage(ABC):
         # Choose our subclass with preference for PodIdentity if it works
         try:
             print(f"Attempting pod identity authentication with {'LOTA' if use_lota else 'CAIOS'}...")
-            client = PodIdentityObjectStorage(cw_token, use_lota, region)
+            client = PodIdentityObjectStorage(k8s, cw_token, use_lota, region)
             print("Testing pod identity credentials...")
             client.s3_client.list_buckets()
             print(f"Initialized CAIOS client using pod identity authentication ({'LOTA' if use_lota else 'CAIOS'}).")
@@ -179,7 +190,7 @@ class ObjectStorage(ABC):
             if use_lota and ("timeout" in e_msg or "connect" in e_msg):
                 print(f"LOTA endpoint failed ({e})\n  Does your cluster have GPUs? Trying CWObject endpoint...")
                 try:
-                    client = PodIdentityObjectStorage(cw_token, use_lota=False, region=region)
+                    client = PodIdentityObjectStorage(k8s, cw_token, use_lota=False, region=region)
                     print("Testing pod identity credentials with CWObject endpoint...")
                     client.s3_client.list_buckets()
                     print("Initialized CAIOS client using pod identity authentication and CWObject endpoint.")
@@ -191,7 +202,7 @@ class ObjectStorage(ABC):
 
         try:
             print(f"Attempting access key authentication with {'LOTA' if use_lota else 'CAIOS'}...")
-            client = AccessKeyObjectStorage(cw_token, use_lota, region)
+            client = AccessKeyObjectStorage(k8s, cw_token, use_lota, region)
             print("Testing access key credentials...")
             client.s3_client.list_buckets()
             print(f"Initialized CAIOS client using access key authentication ({'LOTA' if use_lota else 'CAIOS'}).")
@@ -201,7 +212,7 @@ class ObjectStorage(ABC):
             error_msg = str(e).lower()
             if use_lota and ("timeout" in error_msg or "connect" in error_msg):
                 print(f"LOTA endpoint failed ({e})\n  Does your cluster have GPUs? Trying CWObject endpoint...")
-                client = AccessKeyObjectStorage(cw_token, use_lota=False, region=region)
+                client = AccessKeyObjectStorage(k8s, cw_token, use_lota=False, region=region)
                 print("Initialized CAIOS client using access key authentication (CAIOS).")
                 return client
             else:
@@ -209,12 +220,15 @@ class ObjectStorage(ABC):
                 raise ObjectStorageError(f"Failed to create the ObjectStorage client: {e}")
 
     @staticmethod
-    def with_pod_identity(cw_token: str = "", use_lota: bool = True, region: str = "") -> "PodIdentityObjectStorage":
+    def with_pod_identity(
+        k8s: K8s, cw_token: str = "", use_lota: bool = True, region: str = ""
+    ) -> "PodIdentityObjectStorage":
         """Create ObjectStorage client using Pod Identity / Workload Identity.
 
         Use this when running in a CoreWeave Kubernetes cluster with pod identity configured.
 
         Args:
+            k8s (K8s): Kubernetes client for interacting with the cluster
             cw_token (str, optional): CoreWeave API token. Will attempt to read from pod secrets if not provided.
             use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
             region (str, optional): AWS region.
@@ -225,16 +239,19 @@ class ObjectStorage(ABC):
         Raises:
             MissingCredentialsError: If pod identity token is not available.
         """
-        return PodIdentityObjectStorage(cw_token, use_lota, region)
+        return PodIdentityObjectStorage(k8s, cw_token, use_lota, region)
 
     @staticmethod
-    def with_access_keys(cw_token: str = "", use_lota: bool = True, region: str = "") -> "AccessKeyObjectStorage":
+    def with_access_keys(
+        k8s: K8s, cw_token: str = "", use_lota: bool = True, region: str = ""
+    ) -> "AccessKeyObjectStorage":
         """Create ObjectStorage client using Access Key authentication.
 
         Use this when running outside CoreWeave Kubernetes or with explicit credentials.
         Uses AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY or automatically generates key via CW_TOKEN.
 
         Args:
+            k8s (K8s): Kubernetes client for interacting with the cluster
             cw_token (str, optional): CoreWeave API token for generating temporary keys.
             use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
             region (str, optional): AWS region.
@@ -245,7 +262,7 @@ class ObjectStorage(ABC):
         Raises:
             MissingCredentialsError: If credentials cannot be obtained.
         """
-        return AccessKeyObjectStorage(cw_token, use_lota, region)
+        return AccessKeyObjectStorage(k8s, cw_token, use_lota, region)
 
     @abstractmethod
     def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
@@ -454,7 +471,7 @@ class PodIdentityObjectStorage(ObjectStorage):
     for authentication with CoreWeave services.
     """
 
-    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
+    def __init__(self, k8s: K8s, cw_token: str = "", use_lota: bool = True, region: str = ""):
         """Initialize Pod Identity client.
 
         Args:
@@ -462,6 +479,7 @@ class PodIdentityObjectStorage(ObjectStorage):
                 from /var/run/secrets/cks.coreweave.com/serviceaccount/cks-pod-identity-token
             use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
             region (str, optional): AWS region.
+            k8s (K8s): The kubernetes client for interacting with the cluster
 
         Raises:
             MissingCredentialsError: If token file not found and no token provided.
@@ -474,7 +492,7 @@ class PodIdentityObjectStorage(ObjectStorage):
                 raise MissingCredentialsError(
                     "Pod identity token file not found, are you running in a CoreWeave cluster?"
                 )
-        super().__init__(cw_token, use_lota, region)
+        super().__init__(k8s, cw_token, use_lota, region)
 
     @property
     def s3_client(self) -> S3Client:
@@ -523,7 +541,7 @@ class PodIdentityObjectStorage(ObjectStorage):
             ObjectStorageError: If API request fails.
         """
         endpoint = f"{COREWEAVE_OBJECT_API_BASE_URL}/temporary-credentials/oidc"
-        org_id = K8s().org_id
+        org_id = self.k8s.org_id
         payload = {"durationSeconds": duration_seconds, "orgId": org_id, "oidcToken": self.cw_token}
 
         try:
@@ -552,10 +570,11 @@ class AccessKeyObjectStorage(ObjectStorage):
     and temporary key generation via CW API using a CW_TOKEN.
     """
 
-    def __init__(self, cw_token: str = "", use_lota: bool = True, region: str = ""):
+    def __init__(self, k8s: K8s, cw_token: str = "", use_lota: bool = True, region: str = ""):
         """Initialize Access Key client.
 
         Args:
+            k8s (K8s): Kubernetes client for interacting with the cluster
             cw_token (str, optional): CoreWeave API token for key generation. Defaults to CW_TOKEN env var.
             use_lota (bool, optional): Use LOTA endpoint. Defaults to True.
             region (str, optional): AWS region.
@@ -563,7 +582,7 @@ class AccessKeyObjectStorage(ObjectStorage):
         Raises:
             MissingCredentialsError: If no token provided and static keys not in environment.
         """
-        super().__init__(cw_token, use_lota, region)
+        super().__init__(k8s, cw_token, use_lota, region)
         if not self.cw_token:
             raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
 
@@ -691,7 +710,7 @@ class AccessKeyObjectStorage(ObjectStorage):
             return False
 
 
-def detect_region() -> str:
+def detect_region(k8s: K8s) -> str:
     """Autodetect CoreWeave region from environment or Kubernetes pod metadata.
 
     Checks in order:
@@ -699,6 +718,8 @@ def detect_region() -> str:
     2. Kubernetes pod region annotation (for CW clusters)
     3. Defaults to empty string
 
+    Args:
+        k8s (K8s): Kubernetes client for interacting with the cluster
     Returns:
         str: Detected region name, or empty string if not found.
 
@@ -709,7 +730,7 @@ def detect_region() -> str:
     if region:
         print(f"Detected region from env var: {region}")
     else:
-        pod_region = K8s().pod_region
+        pod_region = k8s.pod_region
         if pod_region:
             region = f"{pod_region}"
             print(f"Detected region from pod: {region}")
