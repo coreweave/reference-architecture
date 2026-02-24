@@ -260,7 +260,7 @@ def _():
             test_file_size_gb=mo.ui.number(start=0, stop=1000, step=10, value=10),  # type: ignore
             multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
             multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-            max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
+            max_concurrency=mo.ui.slider(1, 1000, value=300, show_value=True),  # type: ignore
         )
         .form(submit_button_label="Run Upload Test", clear_on_submit=False)
     )
@@ -390,7 +390,7 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
                 object_key=object_key_dropdown,  # type: ignore
                 multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
                 multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-                max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
+                max_concurrency=mo.ui.slider(1, 1000, value=300, show_value=True),  # type: ignore
             )
             .form(submit_button_label="Run Download Test", clear_on_submit=False)
         )
