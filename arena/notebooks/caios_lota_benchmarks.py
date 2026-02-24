@@ -567,7 +567,10 @@ Submit Results:
 {json.dumps(warp_submit_results, indent=2)}
 
 ```
-Results will be viewable below shortly or in the pod logs in-cluster.
+Results will be viewable below shortly or in the pod logs in-cluster.<br>
+Also, review the Grafana dashboards:<br>
+- [CAIOS Usage](https://cks-grafana.coreweave.com/d/bebi5t788t6v4c/caios-usage)
+- [CAIOS Lota](https://cks-grafana.coreweave.com/d/eeff523hiaewwc/caios-lota)
 ///
         """)
         mo.output.replace(result_section)
