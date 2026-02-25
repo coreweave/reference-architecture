@@ -75,7 +75,7 @@ def _():
     If you'd like to use object storage outside of this notebook you'll need to create your own Access Key and Secret Access Key in the [CoreWeave Console](https://console.coreweave.com/object-storage/access-keys)
     See [here](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios) for more details.
 
-    These credentials are used for S3 API access to CAIOS and LOTA.
+    These credentials are used for API access to CAIOS and LOTA.
     ///
     """)
     return
@@ -160,10 +160,10 @@ def _():
     ---
     ## Bucket Operations
 
-    /// admonition | S3 Buckets
+    /// admonition | CoreWeave AI Object Storage Buckets
         type: info
 
-    List and manage your S3 buckets. Buckets are the top-level containers for your objects.
+    List and manage your CoreWeave AI Object Storage buckets. Buckets are the top-level containers for your objects.
     ///
     """)
     return
@@ -221,7 +221,7 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
         """)
     else:
         _ui = mo.md(f"""
-        ### Create S3 Bucket
+        ### Create CoreWeave AI Object Storage Bucket
 
         /// admonition | No Buckets Found
             type: warning
@@ -238,7 +238,7 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
 @app.cell(hide_code=True)
 def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
     _ui = mo.md(f"""
-        ### Select S3 Bucket for upload and download tests
+        ### Select CoreWeave AI Object Storage Bucket for upload and download tests
         {bucket_dropdown}
         """)
     bucket_name = bucket_dropdown.value
@@ -251,7 +251,7 @@ def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
 def _():
     upload_form = (
         mo.md("""
-        ### Configure S3 Upload Test
+        ### Configure CoreWeave AI Object Storage Upload Test
         - Test File Size (GB): {test_file_size_gb}
         - Multipart Threshold (MB): {multipart_threshold_mb}
         - Chunk Size (MB): {multipart_chunksize_mb}
@@ -310,13 +310,13 @@ def _(bucket_name: str):
         file_key = f"benchmark/{test_file_size_gb}GB"
 
         print(f"""
-        --- S3 Upload Test (Boto3) ---
+        --- CoreWeave AI Object Storage Upload Test (Boto3) ---
         Bucket: s3://{bucket_name}
         Key: {file_key}
         Multipart Threshold: {multipart_threshold_mb} MB
         Chunk Size: {multipart_chunksize_mb} MB
         Max Concurrency: {max_concurrency}
-        --- S3 Upload Test (Boto3) ---
+        --- CoreWeave AI Object Storage Upload Test (Boto3) ---
         """)
 
         start = time.time()
@@ -331,11 +331,11 @@ def _(bucket_name: str):
             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
 
             print(f"""
-        --- S3 Upload Stats ---
+        --- CoreWeave AI Object Storage Upload Stats ---
         Size: {size_gb:.2f} GB
         Time: {elapsed:.2f} seconds
         Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-        --- S3 Upload Stats ---
+        --- CoreWeave AI Object Storage Upload Stats ---
         """)
         except Exception as e:
             print(f"Upload failed: {e}")
@@ -381,7 +381,7 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
     if object_key_dropdown is not None:
         download_form = (
             mo.md("""
-            ### Configure S3 Download Test
+            ### Configure CoreWeave AI Object Storage Download Test
             - Object: {object_key}
             - Multipart Threshold (MB): {multipart_threshold_mb}
             - Chunk Size (MB): {multipart_chunksize_mb}
@@ -441,13 +441,13 @@ def _():
         )
 
         print(f"""
-        --- S3 Download Test (Boto3) ---
+        --- CoreWeave AI Object Storage Download Test (Boto3) ---
         Bucket: s3://{bucket_name}
         Key: {object_key}
         Multipart Threshold: {multipart_threshold_mb} MB
         Chunk Size: {multipart_chunksize_mb} MB
         Max Concurrency: {max_concurrency}
-        --- S3 Download Test (Boto3) ---
+        --- CoreWeave AI Object Storage Download Test (Boto3) ---
         """)
 
         start = time.time()
@@ -462,11 +462,11 @@ def _():
             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
 
             print(f"""
-        --- S3 Download Stats ---
+        --- CoreWeave AI Object Storage Download Stats ---
         Size: {size_gb:.2f} GB
         Time: {elapsed:.2f} seconds
         Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-        --- S3 Download Stats ---
+        --- CoreWeave AI Object Storage Download Stats ---
         """)
         except Exception as e:
             print(f"Download failed: {e}")
