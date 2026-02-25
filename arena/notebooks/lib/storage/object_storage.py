@@ -531,6 +531,8 @@ class PodIdentityObjectStorage(ObjectStorage):
     def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
         """Generate temporary S3 access keys via CoreWeave API.
 
+        Needed for warp benchmarking.
+
         Args:
             duration_seconds (int, optional): Key validity duration in seconds.
 
