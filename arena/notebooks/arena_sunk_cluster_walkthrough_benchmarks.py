@@ -24,7 +24,7 @@ def _():
         CW_ARENA_SSH_KEY_PATH: Path to SSH private key (default: /root/.ssh/id_rsa)
         CW_ARENA_SSH_HOST: SSH host (e.g., user+tenant@sunk.tenant.coreweave.app)
     """
-    from arena.remote_execution_helpers import shell
+    from lib.remote_execution_helpers import shell
 
     return mo, shell
 

@@ -1,13 +1,20 @@
 import os
-from typing import Any, Optional
+from typing import Optional
 
 from kubernetes import client, config
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
+from ruamel.yaml import YAML
 
 
 class KubernetesError(Exception):
     """Base exception for k8s helper errors."""
+
+    pass
+
+
+class KubernetesConfigError(KubernetesError):
+    """Raised when Kubernetes config cannot be loaded in-cluster or from path."""
 
     pass
 
@@ -24,7 +31,7 @@ class K8s:
         _batch_v1 (client.BatchV1Api | None): Cached BatchV1Api client.
     """
 
-    def __init__(self, in_cluster: bool = True, kubeconfig_path: Optional[str] = None):
+    def __init__(self, kubeconfig_path: str = "~/.kube/config"):
         """Initialize Kubernetes client.
 
         Args:
@@ -34,19 +41,23 @@ class K8s:
                 Defaults to None (uses default kubeconfig locations).
 
         Raises:
-            KubernetesError: If Kubernetes config cannot be loaded.
+            KubernetesConfigError: If Kubernetes config cannot be loaded.
         """
         self._core_v1: client.CoreV1Api | None = None
         self._apps_v1: client.AppsV1Api | None = None
         self._batch_v1: client.BatchV1Api | None = None
 
         try:
-            if in_cluster:
-                config.load_incluster_config()
-            else:
+            config.load_incluster_config()
+            print("Loaded in-cluster Kubernetes config")
+        except Exception:
+            try:
                 config.load_kube_config(config_file=kubeconfig_path)
-        except Exception as e:
-            raise KubernetesError(f"Failed to load Kubernetes config: {e}")
+                print(f"Loaded kubeconfig from file {kubeconfig_path}")
+            except Exception as e:
+                raise KubernetesConfigError(
+                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}: {e}"
+                )
 
     @property
     def core_v1(self) -> client.CoreV1Api:
@@ -87,7 +98,8 @@ class K8s:
             self._batch_v1 = client.BatchV1Api()
         return self._batch_v1
 
-    def get_pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> Optional[str]:
+    @property
+    def pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> str:
         """Get the CW region where a pod is running.
 
         Reads the pod's node and retrieves the region from node labels. If pod_name and
@@ -129,11 +141,11 @@ class K8s:
 
             pod = self.core_v1.read_namespaced_pod(name=pod_name, namespace=namespace)
             if pod.spec is None or pod.spec.node_name is None:
-                return None
+                raise KubernetesError("Unable to get pod spec or name")
 
             node = self.core_v1.read_node(name=pod.spec.node_name)
             if node.metadata is None or node.metadata.labels is None:
-                return None
+                raise KubernetesError("Unable to get node metadata")
 
             return node.metadata.labels.get("topology.kubernetes.io/region") or node.metadata.labels.get(
                 "failure-domain.beta.kubernetes.io/region"
@@ -142,7 +154,8 @@ class K8s:
         except ApiException as e:
             raise KubernetesError(f"Failed to get pod region: {e}")
 
-    def get_cluster_region(self) -> Optional[str]:
+    @property
+    def cluster_region(self) -> str:
         """Get the region of the Kubernetes cluster.
 
         Reads the region from the first node's labels.
@@ -156,7 +169,7 @@ class K8s:
         try:
             nodes = self.core_v1.list_node()
             if not nodes.items:
-                return None
+                raise KubernetesError("No nodes found in cluster")
 
             first_node = nodes.items[0]
             if first_node.metadata is None or first_node.metadata.labels is None:
@@ -169,7 +182,7 @@ class K8s:
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster region: {e}")
 
-    def get_nodes(self) -> dict[str, dict[Any, Any]]:
+    def get_nodes(self) -> dict[str, dict[str, dict]]:
         """Get the number and type of nodes in the cluster.
 
         Counts nodes with nvidia.com/gpu resources as gpu nodes and
@@ -228,3 +241,165 @@ class K8s:
             return {"gpu": gpu_nodes, "cpu": cpu_nodes}
         except ApiException as e:
             raise KubernetesError(f"Failed to get node details: {e}")
+
+    def _create_or_update_resource(self, kind: str, name: str, namespace: str, doc: dict, results: dict) -> None:
+        """Helper method to create or update a Kubernetes resource.
+
+        Args:
+            kind: Resource kind (e.g., 'ServiceAccount', 'ConfigMap')
+            name: Resource name
+            namespace: Target namespace
+            doc: Resource definition dictionary
+            results: Results dictionary to append to
+
+        Raises:
+            ApiException: If resource operation fails
+        """
+        match kind:
+            case "ServiceAccount":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.core_v1.read_namespaced_service_account,
+                    self.core_v1.create_namespaced_service_account,
+                    self.core_v1.patch_namespaced_service_account,
+                )
+
+            case "ConfigMap":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.core_v1.read_namespaced_config_map,
+                    self.core_v1.create_namespaced_config_map,
+                    self.core_v1.patch_namespaced_config_map,
+                )
+
+            case "Service":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.core_v1.read_namespaced_service,
+                    self.core_v1.create_namespaced_service,
+                    self.core_v1.patch_namespaced_service,
+                )
+
+            case "StatefulSet":
+                self._apply_resource(
+                    name,
+                    namespace,
+                    doc,
+                    kind,
+                    results,
+                    self.apps_v1.read_namespaced_stateful_set,
+                    self.apps_v1.create_namespaced_stateful_set,
+                    self.apps_v1.patch_namespaced_stateful_set,
+                )
+
+            case "Job":
+                # Jobs cannot be updated
+                try:
+                    self.batch_v1.read_namespaced_job(name, namespace)
+                    results["unchanged"].append(f"{kind}/{name} (jobs cannot be updated)")
+                except ApiException as e:
+                    if e.status == 404:
+                        self.batch_v1.create_namespaced_job(namespace, doc)
+                        results["created"].append(f"{kind}/{name}")
+                    else:
+                        raise
+
+            case _:
+                results["unchanged"].append(f"{kind}/{name} (unsupported resource type)")
+
+    def _apply_resource(
+        self, name: str, namespace: str, doc: dict, kind: str, results: dict, read_fn, create_fn, patch_fn
+    ) -> None:
+        """Apply a resource by attempting to read, then update or create.
+
+        Supports serviceaccount, configmap, service, statefulset, and job
+
+        Args:
+            name: Resource name
+            namespace: Target namespace
+            doc: Resource definition dictionary
+            kind: Resource kind
+            results: Results dictionary to append to
+            read_fn: Function to read the resource
+            create_fn: Function to create the resource
+            patch_fn: Function to patch the resource
+        """
+        try:
+            read_fn(name, namespace)
+            patch_fn(name, namespace, doc)
+            results["updated"].append(f"{kind}/{name}")
+        except ApiException as e:
+            if e.status == 404:
+                create_fn(namespace, doc)
+                results["created"].append(f"{kind}/{name}")
+            else:
+                raise
+
+    def apply_yaml(self, yaml_content: str, namespace: str) -> dict[str, list[str]]:
+        """Apply YAML resources, creating or updating as needed.
+
+        Uses ruamel.yaml to preserve formatting and handle YAML parsing correctly.
+
+        Args:
+            yaml_content: YAML string with Kubernetes resources
+            namespace: Target namespace
+
+        Returns:
+            dict: Results of apply operations with keys 'created', 'updated', 'unchanged'
+
+        Raises:
+            KubernetesError: If parsing or applying YAML fails
+        """
+        results: dict[str, list[str]] = {"created": [], "updated": [], "unchanged": []}
+
+        try:
+            yaml = YAML(typ="safe")
+            documents = list(yaml.load_all(yaml_content))
+
+            for doc in documents:
+                if not doc:
+                    continue
+
+                kind = doc.get("kind")
+                name = doc.get("metadata", {}).get("name")
+
+                if not kind or not name:
+                    continue
+
+                try:
+                    self._create_or_update_resource(kind, name, namespace, doc, results)
+                except ApiException as e:
+                    raise KubernetesError(f"Failed to apply {kind}/{name}: {e}")
+
+            return results
+
+        except Exception as e:
+            raise KubernetesError(f"Failed to parse or apply YAML: {e}")
+
+    @property
+    def org_id(self) -> str:
+        """Detect the CoreWeave org ID by checking the first node's cks.coreweave.com/org-id label. cks.coreweave.com/org-id=cw623e."""
+        try:
+            nodes = self.core_v1.list_node()
+            if not nodes.items:
+                raise KubernetesError("No nodes found")
+
+            first_node = nodes.items[0]
+            if first_node.metadata is None or first_node.metadata.labels is None:
+                raise KubernetesError("First node metadata or labels are missing")
+
+            return first_node.metadata.labels.get("cks.coreweave.com/org-id")
+        except Exception as e:
+            raise KubernetesError(f"Failed to get org ID from node labels: {e}")

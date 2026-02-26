@@ -7,7 +7,8 @@
 #     "marimo>=0.19.7",
 #     "marimo[lsp]>=0.19.7",
 #     "mypy-boto3-s3>=1.42.37",
-#     "shell==1.0.1"
+#     "shell==1.0.1",
+#     "ruamel-yaml>=0.19.1"
 # ]
 # ///
 from typing import Callable
@@ -23,7 +24,9 @@ with app.setup:
     import time
 
     import marimo as mo
-    from arena.object_storage_helpers import MissingCredentialsError, ObjectStorage
+    from lib.k8s import K8s
+    from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
+    from lib.storage.warp import WarpRunner
 
 
 @app.cell(hide_code=True)
@@ -72,7 +75,7 @@ def _():
     If you'd like to use object storage outside of this notebook you'll need to create your own Access Key and Secret Access Key in the [CoreWeave Console](https://console.coreweave.com/object-storage/access-keys)
     See [here](https://docs.coreweave.com/docs/products/storage/object-storage/get-started-caios) for more details.
 
-    These credentials are used for S3 API access to CAIOS and LOTA.
+    These credentials are used for API access to CAIOS and LOTA.
     ///
     """)
     return
@@ -80,7 +83,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _():
-    use_lota_checkbox = mo.ui.checkbox(value=False, label="Use LOTA (GPU clusters only)")
+    use_lota_checkbox = mo.ui.checkbox(value=True, label="Use LOTA (GPU clusters only)")
 
     mo.md(f"""
     ### Storage Endpoint Configuration
@@ -100,11 +103,12 @@ def _():
 
 @app.cell(hide_code=True)
 def _(use_lota_checkbox):
+    k8s = K8s()
     use_lota = use_lota_checkbox.value
     caios: ObjectStorage
     cw_token_required: bool = False
     try:
-        caios = ObjectStorage.auto(use_lota=use_lota)
+        caios = ObjectStorage.auto(k8s, use_lota=use_lota)
     except MissingCredentialsError:
         cw_token_required = True
     if cw_token_required:
@@ -156,10 +160,10 @@ def _():
     ---
     ## Bucket Operations
 
-    /// admonition | S3 Buckets
+    /// admonition | CoreWeave AI Object Storage Buckets
         type: info
 
-    List and manage your S3 buckets. Buckets are the top-level containers for your objects.
+    List and manage your CoreWeave AI Object Storage buckets. Buckets are the top-level containers for your objects.
     ///
     """)
     return
@@ -167,7 +171,9 @@ def _():
 
 @app.cell(hide_code=True)
 def _(storage: ObjectStorage):
-    buckets = storage.list_buckets()
+    get_buckets, set_buckets = mo.state(storage.list_buckets())
+    buckets = get_buckets()
+
     _initial_bucket = buckets[0] if buckets else None
     bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
     create_bucket_form = (
@@ -179,12 +185,13 @@ def _(storage: ObjectStorage):
         )
         .form(submit_button_label="Create Bucket", clear_on_submit=False)
     )
+    bucket_refresh = mo.ui.button(label="Refresh Bucket List")
 
-    return bucket_dropdown, create_bucket_form, buckets
+    return bucket_dropdown, create_bucket_form, buckets, set_buckets, bucket_refresh
 
 
 @app.cell(hide_code=True)
-def _(create_bucket_form, storage: ObjectStorage):
+def _(create_bucket_form: mo.ui.form, set_buckets, bucket_refresh: mo.ui.button, storage: ObjectStorage):
     _ui = None
     if create_bucket_form.value:
         try:
@@ -195,6 +202,10 @@ def _(create_bucket_form, storage: ObjectStorage):
             )
         except Exception as _e:
             _ui = mo.md(f"Failed to create bucket: {_e}")
+
+    if bucket_refresh.value:
+        set_buckets(storage.list_buckets())
+        _ui = mo.md("Bucket list refreshed")
     _ui
     return
 
@@ -210,7 +221,7 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
         """)
     else:
         _ui = mo.md(f"""
-        ### Create S3 Bucket
+        ### Create CoreWeave AI Object Storage Bucket
 
         /// admonition | No Buckets Found
             type: warning
@@ -227,18 +238,20 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
 @app.cell(hide_code=True)
 def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
     _ui = mo.md(f"""
-        ### Select S3 Bucket for upload and download tests
+        ### Select CoreWeave AI Object Storage Bucket for upload and download tests
         {bucket_dropdown}
         """)
     bucket_name = bucket_dropdown.value
     _ui
+
+    return (bucket_name,)
 
 
 @app.cell(hide_code=True)
 def _():
     upload_form = (
         mo.md("""
-        ### Configure S3 Upload Test
+        ### Configure CoreWeave AI Object Storage Upload Test
         - Test File Size (GB): {test_file_size_gb}
         - Multipart Threshold (MB): {multipart_threshold_mb}
         - Chunk Size (MB): {multipart_chunksize_mb}
@@ -248,7 +261,7 @@ def _():
             test_file_size_gb=mo.ui.number(start=0, stop=1000, step=10, value=10),  # type: ignore
             multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
             multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-            max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
+            max_concurrency=mo.ui.slider(1, 1000, value=300, show_value=True),  # type: ignore
         )
         .form(submit_button_label="Run Upload Test", clear_on_submit=False)
     )
@@ -297,13 +310,13 @@ def _(bucket_name: str):
         file_key = f"benchmark/{test_file_size_gb}GB"
 
         print(f"""
-        --- S3 Upload Test (Boto3) ---
+        --- CoreWeave AI Object Storage Upload Test (Boto3) ---
         Bucket: s3://{bucket_name}
         Key: {file_key}
         Multipart Threshold: {multipart_threshold_mb} MB
         Chunk Size: {multipart_chunksize_mb} MB
         Max Concurrency: {max_concurrency}
-        --- S3 Upload Test (Boto3) ---
+        --- CoreWeave AI Object Storage Upload Test (Boto3) ---
         """)
 
         start = time.time()
@@ -318,11 +331,11 @@ def _(bucket_name: str):
             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
 
             print(f"""
-        --- S3 Upload Stats ---
+        --- CoreWeave AI Object Storage Upload Stats ---
         Size: {size_gb:.2f} GB
         Time: {elapsed:.2f} seconds
         Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-        --- S3 Upload Stats ---
+        --- CoreWeave AI Object Storage Upload Stats ---
         """)
         except Exception as e:
             print(f"Upload failed: {e}")
@@ -368,7 +381,7 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
     if object_key_dropdown is not None:
         download_form = (
             mo.md("""
-            ### Configure S3 Download Test
+            ### Configure CoreWeave AI Object Storage Download Test
             - Object: {object_key}
             - Multipart Threshold (MB): {multipart_threshold_mb}
             - Chunk Size (MB): {multipart_chunksize_mb}
@@ -378,7 +391,7 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
                 object_key=object_key_dropdown,  # type: ignore
                 multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
                 multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-                max_concurrency=mo.ui.slider(1, 100, value=32, show_value=True),  # type: ignore
+                max_concurrency=mo.ui.slider(1, 1000, value=300, show_value=True),  # type: ignore
             )
             .form(submit_button_label="Run Download Test", clear_on_submit=False)
         )
@@ -428,13 +441,13 @@ def _():
         )
 
         print(f"""
-        --- S3 Download Test (Boto3) ---
+        --- CoreWeave AI Object Storage Download Test (Boto3) ---
         Bucket: s3://{bucket_name}
         Key: {object_key}
         Multipart Threshold: {multipart_threshold_mb} MB
         Chunk Size: {multipart_chunksize_mb} MB
         Max Concurrency: {max_concurrency}
-        --- S3 Download Test (Boto3) ---
+        --- CoreWeave AI Object Storage Download Test (Boto3) ---
         """)
 
         start = time.time()
@@ -449,11 +462,11 @@ def _():
             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
 
             print(f"""
-        --- S3 Download Stats ---
+        --- CoreWeave AI Object Storage Download Stats ---
         Size: {size_gb:.2f} GB
         Time: {elapsed:.2f} seconds
         Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-        --- S3 Download Stats ---
+        --- CoreWeave AI Object Storage Download Stats ---
         """)
         except Exception as e:
             print(f"Download failed: {e}")
@@ -463,7 +476,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callable, storage: ObjectStorage):
-    if download_form and download_form.value:
+    if download_form.value:
         with mo.status.spinner(
             title="Running Download Test",
             subtitle=f"Downloading from {bucket_name}",
@@ -474,6 +487,150 @@ def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callabl
                 **download_form.value,
             )
     return
+
+
+@app.cell(hide_code=True)
+def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
+    warp_runner = WarpRunner(
+        k8s,
+        bucket_name,
+        storage,
+    )
+    warp_form = (
+        mo.md("""
+            ### Configure Warp Benchmark
+            - {operation}
+            - {duration}
+            - {objects}
+            - {concurrency}
+            """)
+        .batch(
+            operation=mo.ui.dropdown(  # type: ignore
+                options=["get", "put", "delete", "list", "stat", "mixed"],
+                value="get",
+                label="Operation:",
+            ),
+            duration=mo.ui.number(1, 60, step=1, value=10, label="Duration (min):"),  # type: ignore
+            objects=mo.ui.number(1000, 1_000_000, step=1, value=1000, label="Objects:"),  # type: ignore
+            concurrency=mo.ui.number(1, 1000, step=1, value=300, label="Concurrency:"),  # type: ignore
+        )
+        .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
+    )
+
+    description = mo.md(r"""
+    ---
+    ## Warp Benchmark
+
+    /// admonition | About Warp
+        type: info
+
+    [Warp](https://github.com/minio/warp) is a benchmarking tool for S3-compatible object storage that runs comprehensive performance tests on GET, PUT, DELETE, LIST, and STAT operations.
+    ///
+    """)
+
+    mo.vstack([description, warp_form])
+    return (warp_form, warp_runner)
+
+
+@app.cell(hide_code=True)
+def _(warp_objects: int, warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
+    if warp_form.value:
+        warp_config = warp_form.value
+        warp_duration = warp_config.get("duration", 10)
+        warp_operation = warp_config.get("operation", "get")
+        warp_objects = warp_config.get("objects", "1000")
+        warp_concurrency = warp_config.get("concurrency", 300)
+
+        with mo.status.spinner(
+            title="Running Warp Benchmark",
+            subtitle=f"Benchmarking bucket: {bucket_name}",
+        ):
+            warp_submit_results = warp_runner.run_benchmark(
+                warp_operation,
+                warp_duration,
+                warp_objects,
+                warp_concurrency,
+            )
+
+        result_section = mo.md(f"""
+/// admonition | Benchmark Started
+
+Warp benchmark job submitted successfully.
+
+**Operation:** {warp_operation}
+**Endpoint:** {storage.endpoint_url}
+**Objects:** {warp_objects}
+**Duration:** {warp_duration}m
+
+Submit Results:
+```json
+{json.dumps(warp_submit_results, indent=2)}
+
+```
+Results will be viewable below shortly or in the pod logs in-cluster.<br>
+Also, review the Grafana dashboards:<br>
+- [CAIOS Usage](https://cks-grafana.coreweave.com/d/bebi5t788t6v4c/caios-usage)
+- [CAIOS Lota](https://cks-grafana.coreweave.com/d/eeff523hiaewwc/caios-lota)
+///
+        """)
+        mo.output.replace(result_section)
+
+
+@app.cell(hide_code=True)
+def _(
+    storage: ObjectStorage,
+    warp_runner: WarpRunner,
+    warp_operation: str,
+    warp_duration: str,
+    warp_submit_results: dict[str, list[str]],
+    warp_form: mo.ui.form,
+):
+    if warp_form.value:
+        _start_time = time.time()
+        _log_text = ""
+        _recent_logs = ""
+        _status = ""
+
+        with mo.status.spinner(title="Running Warp Benchmark") as _spinner:
+            while _status not in ["succeeded", "failed", "completed"]:
+                warp_results = warp_runner.get_results()
+                _status = warp_results.get("status", "unknown")
+
+                _current_logs = warp_results.get("logs", [])
+                if len(_current_logs) > len(_log_text):
+                    _log_text = _current_logs
+                    _log_lines = _log_text.split("\n") if _log_text else []
+                    _recent_logs = "\n".join(_log_lines[-30:])
+
+                mo.output.replace(
+                    mo.vstack(
+                        [
+                            mo.md(f"""
+### Warp Benchmark Progress
+
+**Status:** {_status}
+**Operation:** {warp_operation}
+**Endpoint:** {storage.endpoint_url}
+                            """),
+                            mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
+                        ]
+                    )
+                )
+                time.sleep(5)
+
+        _total_time = int(time.time() - _start_time)
+
+        _final_output = mo.md(f"""
+### Benchmark Complete
+
+**Total Time:** {_total_time}s
+**Operation:** {warp_operation}
+**Endpoint:** {storage.endpoint_url}
+**Status:** {_status}
+```\n{_log_text}\n```
+""")
+        mo.output.replace(_final_output)
+    return (warp_results,)
 
 
 if __name__ == "__main__":
