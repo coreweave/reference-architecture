@@ -6,6 +6,9 @@ from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
 from ruamel.yaml import YAML
 
+# We don't have a good way to get this off node labels currently
+AVAILABILITY_ZONE = os.getenv("AVAILABILITY_ZONE", "A")
+
 
 class KubernetesError(Exception):
     """Base exception for k8s helper errors."""
@@ -147,9 +150,12 @@ class K8s:
             if node.metadata is None or node.metadata.labels is None:
                 raise KubernetesError("Unable to get node metadata")
 
-            return node.metadata.labels.get("topology.kubernetes.io/region") or node.metadata.labels.get(
+            region = node.metadata.labels.get("topology.kubernetes.io/region") or node.metadata.labels.get(
                 "failure-domain.beta.kubernetes.io/region"
             )
+            region = region + AVAILABILITY_ZONE
+
+            return region
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get pod region: {e}")
@@ -175,9 +181,13 @@ class K8s:
             if first_node.metadata is None or first_node.metadata.labels is None:
                 raise KubernetesError("First node metadata or labels are missing")
 
-            return first_node.metadata.labels.get("topology.kubernetes.io/region") or first_node.metadata.labels.get(
+            region = first_node.metadata.labels.get("topology.kubernetes.io/region") or first_node.metadata.labels.get(
                 "failure-domain.beta.kubernetes.io/region"
             )
+
+            region = region + AVAILABILITY_ZONE
+
+            return region
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster region: {e}")

@@ -364,7 +364,7 @@ spec:
                   - key: node.coreweave.cloud/class
                     operator: In
                     values:
-                      - gpu
+                      - {compute_class}
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
             - labelSelector:
