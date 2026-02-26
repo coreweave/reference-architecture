@@ -32,6 +32,7 @@ class K8s:
         _core_v1 (client.CoreV1Api | None): Cached CoreV1Api client.
         _apps_v1 (client.AppsV1Api | None): Cached AppsV1Api client.
         _batch_v1 (client.BatchV1Api | None): Cached BatchV1Api client.
+        _cluster_region (str | None): Cached cluster region value
     """
 
     def __init__(self, kubeconfig_path: str = "~/.kube/config"):
@@ -49,6 +50,7 @@ class K8s:
         self._core_v1: client.CoreV1Api | None = None
         self._apps_v1: client.AppsV1Api | None = None
         self._batch_v1: client.BatchV1Api | None = None
+        self._cluster_region: str | None = None
 
         try:
             config.load_incluster_config()
@@ -101,7 +103,6 @@ class K8s:
             self._batch_v1 = client.BatchV1Api()
         return self._batch_v1
 
-    @property
     def pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> str:
         """Get the CW region where a pod is running.
 
@@ -172,6 +173,8 @@ class K8s:
         Raises:
             KubernetesError: If the Kubernetes API call fails or if node metadata/labels are missing.
         """
+        if self._cluster_region is not None:
+            return self._cluster_region
         try:
             nodes = self.core_v1.list_node()
             if not nodes.items:
@@ -187,10 +190,21 @@ class K8s:
 
             region = region + AVAILABILITY_ZONE
 
+            self._cluster_region = region
+
             return region
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster region: {e}")
+
+    @cluster_region.setter
+    def cluster_region(self, region: str):
+        """Set the cluster region manually, overriding autodetection.
+
+        Args:
+            region (str): The region to set "US-WEST-04A"
+        """
+        self._cluster_region = region
 
     def get_nodes(self) -> dict[str, dict[str, dict]]:
         """Get the number and type of nodes in the cluster.
