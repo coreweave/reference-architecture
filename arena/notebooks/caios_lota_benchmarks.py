@@ -585,12 +585,12 @@ def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
         storage,
     )
     warp_form = (
-        mo.md("""
-            ### Configure Warp Benchmark
-            - {operation}
-            - {duration}
-            - {objects}
-            - {concurrency}
+        mo.md(f"""
+            ### Configure Warp Benchmark for cluster **"{k8s.cluster_name}"**
+            - {{operation}}
+            - {{duration}}
+            - {{objects}}
+            - {{concurrency}}
             """)
         .batch(
             operation=mo.ui.dropdown(  # type: ignore

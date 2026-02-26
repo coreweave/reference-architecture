@@ -32,7 +32,8 @@ class K8s:
         _core_v1 (client.CoreV1Api | None): Cached CoreV1Api client.
         _apps_v1 (client.AppsV1Api | None): Cached AppsV1Api client.
         _batch_v1 (client.BatchV1Api | None): Cached BatchV1Api client.
-        _cluster_region (str | None): Cached cluster region value
+        _cluster_region (str | None): Cached cluster region value.
+        _cluster_name (str | None): Cached cluster name value.
     """
 
     def __init__(self, kubeconfig_path: str = "", context: str = ""):
@@ -52,6 +53,7 @@ class K8s:
         self._apps_v1: client.AppsV1Api | None = None
         self._batch_v1: client.BatchV1Api | None = None
         self._cluster_region: str | None = None
+        self._cluster_name: str | None = None
 
         try:
             config.load_incluster_config()
@@ -441,3 +443,41 @@ class K8s:
             return first_node.metadata.labels.get("cks.coreweave.com/org-id")
         except Exception as e:
             raise KubernetesError(f"Failed to get org ID from node labels: {e}")
+
+    @property
+    def cluster_name(self) -> str:
+        """Get the cluster name for the current k8s client.
+
+        Attempts to get the cluster name from:
+            1. Node label 'node.coreweave.cloud/cluster on the first node
+            2. Current context name in kubeconfig
+
+        Raises:
+            KubernetesError: If cluster name cannot be determined
+        """
+        if self._cluster_name is not None:
+            return self._cluster_name
+
+        try:
+            nodes = self.core_v1.list_node()
+            if not nodes.items:
+                raise KubernetesError("No nodes found in cluster")
+
+            first_node = nodes.items[0]
+            if first_node.metadata is None or first_node.metadata.labels is None:
+                raise KubernetesError("First node metadata or labels are missing")
+
+            cluster_name = first_node.metadata.labels.get("node.coreweave.cloud/cluster")
+            if not cluster_name:
+                contexts, active_context = config.list_kube_config_contexts()
+                if active_context and active_context.get("name"):
+                    cluster_name = active_context["name"]
+
+            if not cluster_name:
+                raise KubernetesError("Cluster name not found in node labels or kubeconfig context")
+
+            self._cluster_name = cluster_name
+            return cluster_name
+
+        except ApiException as e:
+            raise KubernetesError(f"Failed to get cluster name: {e}")
