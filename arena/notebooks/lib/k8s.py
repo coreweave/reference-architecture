@@ -57,11 +57,11 @@ class K8s:
             print("Loaded in-cluster Kubernetes config")
         except Exception:
             try:
+                print(f"Loading kubeconfig from {kubeconfig_path}, set env var KUBECONFIG_PATH to override")
                 config.load_kube_config(config_file=kubeconfig_path)
-                print(f"Loaded kubeconfig from file {kubeconfig_path}")
             except Exception as e:
                 raise KubernetesConfigError(
-                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}: {e}"
+                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}, set env var KUBECONFIG_PATH to override: {e}"
                 )
 
     @property
@@ -184,8 +184,10 @@ class K8s:
             if first_node.metadata is None or first_node.metadata.labels is None:
                 raise KubernetesError("First node metadata or labels are missing")
 
-            region = first_node.metadata.labels.get("topology.kubernetes.io/region") or first_node.metadata.labels.get(
-                "failure-domain.beta.kubernetes.io/region"
+            region = (
+                first_node.metadata.labels.get("topology.kubernetes.io/region")
+                or first_node.metadata.labels.get("failure-domain.beta.kubernetes.io/region")
+                or ""
             )
 
             region = region + AVAILABILITY_ZONE

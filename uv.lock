@@ -2500,7 +2500,6 @@ dependencies = [
     { name = "statistics" },
     { name = "torch" },
     { name = "transformers" },
-    { name = "ty" },
     { name = "wandb" },
 ]
 
@@ -2530,7 +2529,6 @@ requires-dist = [
     { name = "statistics", specifier = ">=1.0.3.5" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "transformers", specifier = ">=5.0.0" },
-    { name = "ty", specifier = ">=0.0.17" },
     { name = "wandb", specifier = ">=0.24.2" },
 ]
 

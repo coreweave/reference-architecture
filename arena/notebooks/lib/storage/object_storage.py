@@ -737,5 +737,7 @@ def detect_region(k8s: K8s) -> str:
             if region:
                 print(f"Detected region from cluster: {region}")
         except Exception as e:
-            raise MissingRegionError(f"Unable to determine object storage region: {e}")
+            raise MissingRegionError(
+                f"Unable to determine object storage region, set with AWS_DEFAULT_REGION environment variable: {e}"
+            )
     return region
