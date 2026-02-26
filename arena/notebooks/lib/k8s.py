@@ -60,12 +60,11 @@ class K8s:
             print("Loaded in-cluster Kubernetes config")
         except Exception:
             if not kubeconfig_path:
-                kubeconfig_path = os.getenv("KUBECONFIG_PATH", "")
-            if not os.getenv("KUBECONFIG_PATH"):
+                kubeconfig_path = os.getenv("KUBECONFIG", "")
+            if not kubeconfig_path:
                 raise KubernetesConfigError(
-                    "Failed to load Kubernetes config in-cluster and env var KUBECONFIG_PATH is not set."
+                    "Failed to load Kubernetes config in-cluster and env var KUBECONFIG is not set."
                 )
-            kubeconfig_path = os.getenv("KUBECONFIG_PATH", "")
             try:
                 print(f"Loading kubeconfig from {kubeconfig_path}")
                 config.load_kube_config(config_file=kubeconfig_path)

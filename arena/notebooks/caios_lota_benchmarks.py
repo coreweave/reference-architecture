@@ -586,7 +586,8 @@ def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
     )
     warp_form = (
         mo.md(f"""
-            ### Configure Warp Benchmark for cluster **"{k8s.cluster_name}"**
+            ### Configure Warp Benchmark for cluster **"{k8s.cluster_name}"**.
+            If you want to benchmark a different cluster, set the _KUBECONFIG_ env var and context to the desired cluster.
             - {{operation}}
             - {{duration}}
             - {{objects}}
