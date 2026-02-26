@@ -76,7 +76,7 @@ class ObjectStorage(ABC):
         self._s3_client: S3Client | None = None
         self._api_session: requests.Session | None = None
         self.k8s = k8s
-        self.region = region if region else f"{detect_region(self.k8s)}{availability_zone}"
+        self.region = region if region else f"{detect_region(self.k8s)}"
 
         style = os.environ.get("AWS_S3_ADDRESSING_STYLE")
         self.addressing_style: Literal["path", "virtual", "auto"] = (
@@ -733,9 +733,9 @@ def detect_region(k8s: K8s) -> str:
         print(f"Detected region from env var: {region}")
     else:
         try:
-            cluster_region = k8s.cluster_region
-            if cluster_region:
-                print(f"Detected region from cluster: {cluster_region}")
+            region = k8s.cluster_region
+            if region:
+                print(f"Detected region from cluster: {region}")
         except Exception as e:
             raise MissingRegionError(f"Unable to determine object storage region: {e}")
     return region
