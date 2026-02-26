@@ -2,8 +2,8 @@ import os
 import uuid
 from typing import Optional
 
-from arena.notebooks.lib.k8s import K8s
-from arena.notebooks.lib.storage.object_storage import ObjectStorage
+from ..k8s import K8s
+from .object_storage import ObjectStorage
 
 
 class WarpRunnerError(Exception):

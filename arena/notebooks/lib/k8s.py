@@ -13,6 +13,12 @@ class KubernetesError(Exception):
     pass
 
 
+class KubernetesConfigError(KubernetesError):
+    """Raised when Kubernetes config cannot be loaded in-cluster or from path."""
+
+    pass
+
+
 class K8s:
     """Helper class for interacting with Kubernetes clusters.
 
@@ -35,7 +41,7 @@ class K8s:
                 Defaults to None (uses default kubeconfig locations).
 
         Raises:
-            KubernetesError: If Kubernetes config cannot be loaded.
+            KubernetesConfigError: If Kubernetes config cannot be loaded.
         """
         self._core_v1: client.CoreV1Api | None = None
         self._apps_v1: client.AppsV1Api | None = None
@@ -49,7 +55,9 @@ class K8s:
                 config.load_kube_config(config_file=kubeconfig_path)
                 print(f"Loaded kubeconfig from file {kubeconfig_path}")
             except Exception as e:
-                raise KubernetesError(f"Failed to load Kubernetes config: {e}")
+                raise KubernetesConfigError(
+                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}: {e}"
+                )
 
     @property
     def core_v1(self) -> client.CoreV1Api:
@@ -161,7 +169,7 @@ class K8s:
         try:
             nodes = self.core_v1.list_node()
             if not nodes.items:
-                raise KubernetesError("No nodes found")
+                raise KubernetesError("No nodes found in cluster")
 
             first_node = nodes.items[0]
             if first_node.metadata is None or first_node.metadata.labels is None:

@@ -8,7 +8,7 @@ import boto3
 import requests
 from botocore.config import Config
 
-from arena.notebooks.lib.k8s import K8s
+from ..k8s import K8s
 
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
 LOTA_ENDPOINT_URL = "http://cwlota.com"
@@ -615,7 +615,7 @@ class AccessKeyObjectStorage(ObjectStorage):
         """
         if self._api_session is None:
             if not self.cw_token:
-                raise ValueError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
+                raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
 
             session = requests.Session()
             session.headers.update(
@@ -732,12 +732,10 @@ def detect_region(k8s: K8s) -> str:
     if region:
         print(f"Detected region from env var: {region}")
     else:
-        pod_region = k8s.pod_region
-        if pod_region:
-            region = f"{pod_region}"
-            print(f"Detected region from pod: {region}")
-        else:
-            raise MissingRegionError(
-                "Unable to determine object storage region, provide as function input or env var 'AWS_DEFAULT_REGION'."
-            )
+        try:
+            cluster_region = k8s.cluster_region
+            if cluster_region:
+                print(f"Detected region from cluster: {cluster_region}")
+        except Exception as e:
+            raise MissingRegionError(f"Unable to determine object storage region: {e}")
     return region
