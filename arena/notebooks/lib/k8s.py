@@ -35,14 +35,15 @@ class K8s:
         _cluster_region (str | None): Cached cluster region value
     """
 
-    def __init__(self, kubeconfig_path: str = ""):
+    def __init__(self, kubeconfig_path: str = "", context: str = ""):
         """Initialize Kubernetes client.
 
         Args:
             in_cluster (bool, optional): If True, load in-cluster config (for pods). If False,
                 load from kubeconfig file. Defaults to True.
             kubeconfig_path (str, optional): Path to kubeconfig file when in_cluster=False.
-                Defaults to None (uses default kubeconfig locations).
+                Defaults to "" (uses default KUBECONFIG_PATH env var).
+            context (str, optional): Kubernetes context to use when multiple available in the kubeconfig_path. If empty, uses current-context
 
         Raises:
             KubernetesConfigError: If Kubernetes config cannot be loaded.
@@ -56,6 +57,8 @@ class K8s:
             config.load_incluster_config()
             print("Loaded in-cluster Kubernetes config")
         except Exception:
+            if not kubeconfig_path:
+                kubeconfig_path = os.getenv("KUBECONFIG_PATH", "")
             if not os.getenv("KUBECONFIG_PATH"):
                 raise KubernetesConfigError(
                     "Failed to load Kubernetes config in-cluster and env var KUBECONFIG_PATH is not set."

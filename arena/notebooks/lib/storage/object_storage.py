@@ -171,6 +171,7 @@ class ObjectStorage(ABC):
             ObjectStorage: Authenticated client instance (PodIdentityObjectStorage or AccessKeyObjectStorage).
 
         Raises:
+            MissingCredentialsError: If credentials aren't available
             ObjectStorageError: If all auth methods fail.
         """
         print("Initializing CoreWeave AI object storage")
@@ -192,6 +193,8 @@ class ObjectStorage(ABC):
             client.s3_client.list_buckets()
             print(f"Initialized CAIOS client using access key auth to ({'LOTA' if use_lota else 'CAIOS'}).")
             return client
+        except MissingCredentialsError:
+            raise  # re-raise cred error to be handled by the caller
         except Exception as e:
             raise ObjectStorageError(f"Failed to create the ObjectStorage client: {e}")
 

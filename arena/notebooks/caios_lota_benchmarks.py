@@ -58,7 +58,7 @@ def _():
     /// details | Table of Contents
 
     - **Bucket Operations** - List and manage buckets
-    - **Benchmarks** - Performance testing
+    - **Boto3 Upload/Download Performance Tests** - Local Benchmarking
     ///
     """)
     return
@@ -87,7 +87,7 @@ def _(use_lota_checkbox):
     _ui = None
     k8s = K8s()
     use_lota = use_lota_checkbox.value
-    caios: ObjectStorage
+    caios: ObjectStorage | None = None
     cw_token_required: bool = False
     try:
         caios = ObjectStorage.auto(k8s, use_lota=use_lota)
@@ -117,21 +117,36 @@ def _(use_lota_checkbox):
 
 
 @app.cell(hide_code=True)
-def _(caios: ObjectStorage, form: mo.ui.form, region: str, use_lota: bool):
-    storage: ObjectStorage
+def _(k8s: K8s, caios: ObjectStorage, token_form: mo.ui.form, use_lota: bool):
+    storage: ObjectStorage | None = None
     if caios is not None:
         storage = caios
         status = "ObjectStorage client initialized with pod identity."
-    elif form.value and form.value.get("cw_token"):
-        storage = ObjectStorage.with_access_keys(use_lota=use_lota, region=region, cw_token=form.value["cw_token"])
-        status = "ObjectStorage client initialized with provided token."
-    else:
-        status = "Please initialize the client above"
-    mo.md(f"""
-        /// admonition
-        {status}
-        """)
+    elif token_form.value and token_form.value.get("cw_token"):
+        storage = ObjectStorage.with_access_keys(k8s=k8s, use_lota=use_lota, cw_token=token_form.value["cw_token"])
     return (storage,)
+
+
+@app.cell(hide_code=True)
+def _(storage: ObjectStorage):
+    # Stop execution of downstream cells if storage is not initialized properly
+    mo.stop(
+        storage is None,
+        mo.md("""
+        /// admonition | Waiting for Initialization
+            type: warning
+
+        Please complete the initialization above before proceeding.
+        ///
+    """),
+    )
+    mo.md("""
+        /// admonition | Storage Client Initialized
+            type: success
+
+        Successfully initialized ObjectStorage client. You can now manage buckets and run benchmarks.
+    """)
+    return
 
 
 @app.cell(hide_code=True)
@@ -170,6 +185,8 @@ def _():
 
 @app.cell(hide_code=True)
 def _(storage: ObjectStorage):
+    mo.stop(storage is None)
+
     get_buckets, set_buckets = mo.state(storage.list_buckets())
     buckets = get_buckets()
 
@@ -191,13 +208,20 @@ def _(storage: ObjectStorage):
 
 @app.cell(hide_code=True)
 def _(create_bucket_form: mo.ui.form, set_buckets, bucket_refresh: mo.ui.button, storage: ObjectStorage):
+    mo.stop(storage is None)
+
     _ui = None
     if create_bucket_form.value:
         try:
             _name = create_bucket_form.value.get("bucket_name")
             storage.create_bucket(_name)
             _ui = mo.md(
-                f"Successfully created bucket {_name}. Please refresh the bucket list dropdown to see the new bucket."
+                f"""
+                /// admonition | Bucket Created
+                    type: Info
+
+                Successfully created bucket {_name}. Please refresh the bucket list dropdown to see the new bucket.
+                """
             )
         except Exception as _e:
             _ui = mo.md(f"Failed to create bucket: {_e}")
@@ -235,6 +259,18 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
 
 
 @app.cell(hide_code=True)
+def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
+    _ui = mo.md(f"""
+        ### Select CoreWeave AI Object Storage Bucket for upload and download tests
+        {bucket_dropdown}
+        """)
+    bucket_name = bucket_dropdown.value
+    _ui
+
+    return (bucket_name,)
+
+
+@app.cell(hide_code=True)
 def _():
     mo.md(r"""
     ## Boto3 Upload/Download Performance Tests
@@ -259,19 +295,9 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
-    _ui = mo.md(f"""
-        ### Select CoreWeave AI Object Storage Bucket for upload and download tests
-        {bucket_dropdown}
-        """)
-    bucket_name = bucket_dropdown.value
-    _ui
+def _(storage: ObjectStorage):
+    mo.stop(storage is None)
 
-    return (bucket_name,)
-
-
-@app.cell(hide_code=True)
-def _():
     upload_form = (
         mo.md("""
         ### Configure CoreWeave AI Object Storage Upload Test
@@ -318,8 +344,6 @@ def _(bucket_name: str):
                     write_size = min(chunk_size, remaining)
                     f.write(zero_chunk[:write_size])
                     remaining -= write_size
-                    progress = (file_size_bytes - remaining) / file_size_bytes * 100
-                    print(f"Progress: {progress:.0f}%")
         else:
             print(f"Test file '{test_filename}' already exists locally, proceeding to upload.")
 
@@ -360,6 +384,8 @@ def _(bucket_name: str):
 
 @app.cell(hide_code=True)
 def _(run_s3_upload_test: Callable, bucket_name: str, storage: ObjectStorage, upload_form: mo.ui.form):
+    mo.stop(storage is None)
+
     upload_result = None
     if upload_form.value:
         with mo.status.spinner(
@@ -390,6 +416,8 @@ def _(run_s3_upload_test: Callable, bucket_name: str, storage: ObjectStorage, up
 
 @app.cell(hide_code=True)
 def _(storage: ObjectStorage, bucket_name: str):
+    mo.stop(storage is None)
+
     if bucket_name:
         objects_result = storage.list_objects(bucket_name, prefix="benchmark/")
         object_keys = [obj["Key"] for obj in objects_result["objects"]]
@@ -494,6 +522,8 @@ def _():
 
 @app.cell(hide_code=True)
 def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callable, storage: ObjectStorage):
+    mo.stop(storage is None)
+
     download_result = None
     if download_form.value:
         with mo.status.spinner(
@@ -525,7 +555,30 @@ def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callabl
 
 
 @app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ---
+    ## Warp Benchmark
+
+    /// admonition | About Warp Tests
+        type: info
+    [Warp](https://github.com/minio/warp) is a benchmarking tool for S3-compatible object storage that runs comprehensive performance tests on GET, PUT, DELETE, LIST, and STAT operations.
+
+    Results represent the **actual performance your CKS workloads** (pods, jobs, deployments, sunk) can expect when accessing CoreWeave AI Object Storage.
+
+    Performance depends on:
+    - LOTA endpoint: High-speed locally cached access for GPU clusters
+    - CAIOS endpoint: Standard network access
+    - Object size, concurrency level, and operation type
+    ///
+    """)
+    return
+
+
+@app.cell(hide_code=True)
 def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
+    mo.stop(storage is None)
+
     warp_runner = WarpRunner(
         k8s,
         bucket_name,
@@ -552,29 +605,14 @@ def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
     )
 
-    description = mo.md(r"""
-    ---
-    ## Warp Benchmark
-
-    /// admonition | About Warp Tests
-        type: info
-    [Warp](https://github.com/minio/warp) is a benchmarking tool for S3-compatible object storage that runs comprehensive performance tests on GET, PUT, DELETE, LIST, and STAT operations.
-
-    Results represent the **actual performance your CKS workloads** (pods, jobs, deployments, sunk) can expect when accessing CoreWeave AI Object Storage.
-
-    Performance depends on:
-    - LOTA endpoint: High-speed locally cached access for GPU clusters
-    - CAIOS endpoint: Standard network access
-    - Object size, concurrency level, and operation type
-    ///
-    """)
-
-    mo.vstack([description, warp_form])
+    warp_form
     return (warp_form, warp_runner)
 
 
 @app.cell(hide_code=True)
 def _(warp_objects: int, warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
+    mo.stop(storage is None)
+
     if warp_form.value:
         warp_config = warp_form.value
         warp_duration = warp_config.get("duration", 10)
@@ -626,6 +664,8 @@ def _(
     warp_submit_results: dict[str, list[str]],
     warp_form: mo.ui.form,
 ):
+    mo.stop(storage is None)
+
     if warp_form.value:
         _start_time = time.time()
         _log_text = ""
