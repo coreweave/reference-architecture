@@ -24,6 +24,7 @@ with app.setup:
     import time
 
     import marimo as mo
+    from boto3.s3.transfer import TransferConfig
     from lib.k8s import K8s
     from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
     from lib.storage.warp import WarpRunner
@@ -82,27 +83,8 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _():
-    use_lota_checkbox = mo.ui.checkbox(value=True, label="Use LOTA (GPU clusters only)")
-
-    mo.md(f"""
-    ### Storage Endpoint Configuration
-
-    {use_lota_checkbox}
-
-    /// admonition | About LOTA
-        type: info
-
-    [LOTA](https://docs.coreweave.com/products/storage/object-storage/lota/about#about-lota) provides faster access for GPU workloads by using a local cache but is only accessible from GPU clusters.
-    If you're running locally or on CPU-only clusters, keep this unchecked to use CAIOS.
-    ///
-    """)
-
-    return (use_lota_checkbox,)
-
-
-@app.cell(hide_code=True)
 def _(use_lota_checkbox):
+    _ui = None
     k8s = K8s()
     use_lota = use_lota_checkbox.value
     caios: ObjectStorage
@@ -130,8 +112,6 @@ def _(use_lota_checkbox):
         )
     else:
         token_form = None
-        _ui = mo.md("ObjectStorage client initialized successfully")
-
     _ui
     return caios, token_form, use_lota
 
@@ -152,6 +132,25 @@ def _(caios: ObjectStorage, form: mo.ui.form, region: str, use_lota: bool):
         {status}
         """)
     return (storage,)
+
+
+@app.cell(hide_code=True)
+def _():
+    use_lota_checkbox = mo.ui.checkbox(value=False, label="Use LOTA (For notebooks running inside GPU clusters only)")
+
+    mo.md(f"""
+    ### Storage Endpoint Configuration
+    /// admonition | About LOTA
+        type: info
+
+    [LOTA](https://docs.coreweave.com/products/storage/object-storage/lota/about#about-lota) provides faster access for GPU workloads by using a local cache but is only accessible from GPU clusters.
+    If you're running locally or on CPU-only clusters, keep this unchecked to use CAIOS.
+    ///
+
+    {use_lota_checkbox}
+    """)
+
+    return (use_lota_checkbox,)
 
 
 @app.cell(hide_code=True)
@@ -236,6 +235,30 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
 
 
 @app.cell(hide_code=True)
+def _():
+    mo.md(r"""
+    ## Boto3 Upload/Download Performance Tests
+
+    /// admonition | About Boto3 Tests
+        type: info
+
+    These upload and download tests measure the network bandwidth between the _machine running this notebook_ and CoreWeave AI Object Storage using the Boto3 Python library.
+
+    - **Upload Test**: Measures how fast you can write data from this machine to object storage
+    - **Download Test**: Measures how fast you can read data from object storage to this machine
+
+    Performance depends on:
+    - Your current network connection quality
+    - The geographical distance to the storage endpoint
+    - Whether you're using LOTA (GPU cluster) or CAIOS (standard endpoint)
+
+    **Note**: Results will vary based on where this notebook is running (local laptop vs. CoreWeave GPU cluster).
+    ///
+    """)
+    return
+
+
+@app.cell(hide_code=True)
 def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
     _ui = mo.md(f"""
         ### Select CoreWeave AI Object Storage Bucket for upload and download tests
@@ -258,7 +281,7 @@ def _():
         - Max Concurrency: {max_concurrency}
         """)
         .batch(
-            test_file_size_gb=mo.ui.number(start=0, stop=1000, step=10, value=10),  # type: ignore
+            test_file_size_gb=mo.ui.number(start=0, stop=1000, value=10),  # type: ignore
             multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
             multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
             max_concurrency=mo.ui.slider(1, 1000, value=300, show_value=True),  # type: ignore
@@ -279,13 +302,12 @@ def _(bucket_name: str):
         multipart_chunksize_mb: int = 8,
         max_concurrency: int = 10,
     ):
-        from boto3.s3.transfer import TransferConfig
-
         test_dir = "/tmp/bandwidth-test"
         test_filename = f"{test_file_size_gb}GB"
         os.makedirs(test_dir, exist_ok=True)
         file_size_bytes = int(test_file_size_gb * 1024 * 1024 * 1024)
         test_file = f"{test_dir}/{test_filename}"
+
         if not os.path.exists(test_file):
             print(f"Creating test file: {test_filename}...")
             chunk_size = 64 * 1024 * 1024  # 64 MB
@@ -309,16 +331,6 @@ def _(bucket_name: str):
         )
         file_key = f"benchmark/{test_file_size_gb}GB"
 
-        print(f"""
-        --- CoreWeave AI Object Storage Upload Test (Boto3) ---
-        Bucket: s3://{bucket_name}
-        Key: {file_key}
-        Multipart Threshold: {multipart_threshold_mb} MB
-        Chunk Size: {multipart_chunksize_mb} MB
-        Max Concurrency: {max_concurrency}
-        --- CoreWeave AI Object Storage Upload Test (Boto3) ---
-        """)
-
         start = time.time()
         try:
             storage.s3_client.upload_file(test_file, bucket_name, file_key, Config=transfer_config)
@@ -330,33 +342,50 @@ def _(bucket_name: str):
             bandwidth_mbs = size_mb / elapsed
             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
 
-            print(f"""
-        --- CoreWeave AI Object Storage Upload Stats ---
-        Size: {size_gb:.2f} GB
-        Time: {elapsed:.2f} seconds
-        Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-        --- CoreWeave AI Object Storage Upload Stats ---
-        """)
+            return {
+                "success": True,
+                "file_key": file_key,
+                "size_gb": size_gb,
+                "elapsed": elapsed,
+                "bandwidth_mbs": bandwidth_mbs,
+                "bandwidth_gbps": bandwidth_gbps,
+            }
+
         except Exception as e:
             print(f"Upload failed: {e}")
-        return file_key
+            return {"success": False, "error": str(e)}
 
     return (run_s3_upload_test,)
 
 
 @app.cell(hide_code=True)
 def _(run_s3_upload_test: Callable, bucket_name: str, storage: ObjectStorage, upload_form: mo.ui.form):
+    upload_result = None
     if upload_form.value:
         with mo.status.spinner(
-            title="Running Upload Test",
+            title="Running Boto3 Upload Test",
             subtitle=f"Uploading to {bucket_name}",
         ):
-            run_s3_upload_test(
+            _result = run_s3_upload_test(
                 storage=storage,
                 bucket_name=bucket_name,
                 **upload_form.value,
             )
-    return
+            if _result["success"]:
+                upload_result = mo.callout(
+                    mo.md(f"""
+                    ### Boto3 Upload Complete
+                    - **File**: `{_result["file_key"]}`
+                    - **Size**: {_result["size_gb"]:.2f} GB
+                    - **Time**: {_result["elapsed"]:.2f} seconds
+                    - **Bandwidth**: {_result["bandwidth_mbs"]:.2f} MB/s ({_result["bandwidth_gbps"]:.2f} Gbps)
+                    """),
+                    kind="success",
+                )
+            else:
+                upload_result = mo.callout(mo.md(f"Upload failed: {_result['error']}"), kind="danger")
+    upload_result
+    return (upload_result,)
 
 
 @app.cell(hide_code=True)
@@ -419,12 +448,9 @@ def _():
         multipart_threshold_mb: int = 8,
         multipart_chunksize_mb: int = 8,
         max_concurrency: int = 10,
-    ):
-        from boto3.s3.transfer import TransferConfig
-
+    ) -> dict:
         if not bucket_name or not object_key:
-            print("bucket_name and object_key are required")
-            return
+            return {"success": False, "error": "bucket_name and object_key are required"}
 
         test_dir = "/tmp/bandwidth-test"
         os.makedirs(test_dir, exist_ok=True)
@@ -440,16 +466,6 @@ def _():
             use_threads=True,
         )
 
-        print(f"""
-        --- CoreWeave AI Object Storage Download Test (Boto3) ---
-        Bucket: s3://{bucket_name}
-        Key: {object_key}
-        Multipart Threshold: {multipart_threshold_mb} MB
-        Chunk Size: {multipart_chunksize_mb} MB
-        Max Concurrency: {max_concurrency}
-        --- CoreWeave AI Object Storage Download Test (Boto3) ---
-        """)
-
         start = time.time()
         try:
             storage.s3_client.download_file(bucket_name, object_key, output_path, Config=transfer_config)
@@ -461,32 +477,51 @@ def _():
             bandwidth_mbs = size_mb / elapsed
             bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
 
-            print(f"""
-        --- CoreWeave AI Object Storage Download Stats ---
-        Size: {size_gb:.2f} GB
-        Time: {elapsed:.2f} seconds
-        Bandwidth: {bandwidth_mbs:.2f} MB/s ({bandwidth_gbps:.2f} Gbps)
-        --- CoreWeave AI Object Storage Download Stats ---
-        """)
+            return {
+                "success": True,
+                "object_key": object_key,
+                "output_path": output_path,
+                "size_gb": size_gb,
+                "elapsed": elapsed,
+                "bandwidth_mbs": bandwidth_mbs,
+                "bandwidth_gbps": bandwidth_gbps,
+            }
         except Exception as e:
-            print(f"Download failed: {e}")
+            return {"success": False, "error": str(e)}
 
     return (run_s3_download_test,)
 
 
 @app.cell(hide_code=True)
 def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callable, storage: ObjectStorage):
+    download_result = None
     if download_form.value:
         with mo.status.spinner(
-            title="Running Download Test",
+            title="Running Boto3 Download Test",
             subtitle=f"Downloading from {bucket_name}",
         ):
-            run_s3_download_test(
+            _result = run_s3_download_test(
                 storage=storage,
                 bucket_name=bucket_name,
                 **download_form.value,
             )
-    return
+            if _result["success"]:
+                download_result = mo.callout(
+                    mo.md(f"""
+                    ### Boto3 Download Complete
+                    - **Object**: `{_result["object_key"]}`
+                    - **Output**: `{_result["output_path"]}`
+                    - **Size**: {_result["size_gb"]:.2f} GB
+                    - **Time**: {_result["elapsed"]:.2f} seconds
+                    - **Bandwidth**: {_result["bandwidth_mbs"]:.2f} MB/s ({_result["bandwidth_gbps"]:.2f} Gbps)
+                    """),
+                    kind="success",
+                )
+            else:
+                download_result = mo.callout(mo.md(f"Download failed: {_result['error']}"), kind="danger")
+
+    download_result
+    return (download_result,)
 
 
 @app.cell(hide_code=True)
@@ -521,10 +556,16 @@ def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
     ---
     ## Warp Benchmark
 
-    /// admonition | About Warp
+    /// admonition | About Warp Tests
         type: info
-
     [Warp](https://github.com/minio/warp) is a benchmarking tool for S3-compatible object storage that runs comprehensive performance tests on GET, PUT, DELETE, LIST, and STAT operations.
+
+    Results represent the **actual performance your CKS workloads** (pods, jobs, deployments, sunk) can expect when accessing CoreWeave AI Object Storage.
+
+    Performance depends on:
+    - LOTA endpoint: High-speed locally cached access for GPU clusters
+    - CAIOS endpoint: Standard network access
+    - Object size, concurrency level, and operation type
     ///
     """)
 

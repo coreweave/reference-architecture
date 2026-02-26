@@ -35,7 +35,7 @@ class K8s:
         _cluster_region (str | None): Cached cluster region value
     """
 
-    def __init__(self, kubeconfig_path: str = "~/.kube/config"):
+    def __init__(self, kubeconfig_path: str = ""):
         """Initialize Kubernetes client.
 
         Args:
@@ -56,12 +56,17 @@ class K8s:
             config.load_incluster_config()
             print("Loaded in-cluster Kubernetes config")
         except Exception:
+            if not os.getenv("KUBECONFIG_PATH"):
+                raise KubernetesConfigError(
+                    "Failed to load Kubernetes config in-cluster and env var KUBECONFIG_PATH is not set."
+                )
+            kubeconfig_path = os.getenv("KUBECONFIG_PATH", "")
             try:
-                print(f"Loading kubeconfig from {kubeconfig_path}, set env var KUBECONFIG_PATH to override")
+                print(f"Loading kubeconfig from {kubeconfig_path}")
                 config.load_kube_config(config_file=kubeconfig_path)
             except Exception as e:
                 raise KubernetesConfigError(
-                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}, set env var KUBECONFIG_PATH to override: {e}"
+                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}: {e}"
                 )
 
     @property
@@ -175,6 +180,9 @@ class K8s:
         """
         if self._cluster_region is not None:
             return self._cluster_region
+        if os.getenv("CLUSTER_REGION") is not None:
+            self._cluster_region = os.getenv("CLUSTER_REGION", "")
+            return self._cluster_region
         try:
             nodes = self.core_v1.list_node()
             if not nodes.items:
@@ -184,13 +192,14 @@ class K8s:
             if first_node.metadata is None or first_node.metadata.labels is None:
                 raise KubernetesError("First node metadata or labels are missing")
 
-            region = (
-                first_node.metadata.labels.get("topology.kubernetes.io/region")
-                or first_node.metadata.labels.get("failure-domain.beta.kubernetes.io/region")
-                or ""
+            region = first_node.metadata.labels.get("topology.kubernetes.io/region") or first_node.metadata.labels.get(
+                "failure-domain.beta.kubernetes.io/region"
             )
 
-            region = region + AVAILABILITY_ZONE
+            if region:
+                region = region + AVAILABILITY_ZONE
+            else:
+                raise KubernetesError("Unable to detect region, manually set with env var CLUSTER_REGION")
 
             self._cluster_region = region
 
