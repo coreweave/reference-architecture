@@ -172,7 +172,8 @@ def _(storage: ObjectStorage | None):
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage | None):
+def _(storage: ObjectStorage | None, bucket_created: float):
+    bucket_created
     buckets = storage.list_buckets()
     _initial_bucket = buckets[0] if buckets else None
     bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
@@ -205,7 +206,7 @@ def _(create_bucket_form, storage: ObjectStorage | None):
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown):
+def _(bucket_dropdown: mo.ui.dropdown):
     _ui = mo.md(f"""
         ### Select CoreWeave AI Object Storage Bucket for upload and download tests
         {bucket_dropdown}
