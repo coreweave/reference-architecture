@@ -43,6 +43,8 @@ def run_s3_upload_test(
     Note:
         Test files are stored in /tmp/bandwidth-test and reused if they already exist.
     """
+    storage.update_max_pool_connections(max_concurrency)
+
     test_dir = "/tmp/bandwidth-test"
     test_filename = f"{test_file_size_gb}GB"
     os.makedirs(test_dir, exist_ok=True)
@@ -65,7 +67,7 @@ def run_s3_upload_test(
     transfer_config = TransferConfig(
         multipart_threshold=multipart_threshold_mb * 1024 * 1024,
         multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
-        max_concurrency=max_concurrency,
+        max_concurrency=20,
         use_threads=True,
     )
     file_key = f"benchmark/{test_file_size_gb}GB"
@@ -136,6 +138,8 @@ def run_s3_download_test(
     if not bucket_name or not object_key:
         return {"success": False, "error": "bucket_name and object_key are required"}
 
+    storage.update_max_pool_connections(max_concurrency)
+
     test_dir = "/tmp/bandwidth-test"
     os.makedirs(test_dir, exist_ok=True)
 
@@ -146,7 +150,7 @@ def run_s3_download_test(
     transfer_config = TransferConfig(
         multipart_threshold=multipart_threshold_mb * 1024 * 1024,
         multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
-        max_concurrency=max_concurrency,
+        max_concurrency=20,
         use_threads=True,
     )
 

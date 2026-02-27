@@ -29,11 +29,15 @@ class K8s:
     Handles both in-cluster and local kubeconfig authentication.
 
     Attributes:
-        _core_v1 (client.CoreV1Api | None): Cached CoreV1Api client.
-        _apps_v1 (client.AppsV1Api | None): Cached AppsV1Api client.
-        _batch_v1 (client.BatchV1Api | None): Cached BatchV1Api client.
-        _cluster_region (str | None): Cached cluster region value.
-        _cluster_name (str | None): Cached cluster name value.
+        core_v1 (client.CoreV1Api): Kubernetes Core API client for managing pods, services, etc.
+        apps_v1 (client.AppsV1Api): Kubernetes Apps API client for managing deployments, statefulsets, etc.
+        batch_v1 (client.BatchV1Api): Kubernetes Batch API client for managing jobs, cronjobs, etc.
+        cluster_region (str): The CoreWeave region where the cluster is located (e.g., "ORD1").
+        cluster_name (str): The name of the Kubernetes cluster.
+        org_id (str): The CoreWeave organization ID.
+        nodes (dict): Information about GPU and CPU nodes in the cluster.
+        gpu_node_count (int): Total number of GPU nodes in the cluster.
+        cpu_node_count (int): Total number of CPU nodes in the cluster.
     """
 
     def __init__(self, kubeconfig_path: str = "", context: str = ""):
@@ -221,7 +225,8 @@ class K8s:
         """
         self._cluster_region = region
 
-    def get_nodes(self) -> dict[str, dict[str, dict]]:
+    @property
+    def nodes(self) -> dict[str, dict[str, dict]]:
         """Get the number and type of nodes in the cluster.
 
         Counts nodes with nvidia.com/gpu resources as gpu nodes and
@@ -280,6 +285,18 @@ class K8s:
             return {"gpu": gpu_nodes, "cpu": cpu_nodes}
         except ApiException as e:
             raise KubernetesError(f"Failed to get node details: {e}")
+
+    @property
+    def gpu_node_count(self) -> int:
+        """Get the total number of GPU nodes in the cluster."""
+        nodes = self.nodes
+        return sum(info["node_count"] for info in nodes["gpu"].values())
+
+    @property
+    def cpu_node_count(self) -> int:
+        """Get the total number of CPU nodes in the cluster."""
+        nodes = self.nodes
+        return sum(info["node_count"] for info in nodes["cpu"].values())
 
     def _create_or_update_resource(self, kind: str, name: str, namespace: str, doc: dict, results: dict) -> None:
         """Helper method to create or update a Kubernetes resource.

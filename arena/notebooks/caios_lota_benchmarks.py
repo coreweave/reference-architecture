@@ -323,8 +323,8 @@ def _(object_key_dropdown):
             mo.md("""
             ### Configure CoreWeave AI Object Storage Download Test
             - Object: {object_key}
-            - Multipart Threshold (MB): {multipart_threshold_mb}
-            - Chunk Size (MB): {multipart_chunksize_mb}
+            - Multipart Threshold (MB), use multipart for files greater than: {multipart_threshold_mb}
+            - Chunk Size (MB), MB per part: {multipart_chunksize_mb}
             - Max Concurrency: {max_concurrency}
             """)
             .batch(

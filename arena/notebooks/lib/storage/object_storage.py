@@ -99,6 +99,19 @@ class ObjectStorage(ABC):
         self._credentials_expiry: Optional[datetime] = None
         self._credential_duration: int = DEFAULT_ACCESS_TOKEN_DURATION
 
+    def update_max_pool_connections(self, max_connections: int) -> None:
+        """Update the max pool connections for the S3 client.
+
+        Invalidates and recreates the S3 client with the new config settings.
+        Used before running high-concurrency ops
+
+        Args:
+            max_connections (int): New maximum number of connections in the pool.
+        """
+        self.s3_config.max_pool_connections: Config = max_connections
+        # Invalidate cached S3 client so it gets recreated with new config on next call
+        self._s3_client = None
+
     @property
     def access_key_id(self) -> str:
         """Get access key ID, refreshing if necessary."""
