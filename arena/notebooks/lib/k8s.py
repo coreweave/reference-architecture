@@ -468,9 +468,15 @@ class K8s:
 
             cluster_name = first_node.metadata.labels.get("node.coreweave.cloud/cluster")
             if not cluster_name:
-                contexts, active_context = config.list_kube_config_contexts()
-                if active_context and active_context.get("name"):
-                    cluster_name = active_context["name"]
+                # Try to get cluster name from kubeconfig context
+                # Fails if running in-cluster
+                try:
+                    contexts, active_context = config.list_kube_config_contexts()
+                    if active_context and active_context.get("name"):
+                        cluster_name = active_context["name"]
+                except config.ConfigException:
+                    # Running in-cluster without kubeconfig, can only rely on node labels
+                    pass
 
             if not cluster_name:
                 raise KubernetesError("Cluster name not found in node labels or kubeconfig context")

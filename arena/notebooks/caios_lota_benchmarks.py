@@ -172,8 +172,9 @@ def _(storage: ObjectStorage | None):
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage | None, bucket_created: float):
-    bucket_created
+def _(bucket_created, storage: ObjectStorage | None):
+    if bucket_created:
+        pass
     buckets = storage.list_buckets()
     _initial_bucket = buckets[0] if buckets else None
     bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
@@ -202,11 +203,11 @@ def _(create_bucket_form, storage: ObjectStorage | None):
 
     _output = mo.vstack([_ui, _bucket_creation_result] if _bucket_creation_result else [_ui])
     _output
-    return
+    return (bucket_created,)
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown: mo.ui.dropdown):
+def _(bucket_dropdown):
     _ui = mo.md(f"""
         ### Select CoreWeave AI Object Storage Bucket for upload and download tests
         {bucket_dropdown}
@@ -336,7 +337,7 @@ def _(object_key_dropdown):
         )
         _ui = download_form
     else:
-        download_form = None
+        download_form = mo.md("").batch().form()
         _ui = mo.md("""
         /// admonition | CoreWeave AI Object Storage Download Test
             type: warning
@@ -354,7 +355,7 @@ def _(bucket_name, download_form, storage: ObjectStorage | None):
     mo.stop(storage is None)
 
     download_result = None
-    if download_form and download_form.value:
+    if download_form.value:
         with mo.status.spinner(
             title="Running Boto3 Download Test",
             subtitle=f"Downloading from {bucket_name}",
