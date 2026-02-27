@@ -89,6 +89,7 @@ class ObjectStorage(ABC):
             connect_timeout=10,
             read_timeout=600,  # 10 min
             retries={"max_attempts": 3},
+            max_pool_connections=50,
         )
 
         self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
