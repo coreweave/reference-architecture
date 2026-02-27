@@ -257,7 +257,7 @@ def _(storage: ObjectStorage | None):
             test_file_size_gb=mo.ui.number(start=0, stop=1000, value=10),  # type: ignore
             multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
             multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-            max_concurrency=mo.ui.number(start=1, stop=10000, value=300, show_value=True),  # type: ignore
+            max_concurrency=mo.ui.number(start=1, stop=10000, value=300),  # type: ignore
         )
         .form(submit_button_label="Run Upload Test", clear_on_submit=False)
     )
@@ -331,7 +331,7 @@ def _(object_key_dropdown):
                 object_key=object_key_dropdown,
                 multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
                 multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-                max_concurrency=mo.ui.number(start=1, stop=10000, value=300, show_value=True),  # type: ignore
+                max_concurrency=mo.ui.number(start=1, stop=10000, value=300),  # type: ignore
             )
             .form(submit_button_label="Run Download Test", clear_on_submit=False)
         )
@@ -406,16 +406,15 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(bucket_name, k8s, storage: ObjectStorage | None):
+def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
     mo.stop(storage is None)
 
     _node_count = 1
     # get the node count to set default concurrency, rec from storage is 300/node
-    _gpu_nodes = k8s.get_nodes().get("gpu", {})
-    _gpu_count = sum(node.get("node_count", 0) for node in _gpu_nodes.values())
+    _gpu_count = k8s.gpu_node_count
     if not _gpu_count:
-        _cpu_nodes = k8s.get_nodes().get("cpu", {})
-        _node_count = sum(node.get("node_count", 0) for node in _cpu_nodes.values())
+        _cpu_nodes = k8s.cpu_node_count
+        _node_count = k8s.cpu_node_count
     else:
         _node_count = _gpu_count - 1  # subtract 1 for the warp server node
     _default_concurrency = _node_count * 300
