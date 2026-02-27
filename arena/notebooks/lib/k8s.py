@@ -466,7 +466,10 @@ class K8s:
             if first_node.metadata is None or first_node.metadata.labels is None:
                 raise KubernetesError("First node metadata or labels are missing")
 
-            cluster_name = first_node.metadata.labels.get("node.coreweave.cloud/cluster")
+            cluster_name = first_node.metadata.labels.get(
+                "cks.coreweave.com/cluster"
+            ) or first_node.metadata.labels.get("node.coreweave.cloud/cluster")
+
             if not cluster_name:
                 # Try to get cluster name from kubeconfig context
                 # Fails if running in-cluster
