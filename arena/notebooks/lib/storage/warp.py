@@ -26,7 +26,7 @@ class WarpRunner:
             k8s: Kubernetes client instance
             bucket_name: Name of CoreWeave bucket to run tests again
             object_storage: ObjectStorage client with credentials
-            namespace: Kubernetes namespace for warp resources (defaults to POD_NAMESPACE env var)
+            namespace: Kubernetes namespace for warp resources (defaults to POD_NAMESPACE env var and falls back to tenant_slurm)
         """
         self.k8s = k8s
         self.object_storage = object_storage
@@ -67,20 +67,18 @@ class WarpRunner:
                 "unchanged": []
                 }
         """
-        nodes = self.k8s.get_nodes()
+        nodes = self.k8s.nodes
         node_count = 0
 
         if compute_class is None:
-            gpu_nodes = nodes.get("gpu", {})
-            if gpu_nodes:
+            if self.k8s.gpu_node_count > 0:
                 compute_class = "gpu"
-                for gpu_node_type in gpu_nodes:
-                    node_count += gpu_nodes[gpu_node_type].get("node_count", 0)
+                node_count = self.k8s.gpu_node_count
             else:
                 compute_class = "cpu"
-                cpu_nodes = nodes.get("cpu", {})
-                for cpu_node_type in cpu_nodes:
-                    node_count += cpu_nodes[cpu_node_type].get("node_count", 0)
+                node_count = self.k8s.cpu_node_count
+        else:
+            node_count = self.k8s.gpu_node_count if compute_class == "gpu" else self.k8s.cpu_node_count
 
         warp_yaml = self._generate_warp_yaml(
             host_count=node_count,
