@@ -11,21 +11,22 @@
 #     "ruamel-yaml>=0.19.1"
 # ]
 # ///
-from typing import Callable
 
 import marimo
 
-__generated_with = "0.19.11"
+__generated_with = "0.20.2"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 with app.setup:
     import json
     import os
     import time
+    from typing import Callable
 
     import marimo as mo
     from boto3.s3.transfer import TransferConfig
     from lib.k8s import K8s
+    from lib.storage.boto3 import run_s3_download_test, run_s3_upload_test
     from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
     from lib.storage.warp import WarpRunner
 
@@ -113,11 +114,11 @@ def _(use_lota_checkbox):
     else:
         token_form = None
     _ui
-    return caios, token_form, use_lota
+    return caios, k8s, token_form, use_lota
 
 
 @app.cell(hide_code=True)
-def _(k8s: K8s, caios: ObjectStorage, token_form: mo.ui.form, use_lota: bool):
+def _(caios: ObjectStorage | None, k8s, token_form, use_lota):
     storage: ObjectStorage | None = None
     if caios is not None:
         storage = caios
@@ -128,7 +129,7 @@ def _(k8s: K8s, caios: ObjectStorage, token_form: mo.ui.form, use_lota: bool):
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage):
+def _(storage: ObjectStorage | None):
     # Stop execution of downstream cells if storage is not initialized properly
     mo.stop(
         storage is None,
@@ -164,7 +165,6 @@ def _():
 
     {use_lota_checkbox}
     """)
-
     return (use_lota_checkbox,)
 
 
@@ -184,8 +184,10 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage):
-    mo.stop(storage is None)
+def _(storage: ObjectStorage | None):
+    if storage is None:
+        mo.stop(True)
+        return
 
     get_buckets, set_buckets = mo.state(storage.list_buckets())
     buckets = get_buckets()
@@ -202,13 +204,25 @@ def _(storage: ObjectStorage):
         .form(submit_button_label="Create Bucket", clear_on_submit=False)
     )
     bucket_refresh = mo.ui.button(label="Refresh Bucket List")
-
-    return bucket_dropdown, create_bucket_form, buckets, set_buckets, bucket_refresh
+    return (
+        bucket_dropdown,
+        bucket_refresh,
+        buckets,
+        create_bucket_form,
+        set_buckets,
+    )
 
 
 @app.cell(hide_code=True)
-def _(create_bucket_form: mo.ui.form, set_buckets, bucket_refresh: mo.ui.button, storage: ObjectStorage):
-    mo.stop(storage is None)
+def _(
+    bucket_refresh,
+    create_bucket_form,
+    set_buckets,
+    storage: ObjectStorage | None,
+):
+    if storage is None:
+        mo.stop(True)
+        return
 
     _ui = None
     if create_bucket_form.value:
@@ -234,7 +248,7 @@ def _(create_bucket_form: mo.ui.form, set_buckets, bucket_refresh: mo.ui.button,
 
 
 @app.cell(hide_code=True)
-def _(create_bucket_form: mo.ui.form, buckets: list[str]):
+def _(buckets, create_bucket_form):
     _ui = None
     if buckets:
         _ui = mo.md(f"""
@@ -259,14 +273,13 @@ def _(create_bucket_form: mo.ui.form, buckets: list[str]):
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown: mo.ui.dropdown, buckets: list[str]):
+def _(bucket_dropdown):
     _ui = mo.md(f"""
         ### Select CoreWeave AI Object Storage Bucket for upload and download tests
         {bucket_dropdown}
         """)
     bucket_name = bucket_dropdown.value
     _ui
-
     return (bucket_name,)
 
 
@@ -295,7 +308,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage):
+def _(storage: ObjectStorage | None):
     mo.stop(storage is None)
 
     upload_form = (
@@ -319,72 +332,10 @@ def _(storage: ObjectStorage):
 
 
 @app.cell(hide_code=True)
-def _(bucket_name: str):
-    def run_s3_upload_test(
-        storage: ObjectStorage,
-        bucket_name: str,
-        test_file_size_gb: int = 1,
-        multipart_threshold_mb: int = 8,
-        multipart_chunksize_mb: int = 8,
-        max_concurrency: int = 10,
-    ):
-        test_dir = "/tmp/bandwidth-test"
-        test_filename = f"{test_file_size_gb}GB"
-        os.makedirs(test_dir, exist_ok=True)
-        file_size_bytes = int(test_file_size_gb * 1024 * 1024 * 1024)
-        test_file = f"{test_dir}/{test_filename}"
-
-        if not os.path.exists(test_file):
-            print(f"Creating test file: {test_filename}...")
-            chunk_size = 64 * 1024 * 1024  # 64 MB
-            zero_chunk = b"\0" * chunk_size
-            with open(test_file, "wb") as f:
-                remaining = file_size_bytes
-                while remaining > 0:
-                    write_size = min(chunk_size, remaining)
-                    f.write(zero_chunk[:write_size])
-                    remaining -= write_size
-        else:
-            print(f"Test file '{test_filename}' already exists locally, proceeding to upload.")
-
-        transfer_config = TransferConfig(
-            multipart_threshold=multipart_threshold_mb * 1024 * 1024,
-            multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
-            max_concurrency=max_concurrency,
-            use_threads=True,
-        )
-        file_key = f"benchmark/{test_file_size_gb}GB"
-
-        start = time.time()
-        try:
-            storage.s3_client.upload_file(test_file, bucket_name, file_key, Config=transfer_config)
-            elapsed = time.time() - start
-
-            size_bytes = os.path.getsize(test_file)
-            size_gb = size_bytes / (1024 * 1024 * 1024)
-            size_mb = size_bytes / (1024 * 1024)
-            bandwidth_mbs = size_mb / elapsed
-            bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
-
-            return {
-                "success": True,
-                "file_key": file_key,
-                "size_gb": size_gb,
-                "elapsed": elapsed,
-                "bandwidth_mbs": bandwidth_mbs,
-                "bandwidth_gbps": bandwidth_gbps,
-            }
-
-        except Exception as e:
-            print(f"Upload failed: {e}")
-            return {"success": False, "error": str(e)}
-
-    return (run_s3_upload_test,)
-
-
-@app.cell(hide_code=True)
-def _(run_s3_upload_test: Callable, bucket_name: str, storage: ObjectStorage, upload_form: mo.ui.form):
-    mo.stop(storage is None)
+def _(bucket_name, storage: ObjectStorage | None, upload_form):
+    if storage is None:
+        mo.stop(True)
+        return
 
     upload_result = None
     if upload_form.value:
@@ -411,12 +362,14 @@ def _(run_s3_upload_test: Callable, bucket_name: str, storage: ObjectStorage, up
             else:
                 upload_result = mo.callout(mo.md(f"Upload failed: {_result['error']}"), kind="danger")
     upload_result
-    return (upload_result,)
+    return
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage, bucket_name: str):
-    mo.stop(storage is None)
+def _(bucket_name, storage: ObjectStorage | None):
+    if storage is None:
+        mo.stop(True)
+        return
 
     if bucket_name:
         objects_result = storage.list_objects(bucket_name, prefix="benchmark/")
@@ -430,11 +383,11 @@ def _(storage: ObjectStorage, bucket_name: str):
     else:
         object_key_dropdown = None
         object_keys = []
-    return object_key_dropdown, object_keys
+    return (object_key_dropdown,)
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
+def _(object_key_dropdown):
     if object_key_dropdown is not None:
         download_form = (
             mo.md("""
@@ -445,7 +398,7 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
             - Max Concurrency: {max_concurrency}
             """)
             .batch(
-                object_key=object_key_dropdown,  # type: ignore
+                object_key=object_key_dropdown,
                 multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
                 multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
                 max_concurrency=mo.ui.slider(1, 1000, value=300, show_value=True),  # type: ignore
@@ -468,61 +421,10 @@ def _(bucket_dropdown: mo.ui.dropdown, object_key_dropdown: mo.ui.dropdown):
 
 
 @app.cell(hide_code=True)
-def _():
-    def run_s3_download_test(
-        storage: ObjectStorage,
-        bucket_name: str,
-        object_key: str,
-        multipart_threshold_mb: int = 8,
-        multipart_chunksize_mb: int = 8,
-        max_concurrency: int = 10,
-    ) -> dict:
-        if not bucket_name or not object_key:
-            return {"success": False, "error": "bucket_name and object_key are required"}
-
-        test_dir = "/tmp/bandwidth-test"
-        os.makedirs(test_dir, exist_ok=True)
-
-        # Extract filename from object_key for local storage
-        filename = os.path.basename(object_key)
-        output_path = f"{test_dir}/{filename}"
-
-        transfer_config = TransferConfig(
-            multipart_threshold=multipart_threshold_mb * 1024 * 1024,
-            multipart_chunksize=multipart_chunksize_mb * 1024 * 1024,
-            max_concurrency=max_concurrency,
-            use_threads=True,
-        )
-
-        start = time.time()
-        try:
-            storage.s3_client.download_file(bucket_name, object_key, output_path, Config=transfer_config)
-            elapsed = time.time() - start
-
-            size_bytes = os.path.getsize(output_path)
-            size_gb = size_bytes / (1024 * 1024 * 1024)
-            size_mb = size_bytes / (1024 * 1024)
-            bandwidth_mbs = size_mb / elapsed
-            bandwidth_gbps = (size_bytes * 8) / elapsed / 1_000_000_000
-
-            return {
-                "success": True,
-                "object_key": object_key,
-                "output_path": output_path,
-                "size_gb": size_gb,
-                "elapsed": elapsed,
-                "bandwidth_mbs": bandwidth_mbs,
-                "bandwidth_gbps": bandwidth_gbps,
-            }
-        except Exception as e:
-            return {"success": False, "error": str(e)}
-
-    return (run_s3_download_test,)
-
-
-@app.cell(hide_code=True)
-def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callable, storage: ObjectStorage):
-    mo.stop(storage is None)
+def _(bucket_name, download_form, storage: ObjectStorage | None):
+    if storage is None:
+        mo.stop(True)
+        return
 
     download_result = None
     if download_form.value:
@@ -551,7 +453,7 @@ def _(bucket_name: str, download_form: mo.ui.form, run_s3_download_test: Callabl
                 download_result = mo.callout(mo.md(f"Download failed: {_result['error']}"), kind="danger")
 
     download_result
-    return (download_result,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -576,8 +478,21 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
-    mo.stop(storage is None)
+def _(bucket_name, k8s, storage: ObjectStorage | None):
+    if storage is None:
+        mo.stop(True)
+        return
+
+    _node_count = 1
+    # get the node count to set default concurrency, rec from storage is 300/node
+    _gpu_nodes = k8s.get_nodes().get("gpu", {})
+    _gpu_count = sum(node.get("node_count", 0) for node in _gpu_nodes.values())
+    if not _gpu_count:
+        _cpu_nodes = k8s.get_nodes().get("cpu", {})
+        _node_count = sum(node.get("node_count", 0) for node in _cpu_nodes.values())
+    else:
+        _node_count = _gpu_count - 1  # subtract 1 for the warp server node
+    _default_concurrency = _node_count * 300
 
     warp_runner = WarpRunner(
         k8s,
@@ -601,18 +516,20 @@ def _(k8s: K8s, bucket_name: str, storage: ObjectStorage):
             ),
             duration=mo.ui.number(1, 60, step=1, value=10, label="Duration (min):"),  # type: ignore
             objects=mo.ui.number(1000, 1_000_000, step=1, value=1000, label="Objects:"),  # type: ignore
-            concurrency=mo.ui.number(1, 1000, step=1, value=300, label="Concurrency:"),  # type: ignore
+            concurrency=mo.ui.number(1, 1000, step=1, value=_default_concurrency, label="Concurrency:"),  # type: ignore
         )
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
     )
 
     warp_form
-    return (warp_form, warp_runner)
+    return warp_form, warp_runner
 
 
 @app.cell(hide_code=True)
-def _(warp_objects: int, warp_runner: WarpRunner, warp_form: mo.ui.form, storage: ObjectStorage, bucket_name: str):
-    mo.stop(storage is None)
+def _(bucket_name, storage: ObjectStorage | None, warp_form, warp_runner):
+    if storage is None:
+        mo.stop(True)
+        return
 
     if warp_form.value:
         warp_config = warp_form.value
@@ -633,39 +550,35 @@ def _(warp_objects: int, warp_runner: WarpRunner, warp_form: mo.ui.form, storage
             )
 
         result_section = mo.md(f"""
-/// admonition | Benchmark Started
+    /// admonition | Benchmark Started
 
-Warp benchmark job submitted successfully.
+    Warp benchmark job submitted successfully.
 
-**Operation:** {warp_operation}
-**Endpoint:** {storage.endpoint_url}
-**Objects:** {warp_objects}
-**Duration:** {warp_duration}m
+    **Operation:** {warp_operation}
+    **Endpoint:** {storage.endpoint_url}
+    **Objects:** {warp_objects}
+    **Duration:** {warp_duration}m
 
-Submit Results:
-```json
-{json.dumps(warp_submit_results, indent=2)}
+    Submit Results:
+    ```json
+    {json.dumps(warp_submit_results, indent=2)}
 
-```
-Results will be viewable below shortly or in the pod logs in-cluster.<br>
-Also, review the Grafana dashboards:<br>
-- [CAIOS Usage](https://cks-grafana.coreweave.com/d/bebi5t788t6v4c/caios-usage)
-- [CAIOS Lota](https://cks-grafana.coreweave.com/d/eeff523hiaewwc/caios-lota)
-///
+    ```
+    Results will be viewable below shortly or in the pod logs in-cluster.<br>
+    Also, review the Grafana dashboards:<br>
+    - [CAIOS Usage](https://cks-grafana.coreweave.com/d/bebi5t788t6v4c/caios-usage)
+    - [CAIOS Lota](https://cks-grafana.coreweave.com/d/eeff523hiaewwc/caios-lota)
+    ///
         """)
         mo.output.replace(result_section)
+    return (warp_operation,)
 
 
 @app.cell(hide_code=True)
-def _(
-    storage: ObjectStorage,
-    warp_runner: WarpRunner,
-    warp_operation: str,
-    warp_duration: str,
-    warp_submit_results: dict[str, list[str]],
-    warp_form: mo.ui.form,
-):
-    mo.stop(storage is None)
+def _(storage: ObjectStorage | None, warp_form, warp_operation, warp_runner):
+    if storage is None:
+        mo.stop(True)
+        return
 
     if warp_form.value:
         _start_time = time.time()
@@ -688,11 +601,11 @@ def _(
                     mo.vstack(
                         [
                             mo.md(f"""
-### Warp Benchmark Progress
+    ### Warp Benchmark Progress
 
-**Status:** {_status}
-**Operation:** {warp_operation}
-**Endpoint:** {storage.endpoint_url}
+    **Status:** {_status}
+    **Operation:** {warp_operation}
+    **Endpoint:** {storage.endpoint_url}
                             """),
                             mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
                         ]
@@ -703,16 +616,16 @@ def _(
         _total_time = int(time.time() - _start_time)
 
         _final_output = mo.md(f"""
-### Benchmark Complete
+    ### Benchmark Complete
 
-**Total Time:** {_total_time}s
-**Operation:** {warp_operation}
-**Endpoint:** {storage.endpoint_url}
-**Status:** {_status}
-```\n{_log_text}\n```
-""")
+    **Total Time:** {_total_time}s
+    **Operation:** {warp_operation}
+    **Endpoint:** {storage.endpoint_url}
+    **Status:** {_status}
+    ```\n{_log_text}\n```
+    """)
         mo.output.replace(_final_output)
-    return (warp_results,)
+    return
 
 
 if __name__ == "__main__":
