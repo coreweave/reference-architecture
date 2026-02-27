@@ -21,7 +21,7 @@ with app.setup:
     import json
     import os
     import time
-    from typing import Callable
+    from collections.abc import Callable
 
     import marimo as mo
     from boto3.s3.transfer import TransferConfig
@@ -159,11 +159,6 @@ def _():
 def _(storage: ObjectStorage | None):
     mo.stop(storage is None)
 
-    get_buckets, set_buckets = mo.state(storage.list_buckets())
-    buckets = get_buckets()
-
-    _initial_bucket = buckets[0] if buckets else None
-    bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
     create_bucket_form = (
         mo.md("""
         **Bucket Name:** {bucket_name}
@@ -173,64 +168,39 @@ def _(storage: ObjectStorage | None):
         )
         .form(submit_button_label="Create Bucket", clear_on_submit=False)
     )
-    return (
-        bucket_dropdown,
-        buckets,
-        create_bucket_form,
-        set_buckets,
-    )
+    return (create_bucket_form,)
 
 
 @app.cell(hide_code=True)
-def _(
-    create_bucket_form,
-    set_buckets,
-    storage: ObjectStorage | None,
-):
+def _(storage: ObjectStorage | None):
+    buckets = storage.list_buckets()
+    _initial_bucket = buckets[0] if buckets else None
+    bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
+    return (bucket_dropdown,)
+
+
+@app.cell(hide_code=True)
+def _(create_bucket_form, storage: ObjectStorage | None):
     mo.stop(storage is None)
 
-    _ui = None
+    _bucket_creation_result = None
+    bucket_created = 0.0
     if create_bucket_form.value:
         try:
             _name = create_bucket_form.value.get("bucket_name")
             storage.create_bucket(_name)
-            _ui = mo.md(
-                f"""
-                /// admonition | Bucket Created
-                    type: Info
-
-                Successfully created bucket {_name}. Please refresh the bucket list dropdown to see the new bucket.
-                """
-            )
+            bucket_created = time.time()  # timestamp so that multiple bucket creation cause re-run
+            _bucket_creation_result = mo.callout(mo.md(f"Successfully created bucket **{_name}**"), kind="success")
         except Exception as _e:
-            _ui = mo.md(f"Failed to create bucket: {_e}")
+            _bucket_creation_result = mo.callout(mo.md(f"Failed to create bucket: {_e}"), kind="danger")
 
-    _ui
-    return
+    _ui = mo.md(f"""
+    ### Create S3 Bucket
+    {create_bucket_form}
+    """)
 
-
-@app.cell(hide_code=True)
-def _(buckets, create_bucket_form):
-    _ui = None
-    if buckets:
-        _ui = mo.md(f"""
-        ### Create S3 Bucket
-
-        {create_bucket_form}
-        """)
-    else:
-        _ui = mo.md(f"""
-        ### Create CoreWeave AI Object Storage Bucket
-
-        /// admonition | No Buckets Found
-            type: warning
-
-        No buckets found in your account. Create one to get started:
-        ///
-
-        {create_bucket_form}
-        """)
-    _ui
+    _output = mo.vstack([_ui, _bucket_creation_result] if _bucket_creation_result else [_ui])
+    _output
     return
 
 
@@ -367,7 +337,7 @@ def _(object_key_dropdown):
     else:
         download_form = None
         _ui = mo.md("""
-        /// admonition | No Objects Available
+        /// admonition | CoreWeave AI Object Storage Download Test
             type: warning
 
         No objects available for download. Please select a bucket and upload a file first using the upload test above.
@@ -383,7 +353,7 @@ def _(bucket_name, download_form, storage: ObjectStorage | None):
     mo.stop(storage is None)
 
     download_result = None
-    if download_form.value:
+    if download_form and download_form.value:
         with mo.status.spinner(
             title="Running Boto3 Download Test",
             subtitle=f"Downloading from {bucket_name}",

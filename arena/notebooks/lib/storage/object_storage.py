@@ -292,7 +292,6 @@ class ObjectStorage(ABC):
                 Bucket=bucket_name,
                 CreateBucketConfiguration={"LocationConstraint": self.region},
             )
-            print(f"Created bucket: '{bucket_name}'")
             return True
         except Exception as e:
             print(f"Error creating bucket: {e}")
