@@ -26,7 +26,7 @@ class WarpRunner:
             k8s: Kubernetes client instance
             bucket_name: Name of CoreWeave bucket to run tests again
             object_storage: ObjectStorage client with credentials
-            namespace: Kubernetes namespace for warp resources (defaults to POD_NAMESPACE env var)
+            namespace: Kubernetes namespace for warp resources (defaults to POD_NAMESPACE env var and falls back to tenant_slurm)
         """
         self.k8s = k8s
         self.object_storage = object_storage

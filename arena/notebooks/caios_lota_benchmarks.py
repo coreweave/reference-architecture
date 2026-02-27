@@ -26,6 +26,7 @@ with app.setup:
     import marimo as mo
     from boto3.s3.transfer import TransferConfig
     from lib.k8s import K8s
+    from lib.reusable_cells import about, banner, cw_token_input, table_of_contents
     from lib.storage.boto3 import run_s3_download_test, run_s3_upload_test
     from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
     from lib.storage.warp import WarpRunner
@@ -33,35 +34,23 @@ with app.setup:
 
 @app.cell(hide_code=True)
 def _():
-    mo.md(r"""
-    ![CoreWeave ARENA Banner](public/banner.jpg)
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _():
-    mo.md(r"""
-    # CoreWeave ARENA: Object Storage & LOTA
-
-    /// admonition | About This Notebook
-        type: info
-
-    This notebook provides a walkthrough for benchmarking CoreWeave AI Object Storage (CAIOS) and LOTA.
-    ///
-    """)
-    return
-
-
-@app.cell(hide_code=True)
-def _():
-    mo.md(r"""
-    /// details | Table of Contents
-
-    - **Bucket Operations** - List and manage buckets
-    - **Boto3 Upload/Download Performance Tests** - Local Benchmarking
-    ///
-    """)
+    _elements = [
+        banner(),
+        about(
+            "Object Storage & LOTA",
+            """This notebook provides a walkthrough for benchmarking CoreWeave AI Object Storage (CAIOS) and LOTA.<br>
+               _If you are running this notebook in edit mode, make sure you start by running all cells in the bottom right._
+            """,
+        ),
+        table_of_contents(
+            [
+                {"title": "Bucket Operations", "description": "List and manage buckets"},
+                {"title": "Boto3 Upload & Download Performance Tests", "description": "Local benchmarking"},
+                {"title": "Warp Benchmark", "description": "Multinode cluster benchmarking"},
+            ]
+        ),
+    ]
+    mo.vstack(_elements)
     return
 
 
@@ -94,25 +83,8 @@ def _(use_lota_checkbox):
         caios = ObjectStorage.auto(k8s, use_lota=use_lota)
     except MissingCredentialsError:
         cw_token_required = True
-    if cw_token_required:
-        token_form = (
-            mo.md("{cw_token}")
-            .batch(cw_token=mo.ui.text(kind="password", placeholder="CW-SECRET-...", full_width=True))  # type: ignore
-            .form(submit_button_label="Connect", bordered=False)
-        )
-        _ui = mo.md(
-            f"""
-            /// admonition | Manual Initialization Required
-                type: warning
 
-            Automatic credentials not found. Please enter your [CoreWeave access token](https://console.coreweave.com/tokens) to initialize the ObjectStorage client.
-            ///
-
-            {token_form}
-            """
-        )
-    else:
-        token_form = None
+    _ui, token_form = cw_token_input(token_required=cw_token_required)
     _ui
     return caios, k8s, token_form, use_lota
 
@@ -185,9 +157,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _(storage: ObjectStorage | None):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     get_buckets, set_buckets = mo.state(storage.list_buckets())
     buckets = get_buckets()
@@ -203,10 +173,8 @@ def _(storage: ObjectStorage | None):
         )
         .form(submit_button_label="Create Bucket", clear_on_submit=False)
     )
-    bucket_refresh = mo.ui.button(label="Refresh Bucket List")
     return (
         bucket_dropdown,
-        bucket_refresh,
         buckets,
         create_bucket_form,
         set_buckets,
@@ -215,14 +183,11 @@ def _(storage: ObjectStorage | None):
 
 @app.cell(hide_code=True)
 def _(
-    bucket_refresh,
     create_bucket_form,
     set_buckets,
     storage: ObjectStorage | None,
 ):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     _ui = None
     if create_bucket_form.value:
@@ -240,9 +205,6 @@ def _(
         except Exception as _e:
             _ui = mo.md(f"Failed to create bucket: {_e}")
 
-    if bucket_refresh.value:
-        set_buckets(storage.list_buckets())
-        _ui = mo.md("Bucket list refreshed")
     _ui
     return
 
@@ -286,7 +248,7 @@ def _(bucket_dropdown):
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Boto3 Upload/Download Performance Tests
+    ## Boto3 Upload & Download Performance Tests
 
     /// admonition | About Boto3 Tests
         type: info
@@ -333,9 +295,7 @@ def _(storage: ObjectStorage | None):
 
 @app.cell(hide_code=True)
 def _(bucket_name, storage: ObjectStorage | None, upload_form):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     upload_result = None
     if upload_form.value:
@@ -367,9 +327,7 @@ def _(bucket_name, storage: ObjectStorage | None, upload_form):
 
 @app.cell(hide_code=True)
 def _(bucket_name, storage: ObjectStorage | None):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     if bucket_name:
         objects_result = storage.list_objects(bucket_name, prefix="benchmark/")
@@ -422,9 +380,7 @@ def _(object_key_dropdown):
 
 @app.cell(hide_code=True)
 def _(bucket_name, download_form, storage: ObjectStorage | None):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     download_result = None
     if download_form.value:
@@ -479,9 +435,7 @@ def _():
 
 @app.cell(hide_code=True)
 def _(bucket_name, k8s, storage: ObjectStorage | None):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     _node_count = 1
     # get the node count to set default concurrency, rec from storage is 300/node
@@ -501,8 +455,9 @@ def _(bucket_name, k8s, storage: ObjectStorage | None):
     )
     warp_form = (
         mo.md(f"""
-            ### Configure Warp Benchmark for cluster **"{k8s.cluster_name}"**.
-            If you want to benchmark a different cluster, set the _KUBECONFIG_ env var and context to the desired cluster.
+            ### Configure Warp Benchmark for cluster **"{k8s.cluster_name}"** in the **"{warp_runner.namespace}"** namespace.
+            If you want to benchmark a different cluster, set the _KUBECONFIG_ env var and context to the desired cluster.<br>
+            If you'd like the benchmark pods in a different namespace set the _POD_NAMESPACE_ env var.
             - {{operation}}
             - {{duration}}
             - {{objects}}
@@ -527,9 +482,7 @@ def _(bucket_name, k8s, storage: ObjectStorage | None):
 
 @app.cell(hide_code=True)
 def _(bucket_name, storage: ObjectStorage | None, warp_form, warp_runner):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     if warp_form.value:
         warp_config = warp_form.value
@@ -576,9 +529,7 @@ def _(bucket_name, storage: ObjectStorage | None, warp_form, warp_runner):
 
 @app.cell(hide_code=True)
 def _(storage: ObjectStorage | None, warp_form, warp_operation, warp_runner):
-    if storage is None:
-        mo.stop(True)
-        return
+    mo.stop(storage is None)
 
     if warp_form.value:
         _start_time = time.time()

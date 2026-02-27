@@ -15,6 +15,7 @@ Usage:
 # SSH functions
 from . import remote_execution_helpers
 from .remote_execution_helpers import run_remote, run_remote_interactive, ssh
+from .reusable_cells import about, banner, cw_token_input, table_of_contents
 
 __all__ = [
     # Modules
@@ -24,4 +25,9 @@ __all__ = [
     "ssh",
     "run_remote",
     "run_remote_interactive",
+    # Cells
+    "about",
+    "banner",
+    "cw_token_input",
+    "table_of_contents",
 ]
