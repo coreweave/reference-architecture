@@ -86,9 +86,9 @@ class ObjectStorage(ABC):
         # shared s3_config for all auth methods
         self.s3_config = Config(
             s3={"addressing_style": self.addressing_style},
-            connect_timeout=5,
-            read_timeout=10,
-            retries={"max_attempts": 2},
+            connect_timeout=10,
+            read_timeout=600,  # 10 min
+            retries={"max_attempts": 3},
         )
 
         self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
