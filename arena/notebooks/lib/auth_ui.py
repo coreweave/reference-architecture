@@ -35,12 +35,11 @@ def init_k8s() -> tuple[K8s | None, mo.ui.form | None, mo.Html | None]:
 
     try:
         k8s = K8s()
-        _ui = mo.md("Kubernetes client initialized")
+        ui = mo.md("Kubernetes client initialized")
     except KubernetesConfigError:
-        _kubeconfig_ui, kubeconfig_form = kubeconfig_input()
-        _ui = _kubeconfig_ui
+        ui, kubeconfig_form = kubeconfig_input()
 
-    return k8s, kubeconfig_form, _ui
+    return k8s, kubeconfig_form, ui
 
 
 def process_k8s_form(k8s: K8s | None, kubeconfig_form: mo.ui.form | None) -> tuple[K8s | None, list[mo.Html]]:
@@ -105,19 +104,18 @@ def init_object_storage(
     """
     cw_token_form = None
     storage = None
-    _ui = None
+    ui = None
 
     if k8s_client:
         auto_cw_token = detect_cw_token(k8s_client.kubeconfig_path) if k8s_client.kubeconfig_path else detect_cw_token()
 
         try:
             storage = ObjectStorage.auto(k8s=k8s_client, cw_token=auto_cw_token)
-            _ui = mo.md("ObjectStorage client initialized")
+            ui = mo.md("ObjectStorage client initialized")
         except MissingCredentialsError:
-            _cw_token_ui, cw_token_form = cw_token_input()
-            _ui = _cw_token_ui
+            ui, cw_token_form = cw_token_input()
 
-    return storage, cw_token_form, _ui
+    return storage, cw_token_form, ui
 
 
 def process_storage_form(

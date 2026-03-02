@@ -4,7 +4,7 @@
 #     "boto3==1.42.45",
 #     "k8s==0.28.0",
 #     "kubernetes==35.0.0",
-#     "marimo>=0.19.7",
+#     "marimo>=0.20.2",
 #     "mypy-boto3-s3>=1.42.37",
 #     "ruamel-yaml>=0.19.1",
 #     "typing-extensions>=4.15.0"
@@ -62,21 +62,21 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(auto_k8s, kubeconfig_form):
+def _(auto_k8s: K8s, kubeconfig_form: mo.ui.form):
     k8s, _msgs = process_k8s_form(auto_k8s, kubeconfig_form)
     mo.output.append(mo.vstack(_msgs)) if _msgs else None
     return (k8s,)
 
 
 @app.cell(hide_code=True)
-def _(k8s):
+def _(k8s: K8s):
     auto_storage, cw_token_form, _ui = init_object_storage(k8s)
     _ui
     return auto_storage, cw_token_form
 
 
 @app.cell(hide_code=True)
-def _(auto_storage, cw_token_form, k8s):
+def _(auto_storage: ObjectStorage, cw_token_form: mo.ui.form, k8s: K8s):
     storage, _msgs = process_storage_form(auto_storage, cw_token_form, k8s)
     mo.output.append(mo.vstack(_msgs)) if _msgs else None
     return (storage,)
@@ -98,7 +98,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(storage):
+def _(storage: ObjectStorage | None):
     mo.stop(storage is None)
 
     create_bucket_form = (
@@ -114,7 +114,7 @@ def _(storage):
 
 
 @app.cell(hide_code=True)
-def _(create_bucket_form, storage: ObjectStorage):
+def _(create_bucket_form: mo.ui.form, storage: ObjectStorage | None):
     mo.stop(storage is None)
 
     _bucket_creation_result = None
@@ -160,7 +160,9 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(bucket_created: float, storage):
+def _(bucket_created: float, storage: ObjectStorage | None):
+    mo.stop(storage is None)
+
     if bucket_created:
         pass
     buckets = storage.list_buckets()
@@ -185,14 +187,14 @@ def _(bucket_created: float, storage):
 
 
 @app.cell(hide_code=True)
-def _(bucket_dropdown, use_lota_checkbox):
+def _(bucket_dropdown: mo.ui.dropdown, use_lota_checkbox: mo.ui.checkbox):
     bucket_name = bucket_dropdown.value
     use_lota = use_lota_checkbox.value
     return (bucket_name, use_lota)
 
 
 @app.cell(hide_code=True)
-def _(bucket_name, k8s, storage: ObjectStorage | None):
+def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
     mo.stop(storage is None or k8s is None)
 
     _node_count = 1
@@ -292,7 +294,7 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage | None, warp_form, warp_operation, warp_runner):
+def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str, warp_runner: WarpRunner):
     mo.stop(storage is None)
 
     if warp_form.value:

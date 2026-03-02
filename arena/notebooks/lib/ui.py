@@ -1,31 +1,11 @@
-import marimo as mo
-from marimo import Html
-
 """Reusable UI components for CoreWeave ARENA Marimo notebooks.
 
 This module provides a collection of standardized UI components that can be reused
 across different ARENA notebooks to maintain consistent styling and functionality.
-
-Example Usage:
-    Basic notebook header setup:
-        ```python
-        from lib.reusable_cells import banner, about, table_of_contents
-
-        @app.cell(hide_code=True)
-        def _():
-            _elements = mo.vstack([
-                banner(),
-                about("My Notebook", "Description of what this notebook does"),
-                table_of_contents([
-                    {"title": "Section 1", "description": "First section"},
-                    {"title": "Section 2", "description": "Second section"}
-                ])
-            ])
-
-            mo.vstack(_elements)
-            return
-        ```
 """
+
+import marimo as mo
+from marimo import Html
 
 
 def banner() -> Html:
