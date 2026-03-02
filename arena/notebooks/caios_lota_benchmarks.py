@@ -5,7 +5,6 @@
 #     "k8s==0.28.0",
 #     "kubernetes==35.0.0",
 #     "marimo>=0.19.7",
-#     "marimo[lsp]>=0.19.7",
 #     "mypy-boto3-s3>=1.42.37",
 #     "shell==1.0.1",
 #     "ruamel-yaml>=0.19.1"
@@ -19,17 +18,17 @@ app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 with app.setup:
     import json
-    import os
     import time
     from collections.abc import Callable
 
     import marimo as mo
     from boto3.s3.transfer import TransferConfig
+    from lib.coreweave import cw_token_input
     from lib.k8s import K8s
-    from lib.reusable_cells import about, banner, cw_token_input, table_of_contents
     from lib.storage.boto3 import run_s3_download_test, run_s3_upload_test
     from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
     from lib.storage.warp import WarpRunner
+    from lib.ui import about, banner, table_of_contents
 
 
 @app.cell(hide_code=True)
@@ -73,7 +72,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(use_lota_checkbox):
+def _(use_lota_checkbox: mo.ui.checkbox):
     _ui = None
     k8s = K8s()
     use_lota = use_lota_checkbox.value
@@ -84,13 +83,13 @@ def _(use_lota_checkbox):
     except MissingCredentialsError:
         cw_token_required = True
 
-    _ui, token_form = cw_token_input(token_required=cw_token_required)
+    _ui, token_form = cw_token_input()
     _ui
     return caios, k8s, token_form, use_lota
 
 
 @app.cell(hide_code=True)
-def _(caios: ObjectStorage | None, k8s, token_form, use_lota):
+def _(caios: ObjectStorage | None, k8s: K8s, token_form: mo.ui.form, use_lota: bool):
     storage: ObjectStorage | None = None
     if caios is not None:
         storage = caios
@@ -406,7 +405,7 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
+def _(bucket_name, k8s, storage: ObjectStorage | None):
     mo.stop(storage is None)
 
     _node_count = 1

@@ -2,11 +2,12 @@ import json
 import os
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
 import boto3
 import requests
 from botocore.config import Config
+from typing_extensions import override
 
 from ..k8s import K8s
 
@@ -70,34 +71,45 @@ class ObjectStorage(ABC):
             use_lota (bool, optional): Use LOTA endpoint for GPU clusters. Defaults to True.
             region (str, optional): CW region. Defaults to auto-detected region.
         """
-        self.use_lota = use_lota
+        self.use_lota: bool = use_lota
         self._s3_client: S3Client | None = None
         self._api_session: requests.Session | None = None
-        self.k8s = k8s
-        self.region = region if region else detect_region(self.k8s)
+        self.k8s: K8s = k8s
+        self.region: str = region if region else detect_region(self.k8s)
 
         style = os.environ.get("AWS_S3_ADDRESSING_STYLE")
         self.addressing_style: Literal["path", "virtual", "auto"] = (
             style if style in ("path", "virtual", "auto") else DEFAULT_ADDRESSING_STYLE
         )
 
-        self.cw_token = cw_token if cw_token else os.environ.get("CW_TOKEN", "")
+        self.cw_token: str = cw_token if cw_token else os.environ.get("CW_TOKEN", "")
 
         # shared s3_config for all auth methods
-        self.s3_config = Config(
+        self.s3_config: Config = self._create_s3_config()
+
+        self.endpoint_url: str = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
+
+        self._access_key_id: str | None = None
+        self._secret_access_key: str | None = None
+        self._credentials_expiry: datetime | None = None
+        self._credential_duration: int = DEFAULT_ACCESS_TOKEN_DURATION
+
+    def _create_s3_config(self, max_pool_connections: int = 50) -> Config:
+        """Create S3 configuration with customizable parameters.
+
+        Args:
+            max_pool_connections (int, optional): Maximum number of connections in the pool. Defaults to 50.
+
+        Returns:
+            Config: Configured botocore Config object.
+        """
+        return Config(
             s3={"addressing_style": self.addressing_style},
             connect_timeout=10,
             read_timeout=600,  # 10 min
             retries={"max_attempts": 3},
-            max_pool_connections=50,
+            max_pool_connections=max_pool_connections,
         )
-
-        self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
-
-        self._access_key_id: Optional[str] = None
-        self._secret_access_key: Optional[str] = None
-        self._credentials_expiry: Optional[datetime] = None
-        self._credential_duration: int = DEFAULT_ACCESS_TOKEN_DURATION
 
     def update_max_pool_connections(self, max_connections: int) -> None:
         """Update the max pool connections for the S3 client.
@@ -108,7 +120,7 @@ class ObjectStorage(ABC):
         Args:
             max_connections (int): New maximum number of connections in the pool.
         """
-        self.s3_config.max_pool_connections: Config = max_connections
+        self.s3_config = self._create_s3_config(max_pool_connections=max_connections)
         # Invalidate cached S3 client so it gets recreated with new config on next call
         self._s3_client = None
 
@@ -256,11 +268,6 @@ class ObjectStorage(ABC):
             MissingCredentialsError: If credentials cannot be obtained.
         """
         return AccessKeyObjectStorage(k8s, cw_token, use_lota, region)
-
-    @abstractmethod
-    def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
-        """Generate temporary S3 access keys via CoreWeave API."""
-        pass
 
     @property
     @abstractmethod
@@ -487,6 +494,7 @@ class PodIdentityObjectStorage(ObjectStorage):
         super().__init__(k8s, cw_token, use_lota, region)
 
     @property
+    @override
     def s3_client(self) -> S3Client:
         """Get or create the boto3 S3 client with pod identity authentication.
 
@@ -503,13 +511,14 @@ class PodIdentityObjectStorage(ObjectStorage):
         return self._s3_client
 
     @property
+    @override
     def api_session(self) -> requests.Session:
         """Get or create HTTP session for CW API with Bearer token auth.
 
         Returns:
             requests.Session: Cached session with Authorization header.
         """
-        if self._api_session is None:
+        if not self._api_session:
             session = requests.Session()
             session.headers.update(
                 {
@@ -520,6 +529,7 @@ class PodIdentityObjectStorage(ObjectStorage):
             self._api_session = session
         return self._api_session
 
+    @override
     def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
         """Generate temporary S3 access keys via CoreWeave API.
 
@@ -581,6 +591,7 @@ class AccessKeyObjectStorage(ObjectStorage):
             raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
 
     @property
+    @override
     def s3_client(self) -> S3Client:
         """Get or create the boto3 S3 client with access key authentication.
 
@@ -599,6 +610,7 @@ class AccessKeyObjectStorage(ObjectStorage):
         return self._s3_client
 
     @property
+    @override
     def api_session(self) -> requests.Session:
         """Get or create HTTP session for CoreWeave API with Bearer token auth.
 
@@ -619,6 +631,7 @@ class AccessKeyObjectStorage(ObjectStorage):
             self._api_session = session
         return self._api_session
 
+    @override
     def _fetch_temp_access_keys(self, duration_seconds: int = DEFAULT_ACCESS_TOKEN_DURATION) -> tuple[str, str]:
         """Generate temporary S3 access keys via CoreWeave API.
 
