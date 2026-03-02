@@ -125,6 +125,21 @@ class ObjectStorage(ABC):
         # Invalidate cached S3 client so it gets recreated with new config on next call
         self._s3_client = None
 
+    def update_endpoint(self, use_lota: bool) -> None:
+        """Update the endpoint URL for the S3 client.
+
+        Invalidates and recreates the S3 client if the endpoint changes.
+        Used when switching between LOTA and CAIOS.
+
+        Args:
+            use_lota (bool): Whether to use LOTA endpoint vs CWOBJECT endpoint.
+        """
+        if use_lota != self.use_lota:
+            self.use_lota = use_lota
+            self.endpoint_url = LOTA_ENDPOINT_URL if self.use_lota else CAIOS_ENDPOINT_URL
+            # Invalidate cached S3 client so it gets recreated with new endpoint on next call
+            self._s3_client = None
+
     @property
     def access_key_id(self) -> str:
         """Get access key ID, refreshing if necessary."""

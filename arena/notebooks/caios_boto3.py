@@ -6,7 +6,6 @@
 #     "kubernetes==35.0.0",
 #     "marimo>=0.19.7",
 #     "mypy-boto3-s3>=1.42.37",
-#     "shell==1.0.1",
 #     "ruamel-yaml>=0.19.1"
 # ]
 # ///
@@ -214,7 +213,25 @@ def _(storage: ObjectStorage | None):
 
 
 @app.cell(hide_code=True)
-def _(bucket_name, storage: ObjectStorage | None, upload_form):
+def _():
+    use_lota_checkbox = mo.ui.checkbox(value=False, label="Use LOTA (For notebooks running inside GPU clusters only)")
+
+    mo.md(f"""
+    ### Storage Endpoint Configuration
+    /// admonition | About LOTA
+        type: info
+
+    [LOTA](https://docs.coreweave.com/products/storage/object-storage/lota/about#about-lota) provides faster access for GPU workloads by using a local cache but is only accessible from GPU clusters.
+    If you're running on a CPU-only cluster, keep this unchecked to use CAIOS.
+    ///
+
+    {use_lota_checkbox}
+    """)
+    return (use_lota_checkbox,)
+
+
+@app.cell(hide_code=True)
+def _(bucket_name, storage: ObjectStorage | None, upload_form, use_lota_checkbox: mo.ui.checkbox):
     mo.stop(storage is None)
 
     upload_result = None
@@ -223,10 +240,15 @@ def _(bucket_name, storage: ObjectStorage | None, upload_form):
             title="Running Boto3 Upload Test",
             subtitle=f"Uploading to {bucket_name}",
         ):
+            _form_values = upload_form.value.copy()
+            _max_concurrency = _form_values.pop("max_concurrency")
+            storage.update_max_pool_connections(_max_concurrency)
+            storage.update_endpoint(use_lota=use_lota_checkbox.value)
+
             _result = run_s3_upload_test(
                 storage=storage,
                 bucket_name=bucket_name,
-                **upload_form.value,
+                **_form_values,
             )
             if _result["success"]:
                 upload_result = mo.callout(
@@ -299,7 +321,7 @@ def _(object_key_dropdown):
 
 
 @app.cell(hide_code=True)
-def _(bucket_name, download_form, storage: ObjectStorage | None):
+def _(bucket_name, download_form, storage: ObjectStorage | None, use_lota_checkbox: mo.ui.checkbox):
     mo.stop(storage is None)
 
     download_result = None
@@ -308,10 +330,15 @@ def _(bucket_name, download_form, storage: ObjectStorage | None):
             title="Running Boto3 Download Test",
             subtitle=f"Downloading from {bucket_name}",
         ):
+            _form_values = download_form.value.copy()
+            _max_concurrency = _form_values.pop("max_concurrency")
+            storage.update_max_pool_connections(_max_concurrency)
+            storage.update_endpoint(use_lota=use_lota_checkbox.value)
+
             _result = run_s3_download_test(
                 storage=storage,
                 bucket_name=bucket_name,
-                **download_form.value,
+                **_form_values,
             )
             if _result["success"]:
                 download_result = mo.callout(

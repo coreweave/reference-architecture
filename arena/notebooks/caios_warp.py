@@ -180,6 +180,24 @@ def _():
 
 
 @app.cell(hide_code=True)
+def _():
+    use_lota_checkbox = mo.ui.checkbox(value=False, label="Use LOTA (For notebooks running inside GPU clusters only)")
+
+    mo.md(f"""
+    ### Storage Endpoint Configuration
+    /// admonition | About LOTA
+        type: info
+
+    [LOTA](https://docs.coreweave.com/products/storage/object-storage/lota/about#about-lota) provides faster access for GPU workloads by using a local cache but is only accessible from GPU clusters.
+    If you're running on a CPU-only cluster, keep this unchecked to use CAIOS.
+    ///
+
+    {use_lota_checkbox}
+    """)
+    return (use_lota_checkbox,)
+
+
+@app.cell(hide_code=True)
 def _(bucket_name, k8s, storage: ObjectStorage | None):
     mo.stop(storage is None or k8s is None)
 
@@ -226,7 +244,13 @@ def _(bucket_name, k8s, storage: ObjectStorage | None):
 
 
 @app.cell(hide_code=True)
-def _(bucket_name, storage: ObjectStorage | None, warp_form, warp_runner):
+def _(
+    bucket_name: str,
+    storage: ObjectStorage | None,
+    warp_form,
+    warp_runner: WarpRunner,
+    use_lota_checkbox: mo.ui.checkbox,
+):
     mo.stop(storage is None)
 
     if warp_form.value:
@@ -240,6 +264,7 @@ def _(bucket_name, storage: ObjectStorage | None, warp_form, warp_runner):
             title="Running Warp Benchmark",
             subtitle=f"Benchmarking bucket: {bucket_name}",
         ):
+            warp_runner.object_storage.update_endpoint(use_lota_checkbox.value)
             warp_submit_results = warp_runner.run_benchmark(
                 warp_operation,
                 warp_duration,
