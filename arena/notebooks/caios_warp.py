@@ -150,7 +150,7 @@ def _(bucket_created, storage):
 @app.cell(hide_code=True)
 def _(bucket_dropdown):
     _ui = mo.md(f"""
-        ### Select CoreWeave AI Object Storage Bucket for upload and download tests
+        ### Select CoreWeave AI Object Storage Bucket for Warp tests
         {bucket_dropdown}
         """)
     bucket_name = bucket_dropdown.value
