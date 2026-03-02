@@ -1,9 +1,7 @@
 import os
-from time import time
-from typing import Any, Optional
+from typing import Callable
 
 from kubernetes import client, config
-from kubernetes.client import VersionInfo
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
 from ruamel.yaml import YAML
@@ -62,8 +60,8 @@ class K8s:
         self._cluster_region: str | None = None
         self._cluster_name: str | None = None
 
-        self.kubeconfig_path = kubeconfig_path or os.getenv("KUBECONFIG", "")
-        self.context = context
+        self.kubeconfig_path: str = kubeconfig_path or os.getenv("KUBECONFIG", "")
+        self.context: str = context
 
         try:
             config.load_incluster_config()
@@ -81,48 +79,19 @@ class K8s:
                     f"Failed to load Kubernetes config in-cluster or from path {self.kubeconfig_path}: {e}"
                 )
 
-    def validate_config(self) -> dict[str, Any]:
+    def validate_config(self) -> bool:
         """Check the kube config is valid and not expired.
 
         Only checks that:
             - API server is reachable
             - The client has permissions to get cluster k8s version
-        Returns:
-            dict[str, Any]:
-                {
-                    "result": bool,
-                    "message": str,
-                    "details": dict,
-                }
+        Returns: bool
         """
-        result = {"valid": False, "message": "", "details": {}}
         try:
-            start = time()
-            version: VersionInfo = client.VersionApi().get_code()
-            elapsed = time() - start
-
-            result["valid"] = True
-            result["message"] = "Kubernetes config is valid"
-            result["details"] = {
-                "kubernetes_version": f"{version.major}.{version.minor}",
-                "response_time_ms": round(elapsed * 1000 * 2),
-                "platform": version.platform,
-            }
-        except ApiException as e:
-            result["valid"] = (False,)
-            if e.status == 401:
-                result["message"] = "Authentication failed - credentials are invalid or expired"
-                result["details"]["error_code"] = 401
-            elif e.status == 403:
-                result["message"] = "Authorization failed - insufficient permissions"
-                result["details"]["error_code"] = 403
-            else:
-                result["message"] = f"API error: {e.reason}"
-                result["details"]["error_code"] = e.status
-                result["details"]["error_body"] = str(e.body) if e.body else None
-            result["details"]["suggestion"] = "Get a new token from https://console.coreweave.com/tokens"
-
-        return result
+            client.VersionApi().get_code()
+            return True
+        except Exception as e:
+            return False
 
     @property
     def core_v1(self) -> client.CoreV1Api:
@@ -162,64 +131,6 @@ class K8s:
         if self._batch_v1 is None:
             self._batch_v1 = client.BatchV1Api()
         return self._batch_v1
-
-    def pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> str:
-        """Get the CW region where a pod is running.
-
-        Reads the pod's node and retrieves the region from node labels. If pod_name and
-        namespace are not provided, attempts to read them from POD_NAME and POD_NAMESPACE
-        environment variables (set by Kubernetes downward API).
-
-        Args:
-            pod_name (str, optional): Name of the pod. Defaults to None (reads from POD_NAME env var).
-            namespace (str, optional): Namespace containing the pod. Defaults to None
-                (reads from POD_NAMESPACE env var).
-
-        Returns:
-            str | None: CW region label from the node (e.g., "us-east-04"), or None if not found.
-
-        Raises:
-            KubernetesError: If pod_name and namespace cannot be determined, or if the Kubernetes
-                API call fails.
-
-        Note:
-            When running in a pod, POD_NAME and POD_NAMESPACE should be set via the downward API:
-            env:
-              - name: POD_NAME
-                valueFrom:
-                  fieldRef:
-                    fieldPath: metadata.name
-              - name: POD_NAMESPACE
-                valueFrom:
-                  fieldRef:
-                    fieldPath: metadata.namespace
-        """
-        try:
-            pod_name = pod_name or os.getenv("POD_NAME")
-            namespace = namespace or os.getenv("POD_NAMESPACE")
-
-            if not pod_name or not namespace:
-                raise KubernetesError(
-                    "pod_name and namespace must be provided or set via POD_NAME and POD_NAMESPACE environment variable"
-                )
-
-            pod = self.core_v1.read_namespaced_pod(name=pod_name, namespace=namespace)
-            if pod.spec is None or pod.spec.node_name is None:
-                raise KubernetesError("Unable to get pod spec or name")
-
-            node = self.core_v1.read_node(name=pod.spec.node_name)
-            if node.metadata is None or node.metadata.labels is None:
-                raise KubernetesError("Unable to get node metadata")
-
-            region = node.metadata.labels.get("topology.kubernetes.io/region") or node.metadata.labels.get(
-                "failure-domain.beta.kubernetes.io/region"
-            )
-            region = region + AVAILABILITY_ZONE
-
-            return region
-
-        except ApiException as e:
-            raise KubernetesError(f"Failed to get pod region: {e}")
 
     @property
     def cluster_region(self) -> str:
@@ -300,34 +211,35 @@ class K8s:
 
             gpu_nodes: dict[str, dict[str, int]] = {}
             cpu_nodes: dict[str, dict[str, int]] = {}
-            for node in nodes.items:
-                if int(node.status.capacity.get("nvidia.com/gpu", 0)) > 0:
-                    gpu_per_node = int(node.status.capacity.get("nvidia.com/gpu", 0))
-                    cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
-                    gpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
+            if nodes.items:
+                for node in nodes.items:
+                    if int(node.status.capacity.get("nvidia.com/gpu", 0)) > 0:
+                        gpu_per_node = int(node.status.capacity.get("nvidia.com/gpu", 0))
+                        cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
+                        gpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
 
-                    if gpu_type not in gpu_nodes:
-                        gpu_nodes[gpu_type] = {
-                            "node_count": 0,
-                            "gpus_per_node": int(gpu_per_node),
-                            "total_gpus": 0,
-                            "cpu_cores_per_node": cpu_cores_per_node,
-                        }
-                    gpu_nodes[gpu_type]["node_count"] += 1
-                    gpu_nodes[gpu_type]["total_gpus"] += gpu_per_node
+                        if gpu_type not in gpu_nodes:
+                            gpu_nodes[gpu_type] = {
+                                "node_count": 0,
+                                "gpus_per_node": int(gpu_per_node),
+                                "total_gpus": 0,
+                                "cpu_cores_per_node": cpu_cores_per_node,
+                            }
+                        gpu_nodes[gpu_type]["node_count"] += 1
+                        gpu_nodes[gpu_type]["total_gpus"] += gpu_per_node
 
-                else:
-                    cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
-                    cpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
+                    else:
+                        cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
+                        cpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
 
-                    if cpu_type not in cpu_nodes:
-                        cpu_nodes[cpu_type] = {
-                            "node_count": 0,
-                            "cpu_cores_per_node": cpu_cores_per_node,
-                            "total_cpus": 0,
-                        }
-                    cpu_nodes[cpu_type]["node_count"] += 1
-                    cpu_nodes[cpu_type]["total_cpus"] += cpu_cores_per_node
+                        if cpu_type not in cpu_nodes:
+                            cpu_nodes[cpu_type] = {
+                                "node_count": 0,
+                                "cpu_cores_per_node": cpu_cores_per_node,
+                                "total_cpus": 0,
+                            }
+                        cpu_nodes[cpu_type]["node_count"] += 1
+                        cpu_nodes[cpu_type]["total_cpus"] += cpu_cores_per_node
 
             return {"gpu": gpu_nodes, "cpu": cpu_nodes}
         except ApiException as e:
@@ -423,7 +335,15 @@ class K8s:
                 results["unchanged"].append(f"{kind}/{name} (unsupported resource type)")
 
     def _apply_resource(
-        self, name: str, namespace: str, doc: dict, kind: str, results: dict, read_fn, create_fn, patch_fn
+        self,
+        name: str,
+        namespace: str,
+        doc: dict,
+        kind: str,
+        results: dict,
+        read_fn: Callable,
+        create_fn: Callable,
+        patch_fn: Callable,
     ) -> None:
         """Apply a resource by attempting to read, then update or create.
 
@@ -522,7 +442,7 @@ class K8s:
             return self._cluster_name
 
         try:
-            nodes = self.core_v1.list_node()
+            nodes: V1NodeList = self.core_v1.list_node()
             if not nodes.items:
                 raise KubernetesError("No nodes found in cluster")
 
@@ -553,57 +473,3 @@ class K8s:
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster name: {e}")
-
-    @property
-    def cw_token(self):  # noqa: C901
-        """Detects the cw_token from the kubeconfig, only works if running out of cluster."""
-        if not self.kubeconfig_path:
-            raise KubernetesConfigError("KUBECONFIG path is not set, cannot detect cw_token")
-
-        try:
-            contexts, active_context = config.list_kube_config_contexts(config_file=self.kubeconfig_path)
-
-            # Use specified context or active context
-            target_context = None
-            if self.context:
-                target_context = next((ctx for ctx in contexts if ctx["name"] == self.context), None)
-                if not target_context:
-                    raise KubernetesConfigError(f"Context '{self.context}' not found in kubeconfig")
-            else:
-                target_context = active_context
-            if not target_context:
-                raise KubernetesConfigError("No active context found in kubeconfig")
-
-            loader = config.kube_config._get_kube_config_loader(
-                filename=self.kubeconfig_path, active_context=target_context["name"]
-            )
-            loader.load_and_set()
-
-            user_name = target_context["context"]["user"]
-            user_config = None
-            for user in loader._config.safe_get("users"):
-                if user.get("name") == user_name:
-                    user_config = user.get("user", {})
-                    break
-
-            if not user_config:
-                raise KubernetesConfigError(f"User {user_name} not found in kubeconfig")
-
-            token = None
-            if "token" in user_config:
-                token = user_config["token"]
-            elif "tokenFile" in user_config:
-                token_file = user_config["tokenFile"]
-                with open(os.path.expanduser(token_file), "r") as f:
-                    token = f.read().strip()
-            if not token:
-                raise KubernetesConfigError(f"No token found for user {user_name} in kubeconfig")
-
-            return token
-
-        except FileNotFoundError:
-            raise KubernetesConfigError(f"Kubeconfig file not found at path: {self.kubeconfig_path}")
-        except config.ConfigException as e:
-            raise KubernetesConfigError(f"Error loading kubeconfig: {e}")
-        except Exception as e:
-            raise KubernetesConfigError(f"Unexpected error detecting cw_token from kubeconfig: {e}")
