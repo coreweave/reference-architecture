@@ -1,6 +1,7 @@
 import os
 from typing import Optional
 
+from jinja2.filters import K
 from kubernetes import client, config
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
@@ -59,22 +60,23 @@ class K8s:
         self._cluster_region: str | None = None
         self._cluster_name: str | None = None
 
+        self.kubeconfig_path = kubeconfig_path or os.getenv("KUBECONFIG", "")
+        self.context = context
+
         try:
             config.load_incluster_config()
             print("Loaded in-cluster Kubernetes config")
         except Exception:
-            if not kubeconfig_path:
-                kubeconfig_path = os.getenv("KUBECONFIG", "")
-            if not kubeconfig_path:
+            if not self.kubeconfig_path:
                 raise KubernetesConfigError(
                     "Failed to load Kubernetes config in-cluster and env var KUBECONFIG is not set."
                 )
             try:
-                print(f"Loading kubeconfig from {kubeconfig_path}")
-                config.load_kube_config(config_file=kubeconfig_path)
+                print(f"Loading kubeconfig from {self.kubeconfig_path}")
+                config.load_kube_config(config_file=self.kubeconfig_path)
             except Exception as e:
                 raise KubernetesConfigError(
-                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}: {e}"
+                    f"Failed to load Kubernetes config in-cluster or from path {self.kubeconfig_path}: {e}"
                 )
 
     @property
@@ -506,3 +508,57 @@ class K8s:
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster name: {e}")
+
+    @property
+    def cw_token(self):  # noqa: C901
+        """Detects the cw_token from the kubeconfig, only works if running out of cluster."""
+        if not self.kubeconfig_path:
+            raise KubernetesConfigError("KUBECONFIG path is not set, cannot detect cw_token")
+
+        try:
+            contexts, active_context = config.list_kube_config_contexts(config_file=self.kubeconfig_path)
+
+            # Use specified context or active context
+            target_context = None
+            if self.context:
+                target_context = next((ctx for ctx in contexts if ctx["name"] == self.context), None)
+                if not target_context:
+                    raise KubernetesConfigError(f"Context '{self.context}' not found in kubeconfig")
+            else:
+                target_context = active_context
+            if not target_context:
+                raise KubernetesConfigError("No active context found in kubeconfig")
+
+            loader = config.kube_config._get_kube_config_loader(
+                filename=self.kubeconfig_path, active_context=target_context["name"]
+            )
+            loader.load_and_set()
+
+            user_name = target_context["context"]["user"]
+            user_config = None
+            for user in loader._config.safe_get("users"):
+                if user.get("name") == user_name:
+                    user_config = user.get("user", {})
+                    break
+
+            if not user_config:
+                raise KubernetesConfigError(f"User {user_name} not found in kubeconfig")
+
+            token = None
+            if "token" in user_config:
+                token = user_config["token"]
+            elif "tokenFile" in user_config:
+                token_file = user_config["tokenFile"]
+                with open(os.path.expanduser(token_file), "r") as f:
+                    token = f.read().strip()
+            if not token:
+                raise KubernetesConfigError(f"No token found for user {user_name} in kubeconfig")
+
+            return token
+
+        except FileNotFoundError:
+            raise KubernetesConfigError(f"Kubeconfig file not found at path: {self.kubeconfig_path}")
+        except config.ConfigException as e:
+            raise KubernetesConfigError(f"Error loading kubeconfig: {e}")
+        except Exception as e:
+            raise KubernetesConfigError(f"Unexpected error detecting cw_token from kubeconfig: {e}")
