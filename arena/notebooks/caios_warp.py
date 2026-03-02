@@ -6,7 +6,8 @@
 #     "kubernetes==35.0.0",
 #     "marimo>=0.19.7",
 #     "mypy-boto3-s3>=1.42.37",
-#     "ruamel-yaml>=0.19.1"
+#     "ruamel-yaml>=0.19.1",
+#     "typing-extensions>=4.15.0"
 # ]
 # ///
 
@@ -138,27 +139,6 @@ def _(create_bucket_form, storage: ObjectStorage):
 
 
 @app.cell(hide_code=True)
-def _(bucket_created, storage):
-    if bucket_created:
-        pass
-    buckets = storage.list_buckets()
-    _initial_bucket = buckets[0] if buckets else None
-    bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket)
-    return (bucket_dropdown,)
-
-
-@app.cell(hide_code=True)
-def _(bucket_dropdown):
-    _ui = mo.md(f"""
-        ### Select CoreWeave AI Object Storage Bucket for Warp tests
-        {bucket_dropdown}
-        """)
-    bucket_name = bucket_dropdown.value
-    _ui
-    return
-
-
-@app.cell(hide_code=True)
 def _():
     mo.md(r"""
     ---
@@ -180,21 +160,35 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _():
-    use_lota_checkbox = mo.ui.checkbox(value=False, label="Use LOTA (For notebooks running inside GPU clusters only)")
+def _(bucket_created: float, storage):
+    if bucket_created:
+        pass
+    buckets = storage.list_buckets()
+    _initial_bucket = buckets[0] if buckets else None
 
-    mo.md(f"""
+    bucket_dropdown = mo.ui.dropdown(options=buckets, value=_initial_bucket, label="**Bucket**:")
+    use_lota_checkbox = mo.ui.checkbox(value=False, label="**Use LOTA** (For GPU clusters only)")
+    _ui = mo.md(f"""
     ### Storage Endpoint Configuration
     /// admonition | About LOTA
         type: info
 
     [LOTA](https://docs.coreweave.com/products/storage/object-storage/lota/about#about-lota) provides faster access for GPU workloads by using a local cache but is only accessible from GPU clusters.
-    If you're running on a CPU-only cluster, keep this unchecked to use CAIOS.
+    If you're running on a CPU-only cluster, keep this unchecked to use CAIOS.<br><br>
+    {use_lota_checkbox}<br>
+    {bucket_dropdown}
     ///
-
-    {use_lota_checkbox}
     """)
-    return (use_lota_checkbox,)
+
+    _ui
+    return (bucket_dropdown, use_lota_checkbox)
+
+
+@app.cell(hide_code=True)
+def _(bucket_dropdown, use_lota_checkbox):
+    bucket_name = bucket_dropdown.value
+    use_lota = use_lota_checkbox.value
+    return (bucket_name, use_lota)
 
 
 @app.cell(hide_code=True)

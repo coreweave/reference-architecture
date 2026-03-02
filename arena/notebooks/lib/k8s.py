@@ -491,7 +491,7 @@ def kubeconfig_input() -> tuple[mo.Html | None, mo.ui.form | None]:
         /// admonition | Manual Initialization Required
             type: warning
 
-        Automatic Kubernetes credentials not found. Please enter the path to your [CoreWeave Kubeconfig](https://console.coreweave.com/tokens) to initialize the Kubernetes client for submitting Warp jobs.
+        Automatic Kubernetes credentials not found or invalid. Please enter the path to your [CoreWeave Kubeconfig](https://console.coreweave.com/tokens) to initialize the Kubernetes client for submitting Warp jobs.
         ///
 
         {kubeconfig_form}
