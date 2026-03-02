@@ -29,19 +29,26 @@ class K8s:
     Handles both in-cluster and local kubeconfig authentication.
 
     Attributes:
-        _core_v1 (client.CoreV1Api | None): Cached CoreV1Api client.
-        _apps_v1 (client.AppsV1Api | None): Cached AppsV1Api client.
-        _batch_v1 (client.BatchV1Api | None): Cached BatchV1Api client.
+        core_v1 (client.CoreV1Api): Kubernetes Core API client for managing pods, services, etc.
+        apps_v1 (client.AppsV1Api): Kubernetes Apps API client for managing deployments, statefulsets, etc.
+        batch_v1 (client.BatchV1Api): Kubernetes Batch API client for managing jobs, cronjobs, etc.
+        cluster_region (str): The CoreWeave region where the cluster is located (e.g., "ORD1").
+        cluster_name (str): The name of the Kubernetes cluster.
+        org_id (str): The CoreWeave organization ID.
+        nodes (dict): Information about GPU and CPU nodes in the cluster.
+        gpu_node_count (int): Total number of GPU nodes in the cluster.
+        cpu_node_count (int): Total number of CPU nodes in the cluster.
     """
 
-    def __init__(self, kubeconfig_path: str = "~/.kube/config"):
+    def __init__(self, kubeconfig_path: str = "", context: str = ""):
         """Initialize Kubernetes client.
 
         Args:
             in_cluster (bool, optional): If True, load in-cluster config (for pods). If False,
                 load from kubeconfig file. Defaults to True.
             kubeconfig_path (str, optional): Path to kubeconfig file when in_cluster=False.
-                Defaults to None (uses default kubeconfig locations).
+                Defaults to "" (uses default KUBECONFIG_PATH env var).
+            context (str, optional): Kubernetes context to use when multiple available in the kubeconfig_path. If empty, uses current-context
 
         Raises:
             KubernetesConfigError: If Kubernetes config cannot be loaded.
@@ -49,14 +56,22 @@ class K8s:
         self._core_v1: client.CoreV1Api | None = None
         self._apps_v1: client.AppsV1Api | None = None
         self._batch_v1: client.BatchV1Api | None = None
+        self._cluster_region: str | None = None
+        self._cluster_name: str | None = None
 
         try:
             config.load_incluster_config()
             print("Loaded in-cluster Kubernetes config")
         except Exception:
+            if not kubeconfig_path:
+                kubeconfig_path = os.getenv("KUBECONFIG", "")
+            if not kubeconfig_path:
+                raise KubernetesConfigError(
+                    "Failed to load Kubernetes config in-cluster and env var KUBECONFIG is not set."
+                )
             try:
+                print(f"Loading kubeconfig from {kubeconfig_path}")
                 config.load_kube_config(config_file=kubeconfig_path)
-                print(f"Loaded kubeconfig from file {kubeconfig_path}")
             except Exception as e:
                 raise KubernetesConfigError(
                     f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}: {e}"
@@ -101,7 +116,6 @@ class K8s:
             self._batch_v1 = client.BatchV1Api()
         return self._batch_v1
 
-    @property
     def pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> str:
         """Get the CW region where a pod is running.
 
@@ -172,6 +186,11 @@ class K8s:
         Raises:
             KubernetesError: If the Kubernetes API call fails or if node metadata/labels are missing.
         """
+        if self._cluster_region is not None:
+            return self._cluster_region
+        if os.getenv("CLUSTER_REGION") is not None:
+            self._cluster_region = os.getenv("CLUSTER_REGION", "")
+            return self._cluster_region
         try:
             nodes = self.core_v1.list_node()
             if not nodes.items:
@@ -185,14 +204,29 @@ class K8s:
                 "failure-domain.beta.kubernetes.io/region"
             )
 
-            region = region + AVAILABILITY_ZONE
+            if region:
+                region = region + AVAILABILITY_ZONE
+            else:
+                raise KubernetesError("Unable to detect region, manually set with env var CLUSTER_REGION")
+
+            self._cluster_region = region
 
             return region
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster region: {e}")
 
-    def get_nodes(self) -> dict[str, dict[str, dict]]:
+    @cluster_region.setter
+    def cluster_region(self, region: str):
+        """Set the cluster region manually, overriding autodetection.
+
+        Args:
+            region (str): The region to set "US-WEST-04A"
+        """
+        self._cluster_region = region
+
+    @property
+    def nodes(self) -> dict[str, dict[str, dict]]:
         """Get the number and type of nodes in the cluster.
 
         Counts nodes with nvidia.com/gpu resources as gpu nodes and
@@ -251,6 +285,18 @@ class K8s:
             return {"gpu": gpu_nodes, "cpu": cpu_nodes}
         except ApiException as e:
             raise KubernetesError(f"Failed to get node details: {e}")
+
+    @property
+    def gpu_node_count(self) -> int:
+        """Get the total number of GPU nodes in the cluster."""
+        nodes = self.nodes
+        return sum(info["node_count"] for info in nodes["gpu"].values())
+
+    @property
+    def cpu_node_count(self) -> int:
+        """Get the total number of CPU nodes in the cluster."""
+        nodes = self.nodes
+        return sum(info["node_count"] for info in nodes["cpu"].values())
 
     def _create_or_update_resource(self, kind: str, name: str, namespace: str, doc: dict, results: dict) -> None:
         """Helper method to create or update a Kubernetes resource.
@@ -413,3 +459,50 @@ class K8s:
             return first_node.metadata.labels.get("cks.coreweave.com/org-id")
         except Exception as e:
             raise KubernetesError(f"Failed to get org ID from node labels: {e}")
+
+    @property
+    def cluster_name(self) -> str:
+        """Get the cluster name for the current k8s client.
+
+        Attempts to get the cluster name from:
+            1. Node label 'node.coreweave.cloud/cluster on the first node
+            2. Current context name in kubeconfig
+
+        Raises:
+            KubernetesError: If cluster name cannot be determined
+        """
+        if self._cluster_name is not None:
+            return self._cluster_name
+
+        try:
+            nodes = self.core_v1.list_node()
+            if not nodes.items:
+                raise KubernetesError("No nodes found in cluster")
+
+            first_node = nodes.items[0]
+            if first_node.metadata is None or first_node.metadata.labels is None:
+                raise KubernetesError("First node metadata or labels are missing")
+
+            cluster_name = first_node.metadata.labels.get(
+                "cks.coreweave.com/cluster"
+            ) or first_node.metadata.labels.get("node.coreweave.cloud/cluster")
+
+            if not cluster_name:
+                # Try to get cluster name from kubeconfig context
+                # Fails if running in-cluster
+                try:
+                    contexts, active_context = config.list_kube_config_contexts()
+                    if active_context and active_context.get("name"):
+                        cluster_name = active_context["name"]
+                except config.ConfigException:
+                    # Running in-cluster without kubeconfig, can only rely on node labels
+                    pass
+
+            if not cluster_name:
+                raise KubernetesError("Cluster name not found in node labels or kubeconfig context")
+
+            self._cluster_name = cluster_name
+            return cluster_name
+
+        except ApiException as e:
+            raise KubernetesError(f"Failed to get cluster name: {e}")

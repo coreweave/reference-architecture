@@ -45,7 +45,7 @@ ignore = [
 ]
 [tool.ruff.lint.per-file-ignores]
 # Ignore common notebook noise:
-"arena/notebooks/**/*.py" = [
+"arena/notebooks/*.py" = [
  "F401", # unused import
  "F841", # unused variable
  "E999", # syntax errors
@@ -54,6 +54,10 @@ ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
+
+[tool.ty.src]
+# types inside marimo notebooks are a bit weird
+exclude = ["arena/notebooks/*.py"]
 
 # Language server configuration
 [tool.marimo.language_servers.pylsp]
