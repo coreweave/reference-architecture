@@ -1,6 +1,7 @@
 import os
 from typing import Callable
 
+import marimo as mo
 from kubernetes import client, config
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
@@ -65,19 +66,18 @@ class K8s:
 
         try:
             config.load_incluster_config()
-            print("Loaded in-cluster Kubernetes config")
         except Exception:
-            if not self.kubeconfig_path:
-                raise KubernetesConfigError(
-                    "Failed to load Kubernetes config in-cluster and env var KUBECONFIG is not set."
-                )
+            pass
+
+        if self.kubeconfig_path:
             try:
-                print(f"Loading kubeconfig from {self.kubeconfig_path}")
-                config.load_kube_config(config_file=self.kubeconfig_path)
+                config.load_kube_config(config_file=self.kubeconfig_path, context=self.context or None)
+                return
             except Exception as e:
-                raise KubernetesConfigError(
-                    f"Failed to load Kubernetes config in-cluster or from path {self.kubeconfig_path}: {e}"
-                )
+                raise KubernetesConfigError(f"Failed to load Kubernetes config from {self.kubeconfig_path}: {e}")
+        raise KubernetesConfigError(
+            "Failed to load Kubernetes config. Not running in-cluster and no kubeconfig path provided or found in KUBECONFIG env var."
+        )
 
     def validate_config(self) -> bool:
         """Check the kube config is valid and not expired.
@@ -473,3 +473,27 @@ class K8s:
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster name: {e}")
+
+
+def kubeconfig_input() -> tuple[mo.Html | None, mo.ui.form | None]:
+    """Create a form for a user to input their kubeconfig path.
+
+    To access the path in your code, use kubeconfig_form.value.get("kubeconfig_path")
+    """
+    kubeconfig_form = (
+        mo.md("{kubeconfig_path}")
+        .batch(kubeconfig_path=mo.ui.text(placeholder="~/.kube/config", full_width=True))  # type: ignore
+        .form(submit_button_label="Connect", bordered=False)
+    )
+    kubeconfig_ui = mo.md(
+        f"""
+        /// admonition | Manual Initialization Required
+            type: warning
+
+        Automatic Kubernetes credentials not found. Please enter your the path to your [CoreWeave Kubeconfig](https://console.coreweave.com/tokens) to initialize the Kubernetes client for submitting Warp jobs.
+        ///
+
+        {kubeconfig_form}
+        """
+    )
+    return kubeconfig_ui, kubeconfig_form

@@ -9,6 +9,7 @@ import requests
 from botocore.config import Config
 from typing_extensions import override
 
+from ..coreweave import detect_cw_token
 from ..k8s import K8s
 
 COREWEAVE_OBJECT_API_BASE_URL = "https://api.coreweave.com/v1/cwobject"
@@ -200,24 +201,18 @@ class ObjectStorage(ABC):
             MissingCredentialsError: If credentials aren't available
             ObjectStorageError: If all auth methods fail.
         """
-        print("Initializing CoreWeave AI object storage")
         # Choose our subclass with preference for PodIdentity if it works
         try:
-            print(f"Attempting pod identity auth with {'LOTA' if use_lota else 'CAIOS'}...")
             client = PodIdentityObjectStorage(k8s, cw_token, use_lota, region)
-            print("Testing pod identity credentials...")
             client.s3_client.list_buckets()
-            print(f"Initialized CAIOS client using pod identity authentication to ({'LOTA' if use_lota else 'CAIOS'}).")
             return client
         except Exception:
-            print("Pod Identity auth failed, falling back to token auth")
+            # Pod Identity auth failed, falling back to token auth
+            pass
 
         try:
-            print(f"Attempting access key auth with {'LOTA' if use_lota else 'CAIOS'}...")
             client = AccessKeyObjectStorage(k8s, cw_token, use_lota, region)
-            print("Testing access key credentials...")
             client.s3_client.list_buckets()
-            print(f"Initialized CAIOS client using access key auth to ({'LOTA' if use_lota else 'CAIOS'}).")
             return client
         except MissingCredentialsError:
             raise  # re-raise cred error to be handled by the caller
@@ -299,7 +294,7 @@ class ObjectStorage(ABC):
             print(f"Error listing buckets: {e}")
             return []
 
-    def create_bucket(self, bucket_name: str) -> bool:
+    def create_bucket(self, bucket_name: str) -> None:
         """Create a new S3 bucket.
 
         Args:
@@ -308,15 +303,10 @@ class ObjectStorage(ABC):
         Returns:
             bool: True if successful, False otherwise.
         """
-        try:
-            self.s3_client.create_bucket(
-                Bucket=bucket_name,
-                CreateBucketConfiguration={"LocationConstraint": self.region},
-            )
-            return True
-        except Exception as e:
-            print(f"Error creating bucket: {e}")
-            return False
+        self.s3_client.create_bucket(
+            Bucket=bucket_name,
+            CreateBucketConfiguration={"LocationConstraint": self.region},
+        )
 
     def delete_bucket(self, bucket_name: str) -> bool:
         """Delete an empty S3 bucket.
@@ -568,27 +558,25 @@ class PodIdentityObjectStorage(ObjectStorage):
 
 
 class AccessKeyObjectStorage(ObjectStorage):
-    """ObjectStorage client using Access Key authentication.
-
-    Supports both static keys (AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY env vars)
-    and temporary key generation via CW API using a CW_TOKEN.
-    """
+    """ObjectStorage client using Access Key authentication."""
 
     def __init__(self, k8s: K8s, cw_token: str = "", use_lota: bool = False, region: str = ""):
         """Initialize Access Key client.
 
         Args:
             k8s (K8s): Kubernetes client for interacting with the cluster
-            cw_token (str, optional): CoreWeave API token for key generation. Defaults to CW_TOKEN env var.
+            cw_token (str, optional): CoreWeave API token for key generation. Attempts to auto detect if not provided.
             use_lota (bool, optional): Use LOTA endpoint. Defaults to False.
             region (str, optional): AWS region.
 
         Raises:
             MissingCredentialsError: If no token provided and static keys not in environment.
         """
+        if not cw_token:
+            cw_token = detect_cw_token()
+            if not cw_token:
+                raise MissingCredentialsError("Missing valid cw_token, provide as env var 'CW_TOKEN'.")
         super().__init__(k8s, cw_token, use_lota, region)
-        if not self.cw_token:
-            raise MissingCredentialsError("Missing cw_token, provide as function input or env var 'CW_TOKEN'.")
 
     @property
     @override
@@ -660,7 +648,6 @@ class AccessKeyObjectStorage(ObjectStorage):
             if not access_key_id or not secret_access_key:
                 raise ObjectStorageError("Invalid response from access key endpoint, missing keys.")
 
-            print(f"Created access key: {access_key_id[:8]}")
             return access_key_id, secret_access_key
 
         except requests.exceptions.RequestException as e:
@@ -734,13 +721,8 @@ def detect_region(k8s: K8s) -> str:
         MissingRegionError: When none of the methods for getting a region work.
     """
     region = os.environ.get("AWS_DEFAULT_REGION", "")
-    if region:
-        print(f"Detected region from env var: {region}")
-    else:
-        try:
-            region = k8s.cluster_region
-            if region:
-                print(f"Detected region from cluster: {region}")
-        except Exception as e:
-            raise MissingRegionError(f"Unable to determine object storage region: {e}")
+    try:
+        region = k8s.cluster_region
+    except Exception as e:
+        raise MissingRegionError(f"Unable to determine object storage region: {e}")
     return region
