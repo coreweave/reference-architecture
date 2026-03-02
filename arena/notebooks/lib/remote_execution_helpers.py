@@ -139,6 +139,7 @@ def run_remote_stream(
 
 def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
     """Quick helper to run a command and return stdout.
+
     Handles errors gracefully by printing them instead of raising exceptions.
 
     Args:
