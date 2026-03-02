@@ -1,8 +1,9 @@
 import os
-from typing import Optional
+from time import time
+from typing import Any, Optional
 
-from jinja2.filters import K
 from kubernetes import client, config
+from kubernetes.client import VersionInfo
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
 from ruamel.yaml import YAML
@@ -39,6 +40,7 @@ class K8s:
         nodes (dict): Information about GPU and CPU nodes in the cluster.
         gpu_node_count (int): Total number of GPU nodes in the cluster.
         cpu_node_count (int): Total number of CPU nodes in the cluster.
+        cw_token (str): Token detected from kube-config. Only works with local kubeconfig file.
     """
 
     def __init__(self, kubeconfig_path: str = "", context: str = ""):
@@ -78,6 +80,49 @@ class K8s:
                 raise KubernetesConfigError(
                     f"Failed to load Kubernetes config in-cluster or from path {self.kubeconfig_path}: {e}"
                 )
+
+    def validate_config(self) -> dict[str, Any]:
+        """Check the kube config is valid and not expired.
+
+        Only checks that:
+            - API server is reachable
+            - The client has permissions to get cluster k8s version
+        Returns:
+            dict[str, Any]:
+                {
+                    "result": bool,
+                    "message": str,
+                    "details": dict,
+                }
+        """
+        result = {"valid": False, "message": "", "details": {}}
+        try:
+            start = time()
+            version: VersionInfo = client.VersionApi().get_code()
+            elapsed = time() - start
+
+            result["valid"] = True
+            result["message"] = "Kubernetes config is valid"
+            result["details"] = {
+                "kubernetes_version": f"{version.major}.{version.minor}",
+                "response_time_ms": round(elapsed * 1000 * 2),
+                "platform": version.platform,
+            }
+        except ApiException as e:
+            result["valid"] = (False,)
+            if e.status == 401:
+                result["message"] = "Authentication failed - credentials are invalid or expired"
+                result["details"]["error_code"] = 401
+            elif e.status == 403:
+                result["message"] = "Authorization failed - insufficient permissions"
+                result["details"]["error_code"] = 403
+            else:
+                result["message"] = f"API error: {e.reason}"
+                result["details"]["error_code"] = e.status
+                result["details"]["error_body"] = str(e.body) if e.body else None
+            result["details"]["suggestion"] = "Get a new token from https://console.coreweave.com/tokens"
+
+        return result
 
     @property
     def core_v1(self) -> client.CoreV1Api:
