@@ -267,8 +267,10 @@ def _(bucket_name: str, storage: ObjectStorage | None, upload_form: mo.ui.form, 
 
 
 @app.cell(hide_code=True)
-def _(bucket_name: str, storage: ObjectStorage | None):
+def _(bucket_name: str, storage: ObjectStorage | None, upload_form: mo.ui.form):
     mo.stop(storage is None)
+    if upload_form.value:
+        pass
 
     if bucket_name:
         objects_result = storage.list_objects(bucket_name, prefix="benchmark/")
