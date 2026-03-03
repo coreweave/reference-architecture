@@ -221,6 +221,7 @@ def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
             - {{duration}}
             - {{objects}}
             - {{concurrency}}
+            - {{object_size}}
             """)
         .batch(
             operation=mo.ui.dropdown(  # type: ignore
@@ -230,7 +231,10 @@ def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
             ),
             duration=mo.ui.number(1, 60, step=1, value=10, label="Duration (min):"),  # type: ignore
             objects=mo.ui.number(1000, 1_000_000, step=1, value=1000, label="Objects:"),  # type: ignore
-            concurrency=mo.ui.number(1, 1000, step=1, value=_default_concurrency, label="Concurrency:"),  # type: ignore
+            concurrency=mo.ui.number(
+                1, _default_concurrency * 10, step=1, value=_default_concurrency, label="Concurrency:"
+            ),  # type: ignore
+            object_size=mo.ui.number(1, 1000, step=1, value=50, label="Object Size (MiB)"),  # type: ignore
         )
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
     )
@@ -255,6 +259,7 @@ def _(
         warp_operation = warp_config.get("operation", "get")
         warp_objects = warp_config.get("objects", "1000")
         warp_concurrency = warp_config.get("concurrency", 300)
+        warp_object_size = warp_config.get("object_size", 50)
 
         with mo.status.spinner(
             title="Running Warp Benchmark",
@@ -262,10 +267,11 @@ def _(
         ):
             warp_runner.object_storage.update_endpoint(use_lota_checkbox.value)
             warp_submit_results = warp_runner.run_benchmark(
-                warp_operation,
-                warp_duration,
-                warp_objects,
-                warp_concurrency,
+                benchmark_type=warp_operation,
+                duration=warp_duration,
+                warp_objects=warp_objects,
+                concurrency=warp_concurrency,
+                size=warp_object_size,
             )
 
         result_section = mo.md(f"""

@@ -35,7 +35,7 @@ def init_k8s() -> tuple[K8s | None, mo.ui.form | None, mo.Html | None]:
 
     try:
         k8s = K8s()
-        ui = mo.md("Kubernetes client initialized")
+        ui = mo.callout("Kubernetes client initialized", kind="success")
     except KubernetesConfigError:
         ui, kubeconfig_form = kubeconfig_input()
 
@@ -113,7 +113,7 @@ def init_object_storage(
 
         try:
             storage = ObjectStorage.auto(k8s=k8s_client, cw_token=auto_cw_token)
-            ui = mo.callout(f"ObjectStorage client initialized from {detection_method}", kind="success")
+            ui = mo.callout("ObjectStorage client initialized", kind="success")
         except MissingCredentialsError:
             ui, cw_token_form = cw_token_input()
         except ObjectStorageError as e:
