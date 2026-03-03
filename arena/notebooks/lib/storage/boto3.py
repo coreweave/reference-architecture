@@ -12,7 +12,6 @@ def run_s3_upload_test(
     test_file_size_gb: int = 1,
     multipart_threshold_mb: int = 8,
     multipart_chunksize_mb: int = 8,
-    max_concurrency: int = 300,
 ):
     """Run an S3 upload bandwidth test using boto3.
 
@@ -43,8 +42,6 @@ def run_s3_upload_test(
     Note:
         Test files are stored in /tmp/bandwidth-test and reused if they already exist.
     """
-    storage.update_max_pool_connections(max_concurrency)
-
     test_dir = "/tmp/bandwidth-test"
     test_filename = f"{test_file_size_gb}GB"
     os.makedirs(test_dir, exist_ok=True)
@@ -52,7 +49,6 @@ def run_s3_upload_test(
     test_file = f"{test_dir}/{test_filename}"
 
     if not os.path.exists(test_file):
-        print(f"Creating test file: {test_filename}...")
         chunk_size = 64 * 1024 * 1024  # 64 MB
         zero_chunk = b"\0" * chunk_size
         with open(test_file, "wb") as f:
@@ -61,8 +57,6 @@ def run_s3_upload_test(
                 write_size = min(chunk_size, remaining)
                 f.write(zero_chunk[:write_size])
                 remaining -= write_size
-    else:
-        print(f"Test file '{test_filename}' already exists locally, proceeding to upload.")
 
     transfer_config = TransferConfig(
         multipart_threshold=multipart_threshold_mb * 1024 * 1024,
@@ -103,7 +97,6 @@ def run_s3_download_test(
     object_key: str,
     multipart_threshold_mb: int = 8,
     multipart_chunksize_mb: int = 8,
-    max_concurrency: int = 300,
 ) -> dict:
     """Run an S3 download bandwidth test using boto3.
 
@@ -137,9 +130,6 @@ def run_s3_download_test(
     """
     if not bucket_name or not object_key:
         return {"success": False, "error": "bucket_name and object_key are required"}
-
-    storage.update_max_pool_connections(max_concurrency)
-
     test_dir = "/tmp/bandwidth-test"
     os.makedirs(test_dir, exist_ok=True)
 

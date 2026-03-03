@@ -1,31 +1,11 @@
-import marimo as mo
-from marimo import Html
-
 """Reusable UI components for CoreWeave ARENA Marimo notebooks.
 
 This module provides a collection of standardized UI components that can be reused
 across different ARENA notebooks to maintain consistent styling and functionality.
-
-Example Usage:
-    Basic notebook header setup:
-        ```python
-        from lib.reusable_cells import banner, about, table_of_contents
-
-        @app.cell(hide_code=True)
-        def _():
-            _elements = mo.vstack([
-                banner(),
-                about("My Notebook", "Description of what this notebook does"),
-                table_of_contents([
-                    {"title": "Section 1", "description": "First section"},
-                    {"title": "Section 2", "description": "Second section"}
-                ])
-            ])
-
-            mo.vstack(_elements)
-            return
-        ```
 """
+
+import marimo as mo
+from marimo import Html
 
 
 def banner() -> Html:
@@ -91,33 +71,3 @@ def table_of_contents(items: list[dict[str, str]]) -> Html:
 ///
 """)
     return table
-
-
-def cw_token_input(token_required: bool = True) -> tuple[Html | None, mo.ui.form | None]:
-    """Create a form for a user to input their CW_TOKEN secret for auth.
-
-    To access the token in your code, use token_form.value.get("cw_token")
-
-    Args:
-        token_required: If True, the form will be shown. If False, returns an empty Html object.
-    """
-    if not token_required:
-        return None, None
-
-    token_form = (
-        mo.md("{cw_token}")
-        .batch(cw_token=mo.ui.text(kind="password", placeholder="CW-SECRET-...", full_width=True))  # type: ignore
-        .form(submit_button_label="Connect", bordered=False)
-    )
-    token_ui = mo.md(
-        f"""
-        /// admonition | Manual Initialization Required
-            type: warning
-
-        Automatic credentials not found. Please enter your [CoreWeave access token](https://console.coreweave.com/tokens) to initialize the ObjectStorage client.
-        ///
-
-        {token_form}
-        """
-    )
-    return token_ui, token_form

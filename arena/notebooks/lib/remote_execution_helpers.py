@@ -20,7 +20,6 @@ import os
 import shlex
 import subprocess
 import sys
-from typing import Optional, Union
 
 # SSH Configuration (from environment or defaults)
 SSH_KEY = os.getenv("CW_ARENA_SSH_KEY_PATH", "/root/.ssh/id_rsa")
@@ -59,7 +58,7 @@ def run_remote(
     command: str,
     interactive: bool = True,
     capture_output: bool = True,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     check: bool = False,
 ) -> subprocess.CompletedProcess:
     """Run a command on the remote host via SSH.
@@ -139,6 +138,7 @@ def run_remote_stream(
 
 def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
     """Quick helper to run a command and return stdout.
+
     Handles errors gracefully by printing them instead of raising exceptions.
 
     Args:
@@ -205,7 +205,7 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
         return result.stdout
 
 
-def shell(command: Union[str, list], quiet: bool = False, check: bool = False, stream: bool = False) -> str:  # noqa: C901
+def shell(command: str | list, quiet: bool = False, check: bool = False, stream: bool = False) -> str:  # noqa: C901
     """Run a local shell command with clean output.
 
     Args:

@@ -1,6 +1,5 @@
 import os
 import uuid
-from typing import Optional
 
 from ..k8s import K8s
 from .object_storage import ObjectStorage
@@ -19,7 +18,7 @@ class WarpRunner:
     and result collection and parsing
     """
 
-    def __init__(self, k8s: K8s, bucket_name: str, object_storage: ObjectStorage, namespace: Optional[str] = None):
+    def __init__(self, k8s: K8s, bucket_name: str, object_storage: ObjectStorage, namespace: str | None = None):
         """Initialize WarpRunner.
 
         Args:
@@ -32,8 +31,8 @@ class WarpRunner:
         self.object_storage = object_storage
         self.namespace = namespace or os.getenv("POD_NAMESPACE", "tenant-slurm")
         self.bucket_name = bucket_name
-        self.job_name: Optional[str] = None
-        self.job_suffix: Optional[str] = None
+        self.job_name: str | None = None
+        self.job_suffix: str | None = None
 
     def run_benchmark(
         self,
@@ -41,7 +40,7 @@ class WarpRunner:
         duration: int = 10,
         warp_objects: int = 1000,
         concurrency: int = 300,
-        compute_class: Optional[str] = None,
+        compute_class: str | None = None,
     ) -> dict[str, list[str]]:
         """Run the warp benchmark on GPUs if possible, and CPUs if there aren't GPUs and return results of yaml application.
 
@@ -131,10 +130,6 @@ class WarpRunner:
             return {"status": pod_status.lower(), "logs": logs}
         except Exception as e:
             return {"status": "error", "error": f"Failed to fetch logs: {str(e)}", "pod_name": pod_name}
-
-    def _parse_logs(self, logs: str):
-        """Parse warp benchmark output logs to get only the results."""
-        pass
 
     def _generate_warp_yaml(
         self,

@@ -18,21 +18,19 @@ dependencies = [
     "statistics>=1.0.3.5",
     "torch>=2.10.0",
     "transformers>=5.0.0",
+    "typing-extensions>=4.15.0",
     "wandb>=0.24.2",
 ]
 
 [dependency-groups]
 dev = [
-    "ty>=0.0.17",
     "boto3-stubs[s3]>=1.42.48",
     "pre-commit>=4.5.1",
     "ruff>=0.15.0",
     "marimo[lsp]>=0.19.11",
     "mypy-boto3-s3>=1.42.37",
+    "basedpyright>=1.38.2",
 ]
-
-[tool.pyright]
-reportUnusedExpression = false
 
 [tool.ruff]
 line-length = 120
@@ -55,9 +53,23 @@ ignore = [
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
-[tool.ty.src]
-# types inside marimo notebooks are a bit weird
-exclude = ["arena/notebooks/*.py"]
+[tool.basedpyright]
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportUnknownParameterType = false
+reportMissingTypeArgument = false
+reportMissingTypeStubs = false
+reportArgumentType = false
+reportUnusedVariable = false
+reportUnusedCallResult = false
+reportAny = false
+reportExplicitAny = false
+reportPrivateUsage = false
+reportCallIssue = false
+reportUnannotatedClassAttribute = false
+
+ignore = ["arena/notebooks/*.py"]
 
 # Language server configuration
 [tool.marimo.language_servers.pylsp]

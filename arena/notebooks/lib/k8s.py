@@ -1,6 +1,7 @@
 import os
-from typing import Optional
+from typing import Callable
 
+import marimo as mo
 from kubernetes import client, config
 from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
@@ -38,6 +39,7 @@ class K8s:
         nodes (dict): Information about GPU and CPU nodes in the cluster.
         gpu_node_count (int): Total number of GPU nodes in the cluster.
         cpu_node_count (int): Total number of CPU nodes in the cluster.
+        cw_token (str): Token detected from kube-config. Only works with local kubeconfig file.
     """
 
     def __init__(self, kubeconfig_path: str = "", context: str = ""):
@@ -59,23 +61,38 @@ class K8s:
         self._cluster_region: str | None = None
         self._cluster_name: str | None = None
 
+        self.kubeconfig_path: str = kubeconfig_path or os.getenv("KUBECONFIG", "")
+        self.context: str = context
+
         try:
             config.load_incluster_config()
-            print("Loaded in-cluster Kubernetes config")
+            return
         except Exception:
-            if not kubeconfig_path:
-                kubeconfig_path = os.getenv("KUBECONFIG", "")
-            if not kubeconfig_path:
-                raise KubernetesConfigError(
-                    "Failed to load Kubernetes config in-cluster and env var KUBECONFIG is not set."
-                )
+            pass
+
+        if self.kubeconfig_path:
             try:
-                print(f"Loading kubeconfig from {kubeconfig_path}")
-                config.load_kube_config(config_file=kubeconfig_path)
+                config.load_kube_config(config_file=self.kubeconfig_path, context=self.context or None)
+                return
             except Exception as e:
-                raise KubernetesConfigError(
-                    f"Failed to load Kubernetes config in-cluster or from path {kubeconfig_path}: {e}"
-                )
+                raise KubernetesConfigError(f"Failed to load Kubernetes config from {self.kubeconfig_path}: {e}")
+        raise KubernetesConfigError(
+            "Failed to load Kubernetes config. Not running in-cluster and no kubeconfig path provided or found in KUBECONFIG env var."
+        )
+
+    def validate_config(self) -> bool:
+        """Check the kube config is valid and not expired.
+
+        Only checks that:
+            - API server is reachable
+            - The client has permissions to get cluster k8s version
+        Returns: bool
+        """
+        try:
+            client.VersionApi().get_code()
+            return True
+        except Exception as e:
+            return False
 
     @property
     def core_v1(self) -> client.CoreV1Api:
@@ -115,64 +132,6 @@ class K8s:
         if self._batch_v1 is None:
             self._batch_v1 = client.BatchV1Api()
         return self._batch_v1
-
-    def pod_region(self, pod_name: Optional[str] = None, namespace: Optional[str] = None) -> str:
-        """Get the CW region where a pod is running.
-
-        Reads the pod's node and retrieves the region from node labels. If pod_name and
-        namespace are not provided, attempts to read them from POD_NAME and POD_NAMESPACE
-        environment variables (set by Kubernetes downward API).
-
-        Args:
-            pod_name (str, optional): Name of the pod. Defaults to None (reads from POD_NAME env var).
-            namespace (str, optional): Namespace containing the pod. Defaults to None
-                (reads from POD_NAMESPACE env var).
-
-        Returns:
-            str | None: CW region label from the node (e.g., "us-east-04"), or None if not found.
-
-        Raises:
-            KubernetesError: If pod_name and namespace cannot be determined, or if the Kubernetes
-                API call fails.
-
-        Note:
-            When running in a pod, POD_NAME and POD_NAMESPACE should be set via the downward API:
-            env:
-              - name: POD_NAME
-                valueFrom:
-                  fieldRef:
-                    fieldPath: metadata.name
-              - name: POD_NAMESPACE
-                valueFrom:
-                  fieldRef:
-                    fieldPath: metadata.namespace
-        """
-        try:
-            pod_name = pod_name or os.getenv("POD_NAME")
-            namespace = namespace or os.getenv("POD_NAMESPACE")
-
-            if not pod_name or not namespace:
-                raise KubernetesError(
-                    "pod_name and namespace must be provided or set via POD_NAME and POD_NAMESPACE environment variable"
-                )
-
-            pod = self.core_v1.read_namespaced_pod(name=pod_name, namespace=namespace)
-            if pod.spec is None or pod.spec.node_name is None:
-                raise KubernetesError("Unable to get pod spec or name")
-
-            node = self.core_v1.read_node(name=pod.spec.node_name)
-            if node.metadata is None or node.metadata.labels is None:
-                raise KubernetesError("Unable to get node metadata")
-
-            region = node.metadata.labels.get("topology.kubernetes.io/region") or node.metadata.labels.get(
-                "failure-domain.beta.kubernetes.io/region"
-            )
-            region = region + AVAILABILITY_ZONE
-
-            return region
-
-        except ApiException as e:
-            raise KubernetesError(f"Failed to get pod region: {e}")
 
     @property
     def cluster_region(self) -> str:
@@ -253,34 +212,35 @@ class K8s:
 
             gpu_nodes: dict[str, dict[str, int]] = {}
             cpu_nodes: dict[str, dict[str, int]] = {}
-            for node in nodes.items:
-                if int(node.status.capacity.get("nvidia.com/gpu", 0)) > 0:
-                    gpu_per_node = int(node.status.capacity.get("nvidia.com/gpu", 0))
-                    cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
-                    gpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
+            if nodes.items:
+                for node in nodes.items:
+                    if int(node.status.capacity.get("nvidia.com/gpu", 0)) > 0:
+                        gpu_per_node = int(node.status.capacity.get("nvidia.com/gpu", 0))
+                        cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
+                        gpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
 
-                    if gpu_type not in gpu_nodes:
-                        gpu_nodes[gpu_type] = {
-                            "node_count": 0,
-                            "gpus_per_node": int(gpu_per_node),
-                            "total_gpus": 0,
-                            "cpu_cores_per_node": cpu_cores_per_node,
-                        }
-                    gpu_nodes[gpu_type]["node_count"] += 1
-                    gpu_nodes[gpu_type]["total_gpus"] += gpu_per_node
+                        if gpu_type not in gpu_nodes:
+                            gpu_nodes[gpu_type] = {
+                                "node_count": 0,
+                                "gpus_per_node": int(gpu_per_node),
+                                "total_gpus": 0,
+                                "cpu_cores_per_node": cpu_cores_per_node,
+                            }
+                        gpu_nodes[gpu_type]["node_count"] += 1
+                        gpu_nodes[gpu_type]["total_gpus"] += gpu_per_node
 
-                else:
-                    cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
-                    cpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
+                    else:
+                        cpu_cores_per_node = int(node.status.capacity.get("cpu", 0))
+                        cpu_type = node.metadata.labels.get("node.coreweave.cloud/type", "unknown")
 
-                    if cpu_type not in cpu_nodes:
-                        cpu_nodes[cpu_type] = {
-                            "node_count": 0,
-                            "cpu_cores_per_node": cpu_cores_per_node,
-                            "total_cpus": 0,
-                        }
-                    cpu_nodes[cpu_type]["node_count"] += 1
-                    cpu_nodes[cpu_type]["total_cpus"] += cpu_cores_per_node
+                        if cpu_type not in cpu_nodes:
+                            cpu_nodes[cpu_type] = {
+                                "node_count": 0,
+                                "cpu_cores_per_node": cpu_cores_per_node,
+                                "total_cpus": 0,
+                            }
+                        cpu_nodes[cpu_type]["node_count"] += 1
+                        cpu_nodes[cpu_type]["total_cpus"] += cpu_cores_per_node
 
             return {"gpu": gpu_nodes, "cpu": cpu_nodes}
         except ApiException as e:
@@ -376,7 +336,15 @@ class K8s:
                 results["unchanged"].append(f"{kind}/{name} (unsupported resource type)")
 
     def _apply_resource(
-        self, name: str, namespace: str, doc: dict, kind: str, results: dict, read_fn, create_fn, patch_fn
+        self,
+        name: str,
+        namespace: str,
+        doc: dict,
+        kind: str,
+        results: dict,
+        read_fn: Callable,
+        create_fn: Callable,
+        patch_fn: Callable,
     ) -> None:
         """Apply a resource by attempting to read, then update or create.
 
@@ -475,7 +443,7 @@ class K8s:
             return self._cluster_name
 
         try:
-            nodes = self.core_v1.list_node()
+            nodes: V1NodeList = self.core_v1.list_node()
             if not nodes.items:
                 raise KubernetesError("No nodes found in cluster")
 
@@ -506,3 +474,27 @@ class K8s:
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster name: {e}")
+
+
+def kubeconfig_input() -> tuple[mo.Html | None, mo.ui.form | None]:
+    """Create a form for a user to input their kubeconfig path.
+
+    To access the path in your code, use kubeconfig_form.value.get("kubeconfig_path")
+    """
+    kubeconfig_form = (
+        mo.md("{kubeconfig_path}")
+        .batch(kubeconfig_path=mo.ui.text(placeholder="~/.kube/config", full_width=True))  # type: ignore
+        .form(submit_button_label="Connect", bordered=False)
+    )
+    kubeconfig_ui = mo.md(
+        f"""
+        /// admonition | Manual Initialization Required
+            type: warning
+
+        Automatic Kubernetes credentials not found or invalid. Please enter the path to your [CoreWeave Kubeconfig](https://console.coreweave.com/tokens) to initialize the Kubernetes client for submitting Warp jobs.
+        ///
+
+        {kubeconfig_form}
+        """
+    )
+    return kubeconfig_ui, kubeconfig_form
