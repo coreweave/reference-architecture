@@ -63,8 +63,8 @@ def _():
 
 @app.cell(hide_code=True)
 def _(auto_k8s: K8s, kubeconfig_form: mo.ui.form):
-    k8s, _msgs = process_k8s_form(auto_k8s, kubeconfig_form)
-    mo.callout(mo.vstack(_msgs), kind="success") if _msgs else None
+    k8s, _ui = process_k8s_form(auto_k8s, kubeconfig_form)
+    _ui if _ui else None
     return (k8s,)
 
 
@@ -77,8 +77,8 @@ def _(k8s: K8s):
 
 @app.cell(hide_code=True)
 def _(auto_storage: ObjectStorage, cw_token_form: mo.ui.form, k8s: K8s):
-    storage, _msgs = process_storage_form(auto_storage, cw_token_form, k8s)
-    mo.callout(mo.vstack(_msgs), kind="success") if _msgs else None
+    storage, _ui = process_storage_form(auto_storage, cw_token_form, k8s)
+    _ui if _ui else None
     return (storage,)
 
 

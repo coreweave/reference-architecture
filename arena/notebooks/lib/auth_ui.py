@@ -8,7 +8,7 @@ import marimo as mo
 
 from .coreweave import cw_token_input, detect_cw_token
 from .k8s import K8s, KubernetesConfigError, kubeconfig_input
-from .storage.object_storage import MissingCredentialsError, ObjectStorage
+from .storage.object_storage import MissingCredentialsError, ObjectStorage, ObjectStorageError
 
 
 def init_k8s() -> tuple[K8s | None, mo.ui.form | None, mo.Html | None]:
@@ -42,7 +42,7 @@ def init_k8s() -> tuple[K8s | None, mo.ui.form | None, mo.Html | None]:
     return k8s, kubeconfig_form, ui
 
 
-def process_k8s_form(k8s: K8s | None, kubeconfig_form: mo.ui.form | None) -> tuple[K8s | None, list[mo.Html]]:
+def process_k8s_form(k8s: K8s | None, kubeconfig_form: mo.ui.form | None) -> tuple[K8s | None, mo.Html | None]:
     """Process manual kubeconfig input form if auto-init failed.
 
     Args:
@@ -64,7 +64,7 @@ def process_k8s_form(k8s: K8s | None, kubeconfig_form: mo.ui.form | None) -> tup
         ```
     """
     k8s_client = k8s
-    messages = []
+    ui = None
 
     if kubeconfig_form is not None:
         if k8s_client is None and kubeconfig_form.value:
@@ -72,11 +72,11 @@ def process_k8s_form(k8s: K8s | None, kubeconfig_form: mo.ui.form | None) -> tup
             if kubeconfig_path:
                 try:
                     k8s_client = K8s(kubeconfig_path=kubeconfig_path)
-                    messages.append(mo.md(f"Loaded kubeconfig from `{kubeconfig_path}`"))
+                    ui = mo.callout(f"Loaded kubeconfig from `{kubeconfig_path}`", kind="success")
                 except Exception as e:
-                    messages.append(mo.md(f"Failed to initialize K8s client: {e}"))
+                    ui = mo.callout(f"Failed to initialize K8s client: {e}", kind="danger")
 
-    return k8s_client, messages
+    return k8s_client, ui
 
 
 def init_object_storage(
@@ -111,9 +111,12 @@ def init_object_storage(
 
         try:
             storage = ObjectStorage.auto(k8s=k8s_client, cw_token=auto_cw_token)
-            ui = mo.md("ObjectStorage client initialized")
+            ui = mo.callout("ObjectStorage client initialized", kind="success")
         except MissingCredentialsError:
             ui, cw_token_form = cw_token_input()
+        except ObjectStorageError as e:
+            cw_ui, cw_token_form = cw_token_input()
+            ui = mo.vstack([mo.callout(f"Unable to initialize object storage client: {e}", kind="danger"), cw_ui])
 
     return storage, cw_token_form, ui
 
@@ -122,7 +125,7 @@ def process_storage_form(
     storage: ObjectStorage | None,
     cw_token_form: mo.ui.form | None,
     k8s_client: K8s | None,
-) -> tuple[ObjectStorage | None, list[mo.Html]]:
+) -> tuple[ObjectStorage | None, mo.Html | None]:
     """Process manual CW token input form if auto-init failed.
 
     Args:
@@ -145,7 +148,7 @@ def process_storage_form(
         ```
     """
     storage_client = storage
-    messages = []
+    msg = None
 
     if cw_token_form is not None:
         if storage_client is None and cw_token_form.value:
@@ -153,8 +156,8 @@ def process_storage_form(
             if cw_token and k8s_client:
                 try:
                     storage_client = ObjectStorage.auto(k8s=k8s_client, cw_token=cw_token)
-                    messages.append(mo.md("ObjectStorage client initialized"))
+                    msg = mo.callout("ObjectStorage client initialized", kind="success")
                 except Exception as e:
-                    messages.append(mo.md(f"Failed to initialize ObjectStorage client: {e}"))
+                    msg = mo.callout(f"Failed to initialize ObjectStorage client: {e}", kind="danger")
 
-    return storage_client, messages
+    return storage_client, msg
