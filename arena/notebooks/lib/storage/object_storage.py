@@ -588,7 +588,7 @@ class AccessKeyObjectStorage(ObjectStorage):
             MissingCredentialsError: If no token provided and static keys not in environment.
         """
         if not cw_token:
-            cw_token = detect_cw_token()
+            cw_token, _ = detect_cw_token()
             if not cw_token:
                 raise MissingCredentialsError("Missing valid cw_token, provide as env var 'CW_TOKEN'.")
         super().__init__(k8s, cw_token, use_lota, region)

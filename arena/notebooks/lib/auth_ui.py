@@ -107,11 +107,13 @@ def init_object_storage(
     ui = None
 
     if k8s_client:
-        auto_cw_token = detect_cw_token(k8s_client.kubeconfig_path) if k8s_client.kubeconfig_path else detect_cw_token()
+        auto_cw_token, detection_method = (
+            detect_cw_token(k8s_client.kubeconfig_path) if k8s_client.kubeconfig_path else detect_cw_token()
+        )
 
         try:
             storage = ObjectStorage.auto(k8s=k8s_client, cw_token=auto_cw_token)
-            ui = mo.callout("ObjectStorage client initialized", kind="success")
+            ui = mo.callout(f"ObjectStorage client initialized from {detection_method}", kind="success")
         except MissingCredentialsError:
             ui, cw_token_form = cw_token_input()
         except ObjectStorageError as e:
