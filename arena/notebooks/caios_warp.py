@@ -30,7 +30,7 @@ with app.setup:
     from lib.k8s import K8s
     from lib.storage.object_storage import ObjectStorage
     from lib.storage.warp import WarpRunner
-    from lib.ui import about, banner, table_of_contents
+    from lib.ui import about, banner, security_disclaimer, table_of_contents
 
 
 @app.cell(hide_code=True)
@@ -49,6 +49,7 @@ def _():
                 {"title": "Warp Benchmark", "description": "Multinode cluster benchmarking"},
             ]
         ),
+        security_disclaimer(),
     ]
     mo.vstack(_elements)
     return

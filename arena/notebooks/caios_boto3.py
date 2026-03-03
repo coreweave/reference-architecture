@@ -15,6 +15,7 @@ import marimo
 
 from arena.notebooks.lib.coreweave import detect_cw_token
 from arena.notebooks.lib.k8s import KubernetesConfigError
+from arena.notebooks.lib.ui import security_disclaimer
 
 __generated_with = "0.20.2"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
@@ -36,7 +37,7 @@ with app.setup:
     from lib.k8s import K8s
     from lib.storage.boto3 import run_s3_download_test, run_s3_upload_test
     from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
-    from lib.ui import about, banner, table_of_contents
+    from lib.ui import about, banner, security_disclaimer, table_of_contents
 
 
 @app.cell(hide_code=True)
@@ -55,6 +56,7 @@ def _():
                 {"title": "Boto3 Upload & Download Performance Tests", "description": "Local benchmarking"},
             ]
         ),
+        security_disclaimer(),
     ]
     mo.vstack(_elements)
     return

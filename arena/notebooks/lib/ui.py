@@ -71,3 +71,36 @@ def table_of_contents(items: list[dict[str, str]]) -> Html:
 ///
 """)
     return table
+
+
+def security_disclaimer() -> Html:
+    """Provides the standard security boilerplate."""
+    return mo.md("""
+        /// details | Security Disclaimer
+            type: warning
+
+        **CoreWeave Kubernetes Service:**
+        Please note that this notebook operates using a Kubernetes service account with the following default permissions within its namespace:
+        - Read access to Pods (view pod details and status)
+        - Read access to Pod logs
+        - Permission to execute commands inside Pods (kubectl exec–equivalent access)
+        - Read access to Services
+        - Read access to ConfigMaps
+        - Read access to PersistentVolumeClaims
+        - Read access to Deployments, StatefulSets, and ReplicaSets
+        - Read access to Jobs
+
+        In addition, the service account has the following cluster-wide permission:
+        - Read access to Node metadata (view node details such as labels, status, and capacity)
+
+        **CoreWeave AI Object Storage:**
+
+        The service account has the following permissions for Object Storage:
+        - Create short-lived access keys (enables the pod to generate its own short-lived access keys for interacting with Object Storage)
+        - Perform any action on buckets (includes creating and deleting buckets, putting and getting objects, etc)
+
+        **Important Note:**
+
+        Within the CKS cluster, no write, delete, or modify permissions are granted by default beyond the ability to execute commands inside existing pods. Any user with access to the provided token can execute actions at the access level granted to this service account, including running commands inside pods in the namespace.
+        ///
+        """)
