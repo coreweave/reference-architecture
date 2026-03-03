@@ -13,7 +13,7 @@
 
 import marimo
 
-__generated_with = "0.20.2"
+__generated_with = "0.20.3"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 with app.setup:
@@ -184,7 +184,7 @@ def _(bucket_created: float, storage: ObjectStorage | None):
     """)
 
     _ui
-    return (bucket_dropdown, use_lota_checkbox)
+    return bucket_dropdown, use_lota_checkbox
 
 
 @app.cell(hide_code=True)
@@ -238,7 +238,7 @@ def _(
     storage: ObjectStorage | None,
     warp_form: mo.ui.form,
     warp_runner: WarpRunner,
-    use_lota_checkbox: mo.ui.checkbox,
+    use_lota: bool,
 ):
     mo.stop(storage is None)
 
@@ -254,7 +254,7 @@ def _(
             title="Running Warp Benchmark",
             subtitle=f"Benchmarking bucket: {bucket_name}",
         ):
-            warp_runner.object_storage.update_endpoint(use_lota_checkbox.value)
+            warp_runner.object_storage.update_endpoint(use_lota)
             warp_submit_results = warp_runner.run_benchmark(
                 benchmark_type=warp_operation,
                 duration=warp_duration,
@@ -337,6 +337,29 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
     ```\n{_log_text}\n```
     """)
         mo.output.replace(_final_output)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    warp_cleanup_button = mo.ui.run_button(tooltip="Cleanup Warp Benchmark Resources", label="Cleanup", kind="danger")
+    _ui = mo.callout(
+        mo.md(f"""
+        Cleanup Warp resources. This deletes all items in the bucket and the bucket itself.<br>
+        {warp_cleanup_button}
+        """),
+        kind="danger",
+    )
+    _ui
+    return (warp_cleanup_button,)
+
+
+@app.cell(hide_code=True)
+def _(warp_cleanup_button: mo.ui.run_button, warp_runner: WarpRunner):
+    if warp_cleanup_button.value:
+        with mo.status.spinner(title="Cleaning up Warp Benchmark resources..."):
+            warp_runner.cleanup()
+        mo.output.replace(mo.md("Warp benchmark resources cleaned up successfully."))
     return
 
 

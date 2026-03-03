@@ -33,6 +33,15 @@ class WarpRunner:
         self.bucket_name = bucket_name
         self.job_name: str | None = None
         self.job_suffix: str | None = None
+        self.warp_yaml: str | None = None
+
+    def cleanup(self, empty_bucket: bool = True, delete_bucket: bool = True) -> None:
+        """Clean up all items in a bucket then delete the bucket."""
+        if empty_bucket or delete_bucket:
+            self.object_storage.empty_bucket(self.bucket_name)
+        if delete_bucket:
+            self.object_storage.delete_bucket(self.bucket_name)
+        self.k8s.delete_yaml(self.warp_yaml, self.namespace)
 
     def run_benchmark(
         self,
@@ -81,7 +90,7 @@ class WarpRunner:
         else:
             node_count = self.k8s.gpu_node_count if compute_class == "gpu" else self.k8s.cpu_node_count
 
-        warp_yaml = self._generate_warp_yaml(
+        self.warp_yaml = self._generate_warp_yaml(
             host_count=node_count,
             compute_class=compute_class,
             benchmark_type=benchmark_type,
@@ -91,7 +100,7 @@ class WarpRunner:
             size=size,
         )
 
-        results = self.k8s.apply_yaml(warp_yaml, self.namespace)
+        results = self.k8s.apply_yaml(self.warp_yaml, self.namespace)
         # this is a bit sloppy since it assumes only one job is created, but that is currently the case so :shrug:
         for resource in results.get("created", []):
             if resource.startswith("Job/"):

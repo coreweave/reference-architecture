@@ -230,7 +230,7 @@ def _(storage: ObjectStorage | None):
 
 
 @app.cell(hide_code=True)
-def _(bucket_name: str, storage: ObjectStorage | None, upload_form: mo.ui.form, use_lota_checkbox: mo.ui.checkbox):
+def _(bucket_name: str, storage: ObjectStorage | None, upload_form: mo.ui.form, use_lota: bool):
     mo.stop(storage is None)
 
     upload_result = None
@@ -242,7 +242,7 @@ def _(bucket_name: str, storage: ObjectStorage | None, upload_form: mo.ui.form, 
             _form_values = upload_form.value.copy()
             _max_concurrency = _form_values.pop("max_concurrency")
             storage.update_max_pool_connections(_max_concurrency)
-            storage.update_endpoint(use_lota=use_lota_checkbox.value)
+            storage.update_endpoint(use_lota=use_lota)
 
             _result = run_s3_upload_test(
                 storage=storage,
@@ -320,7 +320,7 @@ def _(object_key_dropdown: mo.ui.dropdown):
 
 
 @app.cell(hide_code=True)
-def _(bucket_name: str, download_form: mo.ui.form, storage: ObjectStorage | None, use_lota_checkbox: mo.ui.checkbox):
+def _(bucket_name: str, download_form: mo.ui.form, storage: ObjectStorage | None, use_lota: bool):
     mo.stop(storage is None)
 
     download_result = None
@@ -332,7 +332,7 @@ def _(bucket_name: str, download_form: mo.ui.form, storage: ObjectStorage | None
             _form_values = download_form.value.copy()
             _max_concurrency = _form_values.pop("max_concurrency")
             storage.update_max_pool_connections(_max_concurrency)
-            storage.update_endpoint(use_lota=use_lota_checkbox.value)
+            storage.update_endpoint(use_lota=use_lota)
 
             _result = run_s3_download_test(
                 storage=storage,
