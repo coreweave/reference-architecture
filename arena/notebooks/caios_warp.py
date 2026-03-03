@@ -64,7 +64,7 @@ def _():
 @app.cell(hide_code=True)
 def _(auto_k8s: K8s, kubeconfig_form: mo.ui.form):
     k8s, _msgs = process_k8s_form(auto_k8s, kubeconfig_form)
-    mo.output.append(mo.vstack(_msgs)) if _msgs else None
+    mo.callout(mo.vstack(_msgs), kind="success") if _msgs else None
     return (k8s,)
 
 
@@ -78,7 +78,7 @@ def _(k8s: K8s):
 @app.cell(hide_code=True)
 def _(auto_storage: ObjectStorage, cw_token_form: mo.ui.form, k8s: K8s):
     storage, _msgs = process_storage_form(auto_storage, cw_token_form, k8s)
-    mo.output.append(mo.vstack(_msgs)) if _msgs else None
+    mo.callout(mo.vstack(_msgs), kind="success") if _msgs else None
     return (storage,)
 
 
@@ -98,15 +98,15 @@ def _():
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage | None):
+def _(storage: ObjectStorage | None, k8s: K8s):
     mo.stop(storage is None)
-
+    _initial_bucket_name = f"{k8s.org_id}-arena-bucket"
     create_bucket_form = (
         mo.md("""
         **Bucket Name:** {bucket_name}
         """)
         .batch(
-            bucket_name=mo.ui.text(placeholder="my-bucket-name", full_width=True)  # type: ignore
+            bucket_name=mo.ui.text(value=_initial_bucket_name, full_width=True)  # type: ignore
         )
         .form(submit_button_label="Create Bucket", clear_on_submit=False)
     )
@@ -119,11 +119,11 @@ def _(create_bucket_form: mo.ui.form, storage: ObjectStorage | None):
 
     _bucket_creation_result = None
     bucket_created = 0.0
-    if create_bucket_form.value:
+    if create_bucket_form.value and create_bucket_form.value.get("bucket_name"):
         try:
             _name = create_bucket_form.value.get("bucket_name")
             storage.create_bucket(_name)
-            bucket_created = time.time()  # timestamp so that multiple bucket creation cause re-run of dropdown
+            bucket_created = time.time()  # timestamp so that multiple bucket creation cause re-run
             _bucket_creation_result = mo.callout(mo.md(f"Successfully created bucket **{_name}**"), kind="success")
         except Exception as _e:
             _bucket_creation_result = mo.callout(mo.md(f"Failed to create bucket: {_e}"), kind="danger")
