@@ -197,16 +197,6 @@ def _(bucket_dropdown: mo.ui.dropdown, use_lota_checkbox: mo.ui.checkbox):
 def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
     mo.stop(storage is None or k8s is None)
 
-    _node_count = 1
-    # get the node count to set default concurrency, rec from storage is 300/node
-    _gpu_count = k8s.gpu_node_count
-    if not _gpu_count:
-        _cpu_nodes = k8s.cpu_node_count
-        _node_count = k8s.cpu_node_count
-    else:
-        _node_count = _gpu_count - 1  # subtract 1 for the warp server node
-    _default_concurrency = _node_count * 300
-
     warp_runner = WarpRunner(
         k8s,
         bucket_name,
@@ -231,9 +221,7 @@ def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
             ),
             duration=mo.ui.number(1, 60, step=1, value=10, label="Duration (min):"),  # type: ignore
             objects=mo.ui.number(1000, 1_000_000, step=1, value=1000, label="Objects:"),  # type: ignore
-            concurrency=mo.ui.number(
-                1, _default_concurrency * 10, step=1, value=_default_concurrency, label="Concurrency:"
-            ),  # type: ignore
+            concurrency=mo.ui.number(1, 3000, step=1, value=300, label="Concurrency per GPU:"),  # type: ignore
             object_size=mo.ui.number(1, 1000, step=1, value=50, label="Object Size (MiB)"),  # type: ignore
         )
         .form(submit_button_label="Run Warp Benchmark", clear_on_submit=False)
@@ -247,7 +235,7 @@ def _(bucket_name: str, k8s: K8s, storage: ObjectStorage | None):
 def _(
     bucket_name: str,
     storage: ObjectStorage | None,
-    warp_form,
+    warp_form: mo.ui.form,
     warp_runner: WarpRunner,
     use_lota_checkbox: mo.ui.checkbox,
 ):

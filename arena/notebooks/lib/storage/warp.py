@@ -49,7 +49,7 @@ class WarpRunner:
             benchmark_type: The s3 operation to benchmark: ["list", "get", "put", "delete", "stat", "mixed"].
             duration: How long to run the benchmark in minutes.
             warp_objects: How many objects to spawn for the benchmark.
-            concurrency: The number of workers to use.
+            concurrency: The number of workers to use per gpu.
             compute_class: What type of node to run on ["gpu", "cpu"].
                 If None, will attempt to run on gpu nodes and fall back to cpu if no gpu nodes are available.
             size: The size of the individual objects to test with.
