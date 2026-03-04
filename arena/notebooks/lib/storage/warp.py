@@ -33,6 +33,37 @@ class WarpRunner:
         self.bucket_name = bucket_name
         self.job_name: str | None = None
         self.job_suffix: str | None = None
+        self.warp_yaml: str | None = None
+
+    def cleanup(
+        self,
+        empty_bucket: bool = True,
+    ) -> dict[str, dict]:
+        """Clean up all items in a bucket then delete k8s resources for warp.
+
+        Returns:
+            dict: Results of cleanup operations:
+                {   "storage": {"deleted_count": 100},
+                    "k8s": {
+                        "deleted": ["Job/warp-abc123", "StatefulSet/warp"],
+                        "not_found": [],
+                        "failed": ["Service/warp: Forbidden"]
+                    }
+                }
+        """
+        results = {
+            "storage": {"deleted_count": 0},
+            "k8s": {
+                "deleted": [],
+                "not_found": [],
+                "failed": [],
+            },
+        }
+        results["k8s"] = self.k8s.delete_by_label(self.namespace, "app.kubernetes.io/name=warp")
+        if empty_bucket:
+            results["storage"]["deleted_count"] = self.object_storage.empty_bucket(self.bucket_name)
+
+        return results
 
     def run_benchmark(
         self,
@@ -81,7 +112,7 @@ class WarpRunner:
         else:
             node_count = self.k8s.gpu_node_count if compute_class == "gpu" else self.k8s.cpu_node_count
 
-        warp_yaml = self._generate_warp_yaml(
+        self.warp_yaml = self._generate_warp_yaml(
             host_count=node_count,
             compute_class=compute_class,
             benchmark_type=benchmark_type,
@@ -91,7 +122,7 @@ class WarpRunner:
             size=size,
         )
 
-        results = self.k8s.apply_yaml(warp_yaml, self.namespace)
+        results = self.k8s.apply_yaml(self.warp_yaml, self.namespace)
         # this is a bit sloppy since it assumes only one job is created, but that is currently the case so :shrug:
         for resource in results.get("created", []):
             if resource.startswith("Job/"):

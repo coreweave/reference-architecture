@@ -475,6 +475,75 @@ class K8s:
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster name: {e}")
 
+    def delete_by_label(self, namespace: str, label_selector: str) -> dict[str, list[str]]:
+        """Delete all resources in a namespace matching a label selector.
+
+        Args:
+            namespace: Kubernetes namespace to delete resources from
+            label_selector: Label selector (e.g., "app.kubernetes.io/name=warp")
+
+        Returns:
+            dict: Results of deletion operations with categorized resource names:
+                {
+                    "deleted": ["Job/warp-abc123", "StatefulSet/warp"],
+                    "not_found": [],
+                    "failed": ["Service/warp: Forbidden"]
+                }
+        """
+        results: dict[str, list[str]] = {
+            "deleted": [],
+            "not_found": [],
+            "failed": [],
+        }
+
+        resource_types = [
+            ("Job", self.batch_v1.list_namespaced_job, self.batch_v1.delete_namespaced_job),
+            ("StatefulSet", self.apps_v1.list_namespaced_stateful_set, self.apps_v1.delete_namespaced_stateful_set),
+            ("Deployment", self.apps_v1.list_namespaced_deployment, self.apps_v1.delete_namespaced_deployment),
+            ("Service", self.core_v1.list_namespaced_service, self.core_v1.delete_namespaced_service),
+            ("ConfigMap", self.core_v1.list_namespaced_config_map, self.core_v1.delete_namespaced_config_map),
+            ("Secret", self.core_v1.list_namespaced_secret, self.core_v1.delete_namespaced_secret),
+            (
+                "PersistentVolumeClaim",
+                self.core_v1.list_namespaced_persistent_volume_claim,
+                self.core_v1.delete_namespaced_persistent_volume_claim,
+            ),
+            ("Pod", self.core_v1.list_namespaced_pod, self.core_v1.delete_namespaced_pod),
+        ]
+
+        for kind, list_func, delete_func in resource_types:
+            try:
+                resources = list_func(namespace=namespace, label_selector=label_selector)
+
+                for item in resources.items:
+                    name = item.metadata.name
+                    resource_name = f"{kind}/{name}"
+
+                    try:
+                        if kind in ["Job", "StatefulSet", "Deployment"]:
+                            delete_func(
+                                name=name,
+                                namespace=namespace,
+                                propagation_policy="Foreground",
+                            )
+                        else:
+                            delete_func(name=name, namespace=namespace)
+
+                        results["deleted"].append(resource_name)
+                    except ApiException as e:
+                        if e.status == 404:
+                            results["not_found"].append(resource_name)
+                        else:
+                            results["failed"].append(f"{resource_name}: {e}")
+                    except Exception as e:
+                        results["failed"].append(f"{resource_name}: {e}")
+
+                # If we can't list this resource type, skip
+            except Exception as e:
+                results["failed"].append(f"Failed to list {kind}: {e}")
+
+        return results
+
 
 def kubeconfig_input() -> tuple[mo.Html | None, mo.ui.form | None]:
     """Create a form for a user to input their kubeconfig path.

@@ -7,13 +7,13 @@
 #     "marimo>=0.20.2",
 #     "mypy-boto3-s3>=1.42.37",
 #     "ruamel-yaml>=0.19.1",
-#     "typing-extensions>=4.15.0"
+#     "typing-extensions>=4.15.0",
 # ]
 # ///
 
 import marimo
 
-__generated_with = "0.20.2"
+__generated_with = "0.20.3"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 with app.setup:
@@ -184,7 +184,7 @@ def _(bucket_created: float, storage: ObjectStorage | None):
     """)
 
     _ui
-    return (bucket_dropdown, use_lota_checkbox)
+    return bucket_dropdown, use_lota_checkbox
 
 
 @app.cell(hide_code=True)
@@ -238,7 +238,7 @@ def _(
     storage: ObjectStorage | None,
     warp_form: mo.ui.form,
     warp_runner: WarpRunner,
-    use_lota_checkbox: mo.ui.checkbox,
+    use_lota: bool,
 ):
     mo.stop(storage is None)
 
@@ -254,7 +254,7 @@ def _(
             title="Running Warp Benchmark",
             subtitle=f"Benchmarking bucket: {bucket_name}",
         ):
-            warp_runner.object_storage.update_endpoint(use_lota_checkbox.value)
+            warp_runner.object_storage.update_endpoint(use_lota)
             warp_submit_results = warp_runner.run_benchmark(
                 benchmark_type=warp_operation,
                 duration=warp_duration,
@@ -337,6 +337,52 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
     ```\n{_log_text}\n```
     """)
         mo.output.replace(_final_output)
+    return
+
+
+@app.cell(hide_code=True)
+def _(bucket_name: str, storage: ObjectStorage):
+    mo.stop(storage is None)
+
+    warp_cleanup_button = mo.ui.run_button(tooltip="Cleanup Warp Benchmark Resources", label="Cleanup", kind="danger")
+    _ui = mo.callout(
+        mo.md(f"""
+        Cleanup Warp resources. This deletes all items in the bucket {bucket_name} and all Warp Kubernetes resources.<br>
+        {warp_cleanup_button}
+        """),
+        kind="danger",
+    )
+    _ui
+    return (warp_cleanup_button,)
+
+
+@app.cell(hide_code=True)
+def _(warp_cleanup_button: mo.ui.run_button, warp_runner: WarpRunner):
+    _rows = []
+    if warp_cleanup_button.value:
+        with mo.status.spinner(title="Cleaning up Warp benchmark resources..."):
+            _results = warp_runner.cleanup()
+
+        if _results["storage"]["deleted_count"] > 0:
+            _rows.append(
+                {
+                    "Category": "Object Storage",
+                    "Resource": warp_runner.bucket_name,
+                    "Status": "deleted",
+                    "Count": _results["storage"]["deleted_count"],
+                }
+            )
+        for resource in _results["k8s"]["deleted"]:
+            _rows.append({"Category": "Kubernetes", "Resource": resource, "Status": "deleted", "Count": 1})
+        for resource in _results["k8s"]["not_found"]:
+            _rows.append({"Category": "Kubernetes", "Resource": resource, "Status": "not_found", "Count": 0})
+        for resource in _results["k8s"]["failed"]:
+            _rows.append({"Category": "Kubernetes", "Resource": resource, "Status": "failed", "Count": 0})
+
+        if len(_rows) > 0:
+            mo.output.replace(mo.ui.table(_rows, selection=None))
+        else:
+            mo.output.replace(mo.md("No resources to clean up."))
     return
 
 

@@ -343,23 +343,22 @@ class ObjectStorage(ABC):
             print(f"Error deleting bucket: {e}")
             return False
 
-    def empty_bucket(self, bucket_name: str) -> bool:
+    def empty_bucket(self, bucket_name: str) -> int:
         """Delete all objects in a bucket.
 
         Args:
             bucket_name (str): Name of the bucket to empty.
 
         Returns:
-            bool: True if successful, False otherwise.
+            int: Count of deleted objects
 
         Note:
             Deletes objects in batches of up to 1000. Warns about individual deletion failures.
         """
+        total_deleted = 0
+        print(f"Emptying bucket '{bucket_name}'...")
+        continuation_token = None
         try:
-            print(f"Emptying bucket '{bucket_name}'...")
-            total_deleted = 0
-            continuation_token = None
-
             while True:
                 list_result = self.list_objects(
                     bucket_name=bucket_name, continuation_token=continuation_token, max_keys=1000
@@ -381,10 +380,10 @@ class ObjectStorage(ABC):
                     break
                 continuation_token = list_result.get("next_continuation_token")
             print(f"Finished emptying bucket '{bucket_name}', total deleted: {total_deleted}")
-            return True
+            return total_deleted
         except Exception as e:
             print(f"Error emptying bucket: {e}")
-            return False
+            return total_deleted
 
     def put_bucket_policy(self, bucket_name: str, policy: dict[str, Any]) -> bool:
         """Apply an S3 bucket policy.
