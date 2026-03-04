@@ -8,7 +8,6 @@
 #     "mypy-boto3-s3>=1.42.37",
 #     "ruamel-yaml>=0.19.1",
 #     "typing-extensions>=4.15.0",
-#     "polars>=1.38.1"
 # ]
 # ///
 
@@ -22,7 +21,6 @@ with app.setup:
     import time
 
     import marimo as mo
-    import polars as pl
     from lib.auth_ui import (
         init_k8s,
         init_object_storage,
@@ -382,7 +380,7 @@ def _(warp_cleanup_button: mo.ui.run_button, warp_runner: WarpRunner):
             _rows.append({"Category": "Kubernetes", "Resource": resource, "Status": "failed", "Count": 0})
 
         if len(_rows) > 0:
-            mo.output.replace(mo.ui.table(pl.DataFrame(_rows), selection=None))
+            mo.output.replace(mo.ui.table(_rows, selection=None))
         else:
             mo.output.replace(mo.md("No resources to clean up."))
     return

@@ -59,10 +59,9 @@ class WarpRunner:
                 "failed": [],
             },
         }
-
+        results["k8s"] = self.k8s.delete_by_label(self.namespace, "app.kubernetes.io/name=warp")
         if empty_bucket:
             results["storage"]["deleted_count"] = self.object_storage.empty_bucket(self.bucket_name)
-        results["k8s"] = self.k8s.delete_by_label(self.namespace, "app.kubernetes.io/name=warp")
 
         return results
 
