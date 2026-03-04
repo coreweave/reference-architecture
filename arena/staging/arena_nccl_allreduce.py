@@ -11,27 +11,28 @@
 #
 import marimo
 
-
 __generated_with = "0.19.11"
 app = marimo.App(width="medium")
 
 with app.setup(hide_code=True):
-    import subprocess
-    import marimo as mo
-    from moutils import shell
-    import pandas as pd
     import io
+    import subprocess
+
+    import marimo as mo
+    import pandas as pd
+    from moutils import shell
+
     # Only run git clone if the directory does NOT [ ! -d ] exist
     # Capture the output
-    #gpu_node_output = !kubectl get nodes -l node.coreweave.cloud/class=gpu --no-headers | wc -l
-    gpu_node_output="2"
+    # gpu_node_output = !kubectl get nodes -l node.coreweave.cloud/class=gpu --no-headers | wc -l
+    gpu_node_output = "2"
 
-    # The output of '!' is a list-like object. 
+    # The output of '!' is a list-like object.
     # We take the first element, strip whitespace, and convert to int.
     gpu_count = int(gpu_node_output[0].strip())
-    target_dir="nccl-tests"
-    repo_url="https://github.com/coreweave/nccl-tests.git"
-    cmd= f"[ -d {target_dir} ] && echo '✓ {target_dir} already exists!' || git clone {repo_url} {target_dir}"
+    target_dir = "nccl-tests"
+    repo_url = "https://github.com/coreweave/nccl-tests.git"
+    cmd = f"[ -d {target_dir} ] && echo '✓ {target_dir} already exists!' || git clone {repo_url} {target_dir}"
 
     formatted_cmd = f"""sbatch -N **{gpu_count}** nccl-tests/slurm/nccl-test-distributed-h100-64.slurm"""
 
@@ -92,37 +93,48 @@ def _(most_recent_output):
 
 @app.cell(hide_code=True)
 def _(most_recent_output):
-    tail_cmd=f"tail  {most_recent_output}"
+    tail_cmd = f"tail  {most_recent_output}"
     shell(tail_cmd)
     return
 
 
 @app.cell(hide_code=True)
 def _(most_recent_output):
-
     # Read the NCCL test output from a file
     filename = most_recent_output  # Change this to your file path
 
-    with open(most_recent_output, 'r') as f:
+    with open(most_recent_output, "r") as f:
         lines = f.readlines()
     # Remove the first line
     lines = lines[1:]
 
     # Separate header lines and data lines
-    header_lines = [line.strip() for line in lines if line.strip().startswith('#')]
-    data_lines = [line for line in lines if not line.strip().startswith('#') and line.strip()]
+    header_lines = [line.strip() for line in lines if line.strip().startswith("#")]
+    data_lines = [line for line in lines if not line.strip().startswith("#") and line.strip()]
 
     # Extract column names from the first header line
     # Remove '#' and split by whitespace
-    header_text = header_lines[0].lstrip('#').strip()
+    header_text = header_lines[0].lstrip("#").strip()
     raw_columns = header_text.split()
 
     # Column names - handling duplicates by adding suffixes
-    columns = ['size_B', 'count_elements', 'type', 'redop', 'root', 
-               'time_oop', 'algbw_oop', 'busbw_oop', 'wrong_oop',
-               'time_ip', 'algbw_ip', 'busbw_ip', 'wrong_ip']
+    columns = [
+        "size_B",
+        "count_elements",
+        "type",
+        "redop",
+        "root",
+        "time_oop",
+        "algbw_oop",
+        "busbw_oop",
+        "wrong_oop",
+        "time_ip",
+        "algbw_ip",
+        "busbw_ip",
+        "wrong_ip",
+    ]
 
-    #print(data_lines)
+    # print(data_lines)
     return columns, data_lines
 
 
@@ -131,12 +143,11 @@ def _(columns, data_lines):
     # --- Step 1: Data Acquisition ---
     @mo.cache
     def get_nccl_data():
-
         df1 = pd.read_csv(
-            io.StringIO(''.join(data_lines)), 
-            sep=r'\s+', 
-            names=columns, 
-            dtype={'size_B': 'int64', 'count_elements': 'int64'}
+            io.StringIO("".join(data_lines)),
+            sep=r"\s+",
+            names=columns,
+            dtype={"size_B": "int64", "count_elements": "int64"},
         )
         return df1
 
@@ -144,10 +155,7 @@ def _(columns, data_lines):
 
     # --- Step 2: UI Elements ---
     size_slider = mo.ui.slider(
-        start=int(df1['size_B'].min()), 
-        stop=int(df1['size_B'].max()), 
-        step=1024, 
-        label="Minimum Message Size (Bytes)"
+        start=int(df1["size_B"].min()), stop=int(df1["size_B"].max()), step=1024, label="Minimum Message Size (Bytes)"
     )
     return df1, size_slider
 
@@ -155,18 +163,19 @@ def _(columns, data_lines):
 @app.cell(hide_code=True)
 def _(df1, size_slider):
     import altair as alt
+
     # --- Step 3: Visualization Logic ---
     # Filter data based on the slider
-    filtered_df = df1[df1['size_B'] >= size_slider.value]
+    filtered_df = df1[df1["size_B"] >= size_slider.value]
 
     # Create the chart
     chart = (
         alt.Chart(filtered_df)
         .mark_line(point=True)
         .encode(
-            x=alt.X('size_B:Q', scale=alt.Scale(type='log'), title='Message Size (Bytes)'),
-            y=alt.Y('busbw_oop:Q', title='Bus Bandwidth (GB/s)'),
-            tooltip=['size_B', 'busbw_oop', 'time_oop']
+            x=alt.X("size_B:Q", scale=alt.Scale(type="log"), title="Message Size (Bytes)"),
+            y=alt.Y("busbw_oop:Q", title="Bus Bandwidth (GB/s)"),
+            tooltip=["size_B", "busbw_oop", "time_oop"],
         )
         .properties(title="NCCL AllReduce Performance", width=600, height=400)
         .interactive()

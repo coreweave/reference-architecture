@@ -13,17 +13,12 @@
 
 import marimo
 
-from arena.notebooks.lib.coreweave import detect_cw_token
-from arena.notebooks.lib.k8s import KubernetesConfigError
-from arena.notebooks.lib.ui import security_disclaimer
-
 __generated_with = "0.20.2"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 with app.setup:
     import json
     import time
-    from collections.abc import Callable
 
     import marimo as mo
     from boto3.s3.transfer import TransferConfig

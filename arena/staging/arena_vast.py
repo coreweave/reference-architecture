@@ -6,7 +6,7 @@
 #     "pandas==3.0.0"
 # ]
 # ///
-# 
+#
 
 import marimo
 
@@ -14,13 +14,13 @@ __generated_with = "0.19.11"
 app = marimo.App(width="medium")
 
 with app.setup(hide_code=True):
-    import subprocess
-    import marimo as mo
-    from moutils import shell
-    import pandas as pd
     import io
     import os
+    import subprocess
 
+    import marimo as mo
+    import pandas as pd
+    from moutils import shell
 
 
 @app.cell(hide_code=True)
@@ -49,7 +49,7 @@ def _():
 
 @app.cell
 def _():
-    test_cmd="mkdir -p /mnt/data/cw-vast-test && curl -s https://cw-storage.cwobject.com/perf/runtests.sh | bash -s -- -s /mnt/data -f -t /tmp -d cw-vast-test"
+    test_cmd = "mkdir -p /mnt/data/cw-vast-test && curl -s https://cw-storage.cwobject.com/perf/runtests.sh | bash -s -- -s /mnt/data -f -t /tmp -d cw-vast-test"
     shell(test_cmd)
     return
 
