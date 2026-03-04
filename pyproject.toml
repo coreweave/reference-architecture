@@ -49,6 +49,12 @@ ignore = [
  "E999", # syntax errors
  "E501", # line length, since we have big multiline strings for markdown
 ]
+"arena/staging/*.py" = [
+ "F401", # unused import
+ "F841", # unused variable
+ "E999", # syntax errors
+ "E501", # line length, since we have big multiline strings for markdown
+]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
@@ -69,7 +75,10 @@ reportPrivateUsage = false
 reportCallIssue = false
 reportUnannotatedClassAttribute = false
 
-ignore = ["arena/notebooks/*.py"]
+ignore = [
+    "arena/notebooks/*.py",
+    "arena/staging/*.py"
+]
 
 # Language server configuration
 [tool.marimo.language_servers.pylsp]
