@@ -343,13 +343,13 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
 
 
 @app.cell(hide_code=True)
-def _(storage: ObjectStorage):
+def _(bucket_name: str, storage: ObjectStorage):
     mo.stop(storage is None)
 
     warp_cleanup_button = mo.ui.run_button(tooltip="Cleanup Warp Benchmark Resources", label="Cleanup", kind="danger")
     _ui = mo.callout(
         mo.md(f"""
-        Cleanup Warp resources. This deletes all items in the bucket and all Warp Kubernetes resources.<br>
+        Cleanup Warp resources. This deletes all items in the bucket {bucket_name} and all Warp Kubernetes resources.<br>
         {warp_cleanup_button}
         """),
         kind="danger",
