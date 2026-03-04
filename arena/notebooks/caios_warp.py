@@ -7,7 +7,8 @@
 #     "marimo>=0.20.2",
 #     "mypy-boto3-s3>=1.42.37",
 #     "ruamel-yaml>=0.19.1",
-#     "typing-extensions>=4.15.0"
+#     "typing-extensions>=4.15.0",
+#     "polars>=1.38.1"
 # ]
 # ///
 
@@ -21,6 +22,7 @@ with app.setup:
     import time
 
     import marimo as mo
+    import polars as pl
     from lib.auth_ui import (
         init_k8s,
         init_object_storage,
@@ -341,11 +343,13 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
 
 
 @app.cell(hide_code=True)
-def _():
+def _(storage: ObjectStorage):
+    mo.stop(storage is None)
+
     warp_cleanup_button = mo.ui.run_button(tooltip="Cleanup Warp Benchmark Resources", label="Cleanup", kind="danger")
     _ui = mo.callout(
         mo.md(f"""
-        Cleanup Warp resources. This deletes all items in the bucket and the bucket itself.<br>
+        Cleanup Warp resources. This deletes all items in the bucket and all Warp Kubernetes resources.<br>
         {warp_cleanup_button}
         """),
         kind="danger",
@@ -356,10 +360,31 @@ def _():
 
 @app.cell(hide_code=True)
 def _(warp_cleanup_button: mo.ui.run_button, warp_runner: WarpRunner):
+    _rows = []
     if warp_cleanup_button.value:
-        with mo.status.spinner(title="Cleaning up Warp Benchmark resources..."):
-            warp_runner.cleanup()
-        mo.output.replace(mo.md("Warp benchmark resources cleaned up successfully."))
+        with mo.status.spinner(title="Cleaning up Warp benchmark resources..."):
+            _results = warp_runner.cleanup()
+
+        if _results["storage"]["deleted_count"] > 0:
+            _rows.append(
+                {
+                    "Category": "Object Storage",
+                    "Resource": warp_runner.bucket_name,
+                    "Status": "deleted",
+                    "Count": _results["storage"]["deleted_count"],
+                }
+            )
+        for resource in _results["k8s"]["deleted"]:
+            _rows.append({"Category": "Kubernetes", "Resource": resource, "Status": "deleted", "Count": 1})
+        for resource in _results["k8s"]["not_found"]:
+            _rows.append({"Category": "Kubernetes", "Resource": resource, "Status": "not_found", "Count": 0})
+        for resource in _results["k8s"]["failed"]:
+            _rows.append({"Category": "Kubernetes", "Resource": resource, "Status": "failed", "Count": 0})
+
+        if len(_rows) > 0:
+            mo.output.replace(mo.ui.table(pl.DataFrame(_rows), selection=None))
+        else:
+            mo.output.replace(mo.md("No resources to clean up."))
     return
 
 

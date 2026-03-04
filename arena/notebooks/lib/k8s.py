@@ -412,133 +412,6 @@ class K8s:
         except Exception as e:
             raise KubernetesError(f"Failed to parse or apply YAML: {e}")
 
-    def delete_yaml(self, yaml_content: str, namespace: str) -> dict[str, list[str]]:
-        """Delete Kubernetes resources from YAML content.
-
-        Args:
-            yaml_content: YAML string containing one or more Kubernetes resources to delete
-            namespace: Kubernetes namespace to delete resources from. Defaults to "default".
-
-        Returns:
-            dict: Results of deletion operations with categorized resource names:
-                {
-                    "deleted": ["Job/warp-abc123", "StatefulSet/warp"],
-                    "not_found": ["ConfigMap/missing-config"],
-                    "failed": ["Service/warp: Forbidden"]
-                }
-        """
-        results: dict[str, list[str]] = {
-            "deleted": [],
-            "not_found": [],
-            "failed": [],
-        }
-
-        try:
-            yaml = YAML(typ="safe")
-            documents = list(yaml.load_all(yaml_content))
-
-            for doc in documents:
-                if not doc:
-                    continue
-
-                kind = doc.get("kind")
-                if not kind:
-                    results["failed"].append("Resource missing 'kind' field")
-                    continue
-
-                name = doc.get("metadata", {}).get("name")
-                if not name:
-                    results["failed"].append(f"{kind}: Resource missing 'metadata.name' field")
-                    continue
-
-                resource_name = f"{kind}/{name}"
-
-                try:
-                    result = self._delete_resource(doc, namespace)
-
-                    if result == "deleted":
-                        results["deleted"].append(resource_name)
-                    elif result == "not_found":
-                        results["not_found"].append(resource_name)
-                    else:
-                        results["failed"].append(f"{resource_name}: {result}")
-
-                except Exception as e:
-                    results["failed"].append(f"{kind}/{name}: {e}")
-
-        except Exception as e:
-            raise KubernetesError(f"Failed to parse YAML for deletion: {e}")
-        return results
-
-    def _delete_resource(self, resource: dict, namespace: str) -> str:  # noqa: C901
-        """Delete a single Kubernetes resource.
-
-        Args:
-            resource: Resource definition dictionary
-            namespace: Kubernetes namespace
-
-        Returns:
-            str: Result status - "deleted", "not_found", or error message
-        """
-        kind = resource.get("kind")
-        name = resource["metadata"]["name"]
-
-        try:
-            if kind == "Job":
-                self.batch_v1.delete_namespaced_job(
-                    name=name,
-                    namespace=namespace,
-                    propagation_policy="Foreground",
-                )
-            elif kind == "StatefulSet":
-                self.apps_v1.delete_namespaced_stateful_set(
-                    name=name,
-                    namespace=namespace,
-                    propagation_policy="Foreground",
-                )
-            elif kind == "Deployment":
-                self.apps_v1.delete_namespaced_deployment(
-                    name=name,
-                    namespace=namespace,
-                    propagation_policy="Foreground",
-                )
-            elif kind == "Service":
-                self.core_v1.delete_namespaced_service(
-                    name=name,
-                    namespace=namespace,
-                )
-            elif kind == "ConfigMap":
-                self.core_v1.delete_namespaced_config_map(
-                    name=name,
-                    namespace=namespace,
-                )
-            elif kind == "Secret":
-                self.core_v1.delete_namespaced_secret(
-                    name=name,
-                    namespace=namespace,
-                )
-            elif kind == "PersistentVolumeClaim":
-                self.core_v1.delete_namespaced_persistent_volume_claim(
-                    name=name,
-                    namespace=namespace,
-                )
-            elif kind == "Pod":
-                self.core_v1.delete_namespaced_pod(
-                    name=name,
-                    namespace=namespace,
-                )
-            else:
-                return f"Unsupported resource kind: {kind}"
-
-            return "deleted"
-
-        except ApiException as e:
-            if e.status == 404:
-                return "not_found"
-            return str(e)
-        except Exception as e:
-            return str(e)
-
     @property
     def org_id(self) -> str:
         """Detect the CoreWeave org ID by checking the first node's cks.coreweave.com/org-id label. cks.coreweave.com/org-id=cw623e."""
@@ -601,6 +474,75 @@ class K8s:
 
         except ApiException as e:
             raise KubernetesError(f"Failed to get cluster name: {e}")
+
+    def delete_by_label(self, namespace: str, label_selector: str) -> dict[str, list[str]]:
+        """Delete all resources in a namespace matching a label selector.
+
+        Args:
+            namespace: Kubernetes namespace to delete resources from
+            label_selector: Label selector (e.g., "app.kubernetes.io/name=warp")
+
+        Returns:
+            dict: Results of deletion operations with categorized resource names:
+                {
+                    "deleted": ["Job/warp-abc123", "StatefulSet/warp"],
+                    "not_found": [],
+                    "failed": ["Service/warp: Forbidden"]
+                }
+        """
+        results: dict[str, list[str]] = {
+            "deleted": [],
+            "not_found": [],
+            "failed": [],
+        }
+
+        resource_types = [
+            ("Job", self.batch_v1.list_namespaced_job, self.batch_v1.delete_namespaced_job),
+            ("StatefulSet", self.apps_v1.list_namespaced_stateful_set, self.apps_v1.delete_namespaced_stateful_set),
+            ("Deployment", self.apps_v1.list_namespaced_deployment, self.apps_v1.delete_namespaced_deployment),
+            ("Service", self.core_v1.list_namespaced_service, self.core_v1.delete_namespaced_service),
+            ("ConfigMap", self.core_v1.list_namespaced_config_map, self.core_v1.delete_namespaced_config_map),
+            ("Secret", self.core_v1.list_namespaced_secret, self.core_v1.delete_namespaced_secret),
+            (
+                "PersistentVolumeClaim",
+                self.core_v1.list_namespaced_persistent_volume_claim,
+                self.core_v1.delete_namespaced_persistent_volume_claim,
+            ),
+            ("Pod", self.core_v1.list_namespaced_pod, self.core_v1.delete_namespaced_pod),
+        ]
+
+        for kind, list_func, delete_func in resource_types:
+            try:
+                resources = list_func(namespace=namespace, label_selector=label_selector)
+
+                for item in resources.items:
+                    name = item.metadata.name
+                    resource_name = f"{kind}/{name}"
+
+                    try:
+                        if kind in ["Job", "StatefulSet", "Deployment"]:
+                            delete_func(
+                                name=name,
+                                namespace=namespace,
+                                propagation_policy="Foreground",
+                            )
+                        else:
+                            delete_func(name=name, namespace=namespace)
+
+                        results["deleted"].append(resource_name)
+                    except ApiException as e:
+                        if e.status == 404:
+                            results["not_found"].append(resource_name)
+                        else:
+                            results["failed"].append(f"{resource_name}: {e}")
+                    except Exception as e:
+                        results["failed"].append(f"{resource_name}: {e}")
+
+                # If we can't list this resource type, skip
+            except Exception as e:
+                results["failed"].append(f"Failed to list {kind}: {e}")
+
+        return results
 
 
 def kubeconfig_input() -> tuple[mo.Html | None, mo.ui.form | None]:

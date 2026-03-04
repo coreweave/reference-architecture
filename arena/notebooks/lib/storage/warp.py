@@ -35,13 +35,36 @@ class WarpRunner:
         self.job_suffix: str | None = None
         self.warp_yaml: str | None = None
 
-    def cleanup(self, empty_bucket: bool = True, delete_bucket: bool = True) -> None:
-        """Clean up all items in a bucket then delete the bucket."""
-        if empty_bucket or delete_bucket:
-            self.object_storage.empty_bucket(self.bucket_name)
-        if delete_bucket:
-            self.object_storage.delete_bucket(self.bucket_name)
-        self.k8s.delete_yaml(self.warp_yaml, self.namespace)
+    def cleanup(
+        self,
+        empty_bucket: bool = True,
+    ) -> dict[str, dict]:
+        """Clean up all items in a bucket then delete k8s resources for warp.
+
+        Returns:
+            dict: Results of cleanup operations:
+                {   "storage": {"deleted_count": 100},
+                    "k8s": {
+                        "deleted": ["Job/warp-abc123", "StatefulSet/warp"],
+                        "not_found": [],
+                        "failed": ["Service/warp: Forbidden"]
+                    }
+                }
+        """
+        results = {
+            "storage": {"deleted_count": 0},
+            "k8s": {
+                "deleted": [],
+                "not_found": [],
+                "failed": [],
+            },
+        }
+
+        if empty_bucket:
+            results["storage"]["deleted_count"] = self.object_storage.empty_bucket(self.bucket_name)
+        results["k8s"] = self.k8s.delete_by_label(self.namespace, "app.kubernetes.io/name=warp")
+
+        return results
 
     def run_benchmark(
         self,
