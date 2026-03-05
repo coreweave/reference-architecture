@@ -6,7 +6,7 @@ locals {
   cks_internal_lb_cidr_names = toset([for i in range(2, length(var.vpc_prefixes)) : var.vpc_prefixes[i].name])
 }
 
-# Network (VPC) – created first
+# Network (VPC) - created first
 module "network" {
   source = "./modules/network"
 
@@ -16,7 +16,7 @@ module "network" {
   host_prefixes = var.host_prefixes
 }
 
-# CKS cluster – depends on VPC; uses VPC's zone and prefix names derived from vpc_prefixes
+# CKS cluster - depends on VPC; uses VPC's zone and prefix names derived from vpc_prefixes
 module "cks" {
   source = "./modules/cks"
 
@@ -36,16 +36,19 @@ module "cks" {
   audit_policy    = var.audit_policy
 }
 
-# Object Storage bucket (optional; set object_storage_bucket_name to create)
+# Object Storage bucket + policies (optional; set object_storage_bucket_name to create)
 module "object_storage" {
   source = "./modules/object_storage"
 
   bucket_name = var.object_storage_bucket_name
   zone        = coalesce(var.object_storage_bucket_zone, var.zone)
   tags        = var.object_storage_bucket_tags
+
+  org_access_policies      = var.object_storage_org_access_policies
+  bucket_policy_statements = var.object_storage_bucket_policy_statements
 }
 
-# NodePools (optional; phase 2 – requires kubeconfig). Use nodepools map for multiple NodePools.
+# NodePools (optional; phase 2 - requires kubeconfig). Use nodepools map for multiple NodePools.
 module "nodepool" {
   for_each = local.nodepools_to_create
   source   = "./modules/nodepool"
@@ -62,7 +65,7 @@ module "nodepool" {
   node_taints     = each.value.node_taints
 }
 
-# DFS PVCs (optional; phase 2 – requires kubeconfig for current cluster). Use dfs_pvcs map for multiple PVCs.
+# DFS PVCs (optional; phase 2 - requires kubeconfig for current cluster). Use dfs_pvcs map for multiple PVCs.
 locals {
   nodepools_to_create = var.create_nodepool ? (length(var.nodepools) > 0 ? var.nodepools : {
     (var.nodepool_name) = {

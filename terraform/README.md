@@ -1,24 +1,27 @@
-# CoreWeave Reference Architecture – Terraform
+# CoreWeave Reference Architecture - Terraform
 
-Deploy CoreWeave infrastructure with Terraform: a **VPC**, **CKS (Kubernetes) cluster**, optional **Object Storage bucket**, **NodePool(s)**, and **DFS (Distributed File Storage)** PVCs—all from this code. Uses a single root with modules and a two-phase apply (VPC + cluster first, then NodePool and DFS after kubeconfig is set).
+Deploy CoreWeave infrastructure with Terraform: a **VPC**, **CKS (Kubernetes) cluster**, optional **Object Storage bucket** with **access policies**, **NodePool(s)**, and **DFS (Distributed File Storage)** PVCs-all from this code. Uses a single root with modules and a two-phase apply (VPC + cluster first, then NodePool and DFS after kubeconfig is set).
 
 ## What this creates
 
 | Resource | Required? | Description |
 |----------|-----------|-------------|
 | **VPC** | Yes | CoreWeave VPC with host prefixes and named CIDR prefixes for CKS (pod, service, internal LB). |
-| **CKS cluster** | Yes | CoreWeave Kubernetes Service cluster in the VPC. |
-| **Object Storage bucket** | No | CoreWeave AI Object Storage (S3-compatible) bucket. Requires your user to be in an S3 policy that allows create/list. |
-| **NodePool(s)** | No | One or more CKS node pools (via Kubernetes manifest). Created in **phase 2** after the cluster exists and you have kubeconfig. Use **nodepools** in tfvars for multiple NodePools. |
-| **DFS PVC(s)** | No | One or more Distributed File Storage PVCs (`shared-vast`, ReadWriteMany) in the cluster. Created in **phase 2** with NodePool. Use **dfs_pvcs** in tfvars for multiple PVCs. |
+| **CKS cluster** | Yes | CoreWeave Kubernetes Service cluster in the VPC. Supports OIDC configuration for external IdPs. |
+| **Object Storage org access policy** | No | Organization-wide access policy for AI Object Storage. At least one must exist before creating buckets. |
+| **Object Storage bucket** | No | CoreWeave AI Object Storage (S3-compatible) bucket. |
+| **Object Storage bucket policy** | No | Per-bucket S3-compatible access policy for fine-grained control. |
+| **NodePool(s)** | No | One or more CKS node pools (via Kubernetes manifest). Created in **phase 2** after the cluster exists and you have kubeconfig. |
+| **DFS PVC(s)** | No | One or more Distributed File Storage PVCs (`shared-vast`, ReadWriteMany) in the cluster. Created in **phase 2** with NodePool. |
 
 ## Prerequisites
 
 - [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.2
 - [CoreWeave](https://console.coreweave.com/) account
-- **CoreWeave API token** – [Create in Console → Tokens](https://console.coreweave.com/tokens)
-- (Optional) For **Object Storage bucket**: your user must be added to an **S3 policy** in CoreWeave Console that allows `ListBuckets` and `CreateBucket`; otherwise bucket creation returns 403.
-- (Optional) For **NodePool and DFS** (phase 2): **kubeconfig** for your CKS cluster. Download it from CoreWeave Console after the cluster is running; set `cks_kubeconfig_path` in `terraform.tfvars` before enabling `create_nodepool` or `create_dfs_pvc`.
+- **CoreWeave API token** - [Create in Console -> Tokens](https://console.coreweave.com/tokens)
+- (Optional) For **Object Storage**: set up an org access policy (via Terraform or Console) before creating buckets.
+- (Optional) For **OIDC Workload Identity Federation**: create a WIF configuration in [Console -> Organization -> IAM -> Workload Federation](https://console.coreweave.com/organization/iam/workload-federation#oidc).
+- (Optional) For **NodePool and DFS** (phase 2): **kubeconfig** for your CKS cluster.
 
 ## Quick start
 
@@ -34,10 +37,10 @@ cp terraform.tfvars.example terraform.tfvars
 
 Edit `terraform.tfvars` and replace placeholders:
 
-- **zone** – e.g. `US-EAST-02A`
-- **vpc_name** – your VPC name
-- **vpc_prefixes** – CIDR blocks for pod, service, and internal LB; see [CoreWeave VPC CIDR docs](https://docs.coreweave.com/docs/products/networking/vpc/vpc-cidr) for sizing and examples (the example values in `terraform.tfvars.example` are valid to use as-is).
-- **cluster_name** – your CKS cluster name (max 30 characters)
+- **zone** - e.g. `US-EAST-02A`
+- **vpc_name** - your VPC name
+- **vpc_prefixes** - CIDR blocks for pod, service, and internal LB; see [CoreWeave VPC CIDR docs](https://docs.coreweave.com/docs/products/networking/vpc/vpc-cidr) for sizing and examples (the example values in `terraform.tfvars.example` are valid to use as-is).
+- **cluster_name** - your CKS cluster name (max 30 characters)
 - Leave **create_nodepool** and **create_dfs_pvc** as `false` for the first run.
 
 Do **not** commit `terraform.tfvars` if it contains your API token.
@@ -56,7 +59,7 @@ Or add to `terraform.tfvars` (do not commit):
 coreweave_api_token = "<YOUR_COREWEAVE_API_TOKEN>"
 ```
 
-### 4. Phase 1 – Create VPC and CKS cluster
+### 4. Phase 1 - Create VPC, CKS cluster, and Object Storage
 
 ```bash
 terraform init
@@ -64,26 +67,190 @@ terraform plan    # review
 terraform apply   # creates VPC + cluster (~45 min for cluster)
 ```
 
-Optionally create an **Object Storage bucket** by setting `object_storage_bucket_name` (and zone/tags) in `terraform.tfvars` before apply. Your user must have S3 policy access as in Prerequisites.
+Optionally create **Object Storage** resources by setting the relevant variables in `terraform.tfvars`:
+- `object_storage_org_access_policies` - organization-wide access policies (at least one required before bucket creation)
+- `object_storage_bucket_name` - bucket name
+- `object_storage_bucket_policy_statements` - per-bucket fine-grained access control
 
-### 5. Phase 2 – NodePool and DFS (optional)
+### 5. Phase 2 - NodePool and DFS (optional)
 
 After the cluster is **Running**:
 
-1. **Download kubeconfig** for your cluster from [CoreWeave Console](https://console.coreweave.com/) (open the cluster → download kubeconfig).
-2. In `terraform.tfvars` set **cks_kubeconfig_path** to the path of the downloaded file (e.g. `"~/.kube/config"` or `"/path/to/cks-kubeconfig.yaml"`).
-3. Set **create_nodepool = true** and/or **create_dfs_pvc = true** if you want them.
+1. **Download kubeconfig** for your cluster from [CoreWeave Console](https://console.coreweave.com/).
+2. In `terraform.tfvars` set **cks_kubeconfig_path** to the downloaded file path.
+3. Set **create_nodepool = true** and/or **create_dfs_pvc = true**.
 4. Apply again:
 
 ```bash
 terraform apply
 ```
 
-Terraform will create the NodePool(s) and/or DFS PVC(s) in the cluster. If you see errors like `no such host`, the kubeconfig is pointing at an old or wrong cluster; download a fresh kubeconfig for the current cluster.
+## Object Storage access policies
 
-**Multiple NodePools:** To create more than one NodePool, set **nodepools** in `terraform.tfvars` to a map (key = NodePool name, value = `{ instance_type, target_nodes, autoscaling, min_nodes, max_nodes, node_labels, node_annotations, node_taints }`). See `terraform.tfvars.example` (Option B). If **nodepools** is empty, the single-NodePool vars (**nodepool_name**, **nodepool_instance_type**, etc.) are used.
+The CoreWeave Terraform provider supports two levels of Object Storage access policies. The `object_storage_org_access_policies` variable is a **map** (key = policy name), so you can create multiple policies for different concerns.
 
-**Multiple DFS PVCs:** To create more than one DFS PVC in the same cluster, set **dfs_pvcs** in `terraform.tfvars` to a map (key = PVC name, value = `{ namespace, size }`). See `terraform.tfvars.example` (Option B). If **dfs_pvcs** is empty, the single-PVC vars (**dfs_pvc_name**, **dfs_pvc_namespace**, **dfs_pvc_size**) are used.
+### Open access (single policy)
+
+A single policy granting full S3 and Object Storage API access to every principal in the organization. Suitable for dev/test environments or single-team setups where all users share the same level of access:
+
+```hcl
+object_storage_org_access_policies = {
+  "open-access" = {
+    statements = [
+      {
+        name       = "allow-all-principals-full-access"
+        effect     = "Allow"
+        actions    = ["s3:*", "cwobject:*"]
+        resources  = ["*"]
+        principals = ["*"]
+      }
+    ]
+  }
+}
+```
+
+### Scoped access (multiple policies)
+
+Separate policies for different access patterns - named principals, least-privilege actions, independently manageable and auditable:
+
+```hcl
+object_storage_org_access_policies = {
+  # Policy 1: Admin users get full control
+  "admin-access" = {
+    statements = [
+      {
+        name       = "allow-admin-full-access"
+        effect     = "Allow"
+        actions    = ["s3:*", "cwobject:*"]
+        resources  = ["*"]
+        principals = ["admin@example.com", "platform-team@example.com"]
+      }
+    ]
+  }
+
+  # Policy 2: OIDC workload identity - scoped access for automated workloads
+  "oidc-wif" = {
+    statements = [
+      {
+        name       = "allow-oidc-key-creation"
+        effect     = "Allow"
+        actions    = ["cwobject:CreateAccessKeyFromOIDC"]
+        resources  = ["*"]
+        principals = ["role/https://idp.example.com:svc-data-ingest"]
+      },
+      {
+        name       = "allow-s3-rw-training-bucket"
+        effect     = "Allow"
+        actions    = ["s3:GetObject", "s3:PutObject", "s3:ListBucket", "s3:DeleteObject"]
+        resources  = ["training-data", "training-data/*"]
+        principals = ["role/https://idp.example.com:svc-data-ingest"]
+      }
+    ]
+  }
+}
+```
+
+### Bucket access policy
+
+Bucket access policies add fine-grained, S3-compatible access control for a single bucket. They are evaluated **after** organization access policies. Managed via `object_storage_bucket_policy_statements`.
+
+```hcl
+object_storage_bucket_policy_statements = [
+  {
+    sid    = "allow-read-oidc-role"
+    effect = "Allow"
+    actions   = ["s3:GetObject", "s3:ListBucket"]
+    resources = ["arn:aws:s3:::my-bucket", "arn:aws:s3:::my-bucket/*"]
+    principals = {
+      "CW" = ["arn:aws:iam::<org-id>:role/https://idp.example.com:svc-reader"]
+    }
+  }
+]
+```
+
+**Key difference:** Organization policies use short-form principals (e.g. `role/https://idp.example.com:sub`), while bucket policies use full ARNs (e.g. `arn:aws:iam::<org-id>:role/https://idp.example.com:sub`).
+
+## OIDC Workload Identity Federation for Object Storage
+
+For production use cases, OIDC Workload Identity Federation eliminates static API keys by exchanging short-lived JWT tokens from your identity provider for temporary Object Storage credentials.
+
+> **What Terraform manages vs. what's manual:**
+> - **Terraform manages:** Organization and bucket access policies that authorize OIDC-derived roles (steps 2-3 below)
+> - **Manual (Console):** The WIF configuration that tells CoreWeave how to validate your IdP's tokens (step 1 below). There is no Terraform resource for WIF configurations today.
+> - **Manual (workload):** Client-side environment variables that tell the AWS SDK where to exchange tokens (step 3 below)
+>
+> You will need your IdP's issuer URL and the subject identifier for your workloads before writing the Terraform policy.
+
+### How it works
+
+1. Your workload obtains an OIDC token from your identity provider (IdP)
+2. The token is sent to CoreWeave's WIF endpoint
+3. CoreWeave validates the token and returns temporary Access Key / Secret Key credentials
+4. Credentials expire automatically; the AWS SDK handles refresh transparently
+
+The derived role identity is: `role/<ISSUER_URL>:<SUBJECT>`
+
+### Setup
+
+#### Step 1: Create WIF configuration in Console
+
+Navigate to [Console -> Organization -> IAM -> Workload Federation](https://console.coreweave.com/organization/iam/workload-federation#oidc) and create an OIDC configuration with:
+- **Issuer URL**: Your IdP's URL (e.g. `https://your-domain.okta.com`)
+- **Client ID (Audience)**: The value tokens must contain in their `aud` claim
+
+#### Step 2: Create org access policy via Terraform
+
+Grant `cwobject:CreateAccessKeyFromOIDC` to your OIDC-derived role, plus any S3 permissions. This can be its own policy or combined with others:
+
+```hcl
+object_storage_org_access_policies = {
+  "oidc-wif" = {
+    statements = [
+      {
+        name       = "allow-oidc-key-creation"
+        effect     = "Allow"
+        actions    = ["cwobject:CreateAccessKeyFromOIDC"]
+        resources  = ["*"]
+        principals = ["role/https://idp.example.com:svc-data-ingest"]
+      },
+      {
+        name       = "allow-s3-rw"
+        effect     = "Allow"
+        actions    = ["s3:Get*", "s3:List*", "s3:Put*", "s3:DeleteObject"]
+        resources  = ["my-bucket", "my-bucket/*"]
+        principals = ["role/https://idp.example.com:svc-data-ingest"]
+      }
+    ]
+  }
+}
+```
+
+#### Step 3: Configure workloads
+
+Set these environment variables (requires AWS CLI >= 2.33.2 or boto3 >= 1.42.5):
+
+```bash
+export AWS_CONTAINER_CREDENTIALS_FULL_URI=https://api.coreweave.com/v1/cwobject/temporary-credentials/oidc/<ORG_ID>
+export AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE=/path/to/jwt-token
+
+aws configure set s3.addressing_style virtual
+export AWS_REGION="US-EAST-02A"
+export AWS_ENDPOINT_URL_S3="https://cwobject.com"
+
+# Test
+aws s3 ls
+```
+
+### Using CKS service account tokens
+
+CKS clusters expose an OIDC issuer URL for Kubernetes service account tokens (output as `cks_service_account_oidc_issuer_url`). You can use this as the issuer when creating the WIF configuration in Console, allowing CKS workloads to access Object Storage without any static credentials:
+
+1. Create the CKS cluster and note the `cks_service_account_oidc_issuer_url` output
+2. Create a WIF configuration in Console using that URL as the issuer
+3. The role becomes: `role/<cks_service_account_oidc_issuer_url>:system:serviceaccount:<namespace>:<sa-name>`
+4. Grant that role access in your org access policy
+
+This is the recommended approach for CKS workloads accessing Object Storage.
 
 ## Step-by-step (detailed)
 
@@ -92,11 +259,14 @@ Terraform will create the NodePool(s) and/or DFS PVC(s) in the cluster. If you s
 | 1 | Clone repo, `cp terraform.tfvars.example terraform.tfvars`. |
 | 2 | Edit `terraform.tfvars`: set zone, vpc_name, cluster_name; keep create_nodepool and create_dfs_pvc **false**. |
 | 3 | Set `TF_VAR_coreweave_api_token` (or coreweave_api_token in tfvars). Do not commit tfvars if it has the token. |
-| 4 | (Optional) To create a bucket: set object_storage_bucket_name (and zone/tags). Ensure your user has S3 policy access. |
-| 5 | Run `terraform init`, then `terraform plan` and `terraform apply`. Wait for cluster to be ready. |
-| 6 | Download kubeconfig for the new cluster from CoreWeave Console. |
-| 7 | In terraform.tfvars set cks_kubeconfig_path and set create_nodepool = true and/or create_dfs_pvc = true. |
-| 8 | Run `terraform apply` again to create NodePool(s) and/or DFS PVC(s). |
+| 4 | (Optional) Set object_storage_org_access_policies for org-wide access control (easy setup or production). |
+| 5 | (Optional) Set object_storage_bucket_name (and zone/tags) to create a bucket. |
+| 6 | (Optional) Set object_storage_bucket_policy_statements for per-bucket access control. |
+| 7 | Run `terraform init`, then `terraform plan` and `terraform apply`. Wait for cluster to be ready. |
+| 8 | (Optional, for OIDC WIF) Note the cks_service_account_oidc_issuer_url output. Create a WIF config in Console. |
+| 9 | Download kubeconfig for the new cluster from CoreWeave Console. |
+| 10 | In terraform.tfvars set cks_kubeconfig_path and set create_nodepool = true and/or create_dfs_pvc = true. |
+| 11 | Run `terraform apply` again to create NodePool(s) and/or DFS PVC(s). |
 
 ## Repository structure
 
@@ -123,8 +293,8 @@ All resources are organized as **modules**. The root `main.tf` wires them togeth
     │   ├── variables.tf
     │   ├── outputs.tf
     │   └── versions.tf
-    ├── object_storage/       # Optional AI Object Storage bucket
-    │   ├── main.tf
+    ├── object_storage/       # Optional AI Object Storage bucket + policies
+    │   ├── main.tf           # Bucket, org access policy, bucket policy
     │   ├── variables.tf
     │   ├── outputs.tf
     │   └── versions.tf
@@ -156,29 +326,25 @@ terraform state mv 'kubernetes_manifest.dfs_pvc[0]' 'module.dfs["dfs-shared"].ku
 
 Omit any line that fails (resource not in state). Then run `terraform plan` again; it should show no changes for those resources.
 
-## Object Storage bucket – S3 policy requirement
-
-To create a bucket, your **user** (or the token’s principal) must be added to an **S3 policy** in CoreWeave Console that allows:
-
-- `ListBuckets`
-- `CreateBucket`
-
-Without this, bucket creation fails with **403 AccessDenied**. Add your user to the appropriate Object Storage (S3) policy in Console, then use the same API token when running Terraform.
-
 ## Outputs
 
 After apply, Terraform outputs include:
 
-- **vpc_id** – Created VPC ID (from `module.network`)
+- **vpc_id** - Created VPC ID (from `module.network`)
 - **cks_cluster_id**, **cks_cluster_name**, **cks_api_server_endpoint**, **cks_status** (from `module.cks`)
-- **object_storage_bucket_name** – If a bucket was created (from `module.object_storage`)
-- **nodepools** – Map of created NodePool names: key → nodepool_name (from `module.nodepool`; empty if create_nodepool is false)
-- **dfs_pvcs** – Map of created DFS PVCs: name → { pvc_name, namespace } (from `module.dfs`; empty if create_dfs_pvc is false)
+- **cks_service_account_oidc_issuer_url** - OIDC issuer URL for CKS service account tokens (use for WIF setup)
+- **object_storage_bucket_name** - If a bucket was created (from `module.object_storage`)
+- **object_storage_org_access_policy_names** - Map of created org access policy names
+- **object_storage_bucket_policy_json** - If a bucket policy was applied
+- **nodepools** - Map of created NodePool names (from `module.nodepool`)
+- **dfs_pvcs** - Map of created DFS PVCs (from `module.dfs`)
 
 ## Links
 
 - [CoreWeave Cloud Console](https://console.coreweave.com/)
 - [CoreWeave Terraform Provider](https://registry.terraform.io/providers/coreweave/coreweave/latest/docs)
 - [CKS documentation](https://docs.coreweave.com/products/cks/clusters/introduction)
-- [Object Storage – Create access tokens](https://docs.coreweave.com/products/storage/object-storage/auth-access/create-access-tokens)
-- [DFS – Create volumes](https://docs.coreweave.com/products/storage/distributed-file-storage/create-volumes)
+- [Object Storage - Access policies](https://docs.coreweave.com/platform/terraform/resources/object_storage_organization_access_policy)
+- [Object Storage - Bucket policies](https://docs.coreweave.com/platform/terraform/resources/object_storage_bucket_policy)
+- [Workload Identity Federation with OIDC](https://docs.coreweave.com/products/storage/object-storage/auth-access/workload-identity-federation/use-oidc-tokens)
+- [DFS - Create volumes](https://docs.coreweave.com/products/storage/distributed-file-storage/create-volumes)
