@@ -74,6 +74,7 @@ reportExplicitAny = false
 reportPrivateUsage = false
 reportCallIssue = false
 reportUnannotatedClassAttribute = false
+reportImplicitStringConcatenation = false
 
 ignore = [
     "arena/notebooks/*.py",

@@ -30,7 +30,7 @@ with app.setup:
     from lib.k8s import K8s
     from lib.storage.object_storage import ObjectStorage
     from lib.storage.warp import WarpRunner
-    from lib.ui import about, banner, security_disclaimer, table_of_contents
+    from lib.ui import about, banner, cluster_details, security_disclaimer, table_of_contents
 
 
 @app.cell(hide_code=True)
@@ -67,6 +67,11 @@ def _(auto_k8s: K8s, kubeconfig_form: mo.ui.form):
     k8s, _ui = process_k8s_form(auto_k8s, kubeconfig_form)
     _ui if _ui else None
     return (k8s,)
+
+
+@app.cell(hide_code=True)
+def _(k8s: K8s):
+    cluster_details(k8s.nodes)
 
 
 @app.cell(hide_code=True)
