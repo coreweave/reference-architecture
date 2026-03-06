@@ -32,7 +32,7 @@ with app.setup:
     from lib.k8s import K8s
     from lib.storage.boto3 import run_s3_download_test, run_s3_upload_test
     from lib.storage.object_storage import MissingCredentialsError, ObjectStorage
-    from lib.ui import about, banner, security_disclaimer, table_of_contents
+    from lib.ui import about, banner, cluster_details, security_disclaimer, table_of_contents
 
 
 @app.cell(hide_code=True)
@@ -76,6 +76,11 @@ def _(k8s: K8s):
     auto_storage, cw_token_form, _ui = init_object_storage(k8s)
     _ui
     return auto_storage, cw_token_form
+
+
+@app.cell(hide_code=True)
+def _(k8s: K8s):
+    cluster_details(k8s.nodes)
 
 
 @app.cell(hide_code=True)

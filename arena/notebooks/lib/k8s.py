@@ -46,11 +46,9 @@ class K8s:
         """Initialize Kubernetes client.
 
         Args:
-            in_cluster (bool, optional): If True, load in-cluster config (for pods). If False,
-                load from kubeconfig file. Defaults to True.
             kubeconfig_path (str, optional): Path to kubeconfig file when in_cluster=False.
                 Defaults to "" (uses default KUBECONFIG_PATH env var).
-            context (str, optional): Kubernetes context to use when multiple available in the kubeconfig_path. If empty, uses current-context
+            context (str, optional): Kubernetes context to use when multiple available in the kubeconfig_path. If empty, uses current-context.
 
         Raises:
             KubernetesConfigError: If Kubernetes config cannot be loaded.
