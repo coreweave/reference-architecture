@@ -25,7 +25,7 @@ output "cks_api_server_endpoint" {
 
 output "cks_service_account_oidc_issuer_url" {
   value       = module.cks.service_account_oidc_issuer_url
-  description = "OIDC issuer URL for service account tokens"
+  description = "OIDC issuer URL for service account tokens. Use this as the issuer URL when configuring Workload Identity Federation for Object Storage."
 }
 
 output "cks_status" {
@@ -36,6 +36,16 @@ output "cks_status" {
 output "object_storage_bucket_name" {
   value       = module.object_storage.bucket_name
   description = "Created object storage bucket name (null if no bucket created)"
+}
+
+output "object_storage_org_access_policy_names" {
+  value       = module.object_storage.org_access_policy_names
+  description = "Map of created organization access policy names (empty if none created)"
+}
+
+output "object_storage_bucket_policy_json" {
+  value       = module.object_storage.bucket_policy_json
+  description = "Applied bucket policy JSON (null if not created)"
 }
 
 output "nodepools" {

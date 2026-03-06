@@ -10,7 +10,7 @@ variable "vpc_name" {
   description = "VPC name"
 }
 
-# VPC prefixes – order defines CKS usage: [0]=pod, [1]=service, [2..]=internal LB(s). At least 3 entries required.
+# VPC prefixes - order defines CKS usage: [0]=pod, [1]=service, [2..]=internal LB(s). At least 3 entries required.
 variable "vpc_prefixes" {
   type = list(object({
     name  = string
@@ -48,11 +48,23 @@ variable "cks_public" {
 
 variable "oidc" {
   type = object({
-    issuer_url = string
-    client_id  = string
-    ca         = optional(string)
+    issuer_url         = string
+    client_id          = string
+    ca                 = optional(string)
+    admin_group_binding = optional(string)
+    groups_claim       = optional(string)
+    groups_prefix      = optional(string)
+    required_claim     = optional(string)
+    signing_algs       = optional(set(string))
+    username_claim     = optional(string)
+    username_prefix    = optional(string)
   })
-  description = "OIDC config for the CKS cluster (external IdP). Omit or set to null to leave unset."
+  description = <<-EOT
+    OIDC config for the CKS cluster (external IdP). Omit or set to null to leave unset.
+    For workload identity federation with Object Storage, the CKS cluster's
+    service_account_oidc_issuer_url (output) can be used as the issuer for
+    exchanging K8s service account tokens for temporary Object Storage credentials.
+  EOT
   default     = null
 }
 
@@ -106,6 +118,47 @@ variable "object_storage_bucket_tags" {
   type        = map(string)
   description = "Tags to assign to the bucket"
   default     = {}
+}
+
+# --- Object Storage organization access policies ---
+variable "object_storage_org_access_policies" {
+  type = map(object({
+    statements = set(object({
+      name       = string
+      effect     = string
+      actions    = set(string)
+      resources  = set(string)
+      principals = set(string)
+    }))
+  }))
+  description = <<-EOT
+    Map of organization-wide access policies for Object Storage. Map key = policy name.
+    At least one must exist before creating a bucket. Use separate policies to isolate
+    concerns (e.g. one for human users, one for OIDC/WIF roles, one for CI/CD).
+    Each statement needs: name, effect (Allow/Deny), actions (s3:* or cwobject:*), resources, and principals.
+    Principals use short-form identifiers (not full ARNs). For OIDC WIF roles: role/<ISSUER_URL>:<SUBJECT>
+    Leave empty ({}) to skip (e.g. if policies are managed outside Terraform).
+  EOT
+  default     = {}
+}
+
+# --- Object Storage bucket access policy ---
+variable "object_storage_bucket_policy_statements" {
+  type = list(object({
+    sid        = string
+    effect     = string
+    actions    = list(string)
+    resources  = list(string)
+    principals = map(list(string))
+  }))
+  description = <<-EOT
+    Optional per-bucket access policy statements. Evaluated after organization access policies.
+    Each statement needs: sid, effect (Allow/Deny), actions (e.g. ["s3:GetObject"]),
+    resources (ARN format, e.g. ["arn:aws:s3:::my-bucket/*"]),
+    principals (e.g. { "CW" = ["*"] } or { "CW" = ["arn:aws:iam::<org-id>:role/..."] }).
+    Requires object_storage_bucket_name to be set. Set to null to skip.
+  EOT
+  default     = null
 }
 
 # --- CKS NodePool (kubernetes_manifest) ---

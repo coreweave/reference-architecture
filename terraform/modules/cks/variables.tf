@@ -42,11 +42,22 @@ variable "internal_lb_cidr_names" {
 
 variable "oidc" {
   type = object({
-    issuer_url = string
-    client_id  = string
-    ca         = optional(string)
+    issuer_url         = string
+    client_id          = string
+    ca                 = optional(string)
+    admin_group_binding = optional(string)
+    groups_claim       = optional(string)
+    groups_prefix      = optional(string)
+    required_claim     = optional(string)
+    signing_algs       = optional(set(string))
+    username_claim     = optional(string)
+    username_prefix    = optional(string)
   })
-  description = "OIDC config for the cluster (external IdP). Omit or set to null to leave unset."
+  description = <<-EOT
+    OIDC config for the cluster (external IdP). Omit or set to null to leave unset.
+    The cluster's service_account_oidc_issuer_url output can be used to configure
+    Workload Identity Federation for Object Storage in CoreWeave Console.
+  EOT
   default     = null
 }
 
