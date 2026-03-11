@@ -35,7 +35,7 @@ export CONTAINER_DIR="/mnt/data/coreweave/images"
 
 
 # Use squished container if available, otw download and save it.
-export REMOTE_IMAGE_URI="ghcr.io#coreweave/ml-containers/megatron-demo:dmarx-megatron-demo-7773da7"
+export REMOTE_IMAGE_URI="ghcr.io#coreweave/ml-containers/megatron:dmarx-megatron-update-0c68584"
 export IMAGE_NAME="training-test.sqsh"
 export LOCAL_IMAGE_PATH="${CONTAINER_DIR}/${IMAGE_NAME}"
 
@@ -48,7 +48,7 @@ else
 fi
 
 
-srun --container-image "${CONTAINER_IMAGE}" "${CONTAINER_SAVE}" \
+srun --container-image "${CONTAINER_IMAGE}" ${CONTAINER_SAVE:+"$CONTAINER_SAVE"} \
      --container-mounts /mnt/data:/mnt/data \
      --export=ALL \
      --mpi=pmix \
@@ -59,9 +59,6 @@ srun --container-image "${CONTAINER_IMAGE}" "${CONTAINER_SAVE}" \
 #!/bin/bash
 
 export CUDA_DEVICE_MAX_CONNECTIONS=1
-export MEGATRON_TENSORIZER_SYNCHRONOUS=0
-export MEGATRON_TENSORIZER_SERIALIZATION_NUM_THREADS=5
-export MEGATRON_TENSORIZER_PROFILE_SAVE=0
 
 export WORLD_SIZE="${SLURM_NTASKS:?}"
 export RANK="${SLURM_PROCID:?}"
@@ -86,11 +83,17 @@ WARNING_FILTERS=(
 '-Wignore::UserWarning:megatron.core.optimizer.distrib_optimizer'  # "pre_hook" method deprecations
 )
 
+WANDB_ARGS=()
+# Enable W&B flags only if credentials are available via ~/.netrc or env var
+if [ -f "${HOME}/.netrc" ] || [ -n "${WANDB_API_KEY:-}" ] || [ -n "${WANDB_APIP_KEY:-}" ]; then
+  WANDB_ARGS+=("--wandb-exp-name" "${SLURM_JOB_ID:?}/megatron-test")
+  WANDB_ARGS+=("--wandb-project" "${PROJECT_NAME}")
+  WANDB_ARGS+=("--wandb-save-dir" "${OUTDIR}/logs")
+fi
+
 python3 "${WARNING_FILTERS[@]:?}" \
         "/usr/src/app/megatron-lm/pretrain_gpt.py" \
-        --wandb-exp-name "${SLURM_JOB_ID:?}/megatron-test" \
-        --wandb-project "${PROJECT_NAME}" \
-        --wandb-save-dir "${OUTDIR}/logs" \
+        ${WANDB_ARGS[@]+"${WANDB_ARGS[@]}"}  \
         --tensorboard-dir "${OUTDIR}/tensorboard" \
         --data-cache-path ${CACHEDIR} \
         --load "${CKPTDIR_LOAD}" \
@@ -155,10 +158,5 @@ python3 "${WARNING_FILTERS[@]:?}" \
         --disable-bias-linear \
         --group-query-attention \
         --num-query-groups 8 \
-        --data-path \
-          /usr/src/app/megatron-lm/coreweave-datasets/smol/tokenized/nerdstash_v2-uint16/chunk.0 \
-          /usr/src/app/megatron-lm/coreweave-datasets/smol/tokenized/nerdstash_v2-uint16/chunk.0 \
-        --tokenizer-type GPTSentencePieceTokenizer \
-        --tokenizer-model /usr/src/app/megatron-lm/tokenizers/nerdstash-tokenizer-v2/tokenizer.model \
-        --dataloader-type cyclic
+        --mock-data
 EOF
