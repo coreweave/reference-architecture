@@ -76,6 +76,20 @@ def _(k8s: K8s):
 
 @app.cell(hide_code=True)
 def _(k8s: K8s):
+    if k8s.cpu_node_count < 2 and k8s.gpu_node_count < 2:
+        _ui = mo.md("""
+            /// admonition | Node Count
+                type: error
+
+                Cannot run Warp on cluster with less than 2 CPU or GPU nodes.
+            """)
+    else:
+        _ui = None
+    _ui
+
+
+@app.cell(hide_code=True)
+def _(k8s: K8s):
     auto_storage, cw_token_form, _ui = init_object_storage(k8s)
     _ui
     return auto_storage, cw_token_form
