@@ -49,7 +49,7 @@ ignore = [
  "E999", # syntax errors
  "E501", # line length, since we have big multiline strings for markdown
 ]
-"arena/staging/*.py" = [
+"arena-staging/**.py" = [
  "F401", # unused import
  "F841", # unused variable
  "E999", # syntax errors
@@ -78,7 +78,7 @@ reportImplicitStringConcatenation = false
 
 ignore = [
     "arena/notebooks/*.py",
-    "arena/staging/*.py"
+    "arena-staging/*.py"
 ]
 
 # Language server configuration

@@ -1,3 +1,7 @@
+## Warning
+Make sure to check your imports when moving from here to arena/  
+The lib and public path will change and relative imports may break.
+
 For notebooks that don't currently meet the following criteria:
 1. Can be run in cluster or locally
   2. Errors are clear and actionable without leaving the notebook if possible

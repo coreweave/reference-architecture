@@ -14,12 +14,7 @@ __generated_with = "0.19.11"
 app = marimo.App(width="medium")
 
 with app.setup(hide_code=True):
-    import io
-    import os
-    import subprocess
-
     import marimo as mo
-    import pandas as pd
     from moutils import shell
 
 
