@@ -48,7 +48,7 @@ spec:
             - name: ZOT_CREDS
               value: "$(ZOT_USER):$(ZOT_PASS)"
             - name: ZOT_URL
-              value: "https://10.16.12.10:5000"
+              value: "https://ZOT_INTERNAL_LB_SVC_IP:5000"
           volumeMounts:
             - name: ca-cert
               mountPath: /etc/ca-certs

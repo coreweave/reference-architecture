@@ -6,7 +6,7 @@ metadata:
 type: Opaque
 stringData:
   username: admin
-  password: xxxxx
+  password: ZOT_PASSWORD
 ---
 apiVersion: v1
 kind: Pod
@@ -40,7 +40,7 @@ spec:
 
           cp /ca/ca.crt /usr/local/share/ca-certificates/zot-internal-ca.crt
           update-ca-certificates
-          enroot import docker://${ZOT_USERNAME}:${ZOT_PASSWORD}@10.16.12.10:5000#library/nginx:stable
+          enroot import docker://${ZOT_USERNAME}:${ZOT_PASSWORD}@ZOT_INTERNAL_LB_SVC_IP:5000#library/nginx:stable
           sleep infinity
       env:
         - name: ZOT_USERNAME
@@ -54,6 +54,27 @@ spec:
               name: zot-credentials
               key: password
       securityContext:
+        # privileged: true is required for enroot import to function inside a Kubernetes pod.
+        # enroot's import pipeline needs capabilities that cannot be satisfied individually
+        # under Kubernetes's default seccomp/AppArmor restrictions:
+        #
+        # 1. CAP_MKNOD — enroot converts OCI layer whiteout files (AUFS `.wh.*` prefix files)
+        #    into overlayfs-style character devices with major:minor 0:0 via mknod(). Without
+        #    this, layer deletion markers cannot be processed correctly.
+        #
+        # 2. CAP_SYS_ADMIN — mksquashfs must create device inodes and perform mount operations
+        #    when packaging image layers into the .sqsh SquashFS image. SquashFS cannot be
+        #    mounted inside an unprivileged user namespace.
+        #
+        # 3. unshare() syscall — enroot uses Linux mount namespaces during extraction and
+        #    layer merging. This syscall is blocked by Kubernetes's default seccomp profile
+        #    for unprivileged containers.
+        #
+        # The enroot+caps package (installed above) sets file capabilities on enroot binaries
+        # to allow unprivileged operation on bare-metal SLURM nodes, but this is insufficient
+        # inside a Kubernetes pod because: seccomp filters block unshare(), extended attribute
+        # capabilities are cleared when crossing user namespace boundaries, and overlayfs
+        # blocks device creation for unprivileged containers regardless of capability grants.
         privileged: true
       volumeMounts:
         - name: ca-secret
