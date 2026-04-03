@@ -1,0 +1,12 @@
+apiVersion: v2
+name: zot-infra
+description: >
+  Bootstraps the infrastructure layer for a Zot OCI registry on Kubernetes:
+  internal CA (cert-manager Certificate + ClusterIssuer), internal Gateway
+  (GatewayParameters, IP-SAN certificate, Gateway, HTTPRoute), external Gateway
+  (GatewayParameters, Let's Encrypt Gateway, HTTPRoute), and the containerd
+  DaemonSet that distributes the CA cert and hosts.toml to every node.
+  Upstream Helm charts (kgateway, cert-manager, zot) are managed separately.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

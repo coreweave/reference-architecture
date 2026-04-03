@@ -1,0 +1,29 @@
+{{- /*
+  External Gateway HTTPRoute — namespaces.zot
+  Routes HTTPS traffic from the public Gateway to the zot backend Service.
+  The 1-hour timeouts are required for large OCI blob uploads.
+*/ -}}
+{{- $hostname := printf "registry.%s.coreweave.app" .Values.externalGateway.clusterOrgHostname }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "zot-infra.externalRouteName" . }}
+  namespace: {{ .Values.namespaces.zot }}
+spec:
+  parentRefs:
+    - name: {{ include "zot-infra.externalGwName" . }}
+      namespace: {{ .Values.namespaces.kgateway }}
+      sectionName: https
+  hostnames:
+    - {{ $hostname | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      timeouts:
+        request: 3600s       # 1 hour — needed for large blob uploads
+        backendRequest: 3600s
+      backendRefs:
+        - name: {{ .Values.externalGateway.zotServiceName }}
+          port: {{ .Values.externalGateway.port }}

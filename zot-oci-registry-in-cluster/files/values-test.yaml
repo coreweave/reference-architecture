@@ -1,0 +1,30 @@
+namespaces:
+  certManager: kube-system
+  kgateway: kgateway-system
+  zot: zot-registry
+
+ca:
+  bootstrapIssuer: selfsigned-cluster-issuer
+  duration: 87600h
+  renewBefore: 720h
+
+internalGateway:
+  lbIP: "10.16.12.10"
+  port: 5000
+  zotServiceName: zot
+  duration: 8760h
+  renewBefore: 720h
+
+externalGateway:
+  clusterOrgHostname: cwxx-xx-cluster04
+  clusterIssuer: letsencrypt-prod
+  zotServiceName: zot
+  port: 5000
+  networkPolicy:
+    enabled: true
+    allowedCIDRs:
+      - cidr: 74.96.xx.xx/32
+
+daemonset:
+  initImage: busybox:1.36
+  pauseImage: registry.k8s.io/pause:3.10

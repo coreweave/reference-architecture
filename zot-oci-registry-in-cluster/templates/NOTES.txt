@@ -1,0 +1,47 @@
+zot-infra deployed. Run the following to verify each component:
+
+─── Internal CA ──────────────────────────────────────────────────────────────
+
+  kubectl get clusterissuer {{ include "zot-infra.caIssuerName" . }}
+  # Expected: READY=True
+
+  kubectl get certificate {{ include "zot-infra.caName" . }} -n {{ .Values.namespaces.certManager }}
+  # Expected: READY=True, SECRET={{ include "zot-infra.caSecretName" . }}
+
+─── Internal Gateway ─────────────────────────────────────────────────────────
+
+  kubectl get gateway {{ include "zot-infra.internalGwName" . }} -n {{ .Values.namespaces.kgateway }}
+  # Expected: PROGRAMMED=True, ADDRESS={{ .Values.internalGateway.lbIP }}
+
+  kubectl get certificate {{ include "zot-infra.internalCertName" . }} -n {{ .Values.namespaces.kgateway }}
+  # Expected: READY=True, SECRET={{ include "zot-infra.internalCertSecretName" . }}
+
+  kubectl get svc {{ include "zot-infra.internalGwName" . }} -n {{ .Values.namespaces.kgateway }}
+  # Expected: EXTERNAL-IP={{ .Values.internalGateway.lbIP }}
+
+  kubectl get httproute {{ include "zot-infra.internalRouteName" . }} -n {{ .Values.namespaces.zot }}
+
+─── External Gateway ─────────────────────────────────────────────────────────
+
+  kubectl get gateway {{ include "zot-infra.externalGwName" . }} -n {{ .Values.namespaces.kgateway }}
+  # Expected: PROGRAMMED=True
+
+  kubectl get certificate {{ include "zot-infra.externalCertSecretName" . }} -n {{ .Values.namespaces.kgateway }}
+  # Expected: READY=True
+
+  kubectl get httproute {{ include "zot-infra.externalRouteName" . }} -n {{ .Values.namespaces.zot }}
+  # Expected: HOSTNAMES=[registry.{{ .Values.externalGateway.clusterOrgHostname }}.coreweave.app]
+
+─── containerd DaemonSet ─────────────────────────────────────────────────────
+
+  kubectl get ds {{ include "zot-infra.dsName" . }} -n {{ .Values.namespaces.certManager }}
+  # Expected: DESIRED == CURRENT == READY
+
+  # Confirm files written on a node:
+  #   cwic node shell WORKER_NODE_ID
+  #   ls /etc/containerd/certs.d/{{ .Values.internalGateway.lbIP }}:{{ .Values.internalGateway.port }}/
+  #   Expected: ca.crt  hosts.toml
+
+─── CA Rotation ──────────────────────────────────────────────────────────────
+
+  kubectl -n {{ .Values.namespaces.certManager }} rollout restart ds/{{ include "zot-infra.dsName" . }}

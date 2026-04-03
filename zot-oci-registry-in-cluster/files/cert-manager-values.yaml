@@ -1,0 +1,49 @@
+cert-issuers:
+  enabled: true
+  clusterIssuers:
+    - name: letsencrypt-prod
+      annotations: {}
+      labels: {}
+      spec:
+        acme:
+          server: https://acme-v02.api.letsencrypt.org/directory
+          privateKeySecretRef:
+            name: letsencrypt-prod-account-key
+          solvers:
+            - http01:
+                gatewayHTTPRoute:
+                  parentRefs:
+                    - name: zot-external-gateway
+                      namespace: kgateway-system
+                      kind: Gateway
+    - name: letsencrypt-staging
+      annotations: {}
+      labels: {}
+      spec:
+        acme:
+          server: https://acme-staging-v02.api.letsencrypt.org/directory
+          privateKeySecretRef:
+            name: letsencrypt-staging-account-key
+          solvers:
+            - http01:
+                gatewayHTTPRoute:
+                  parentRefs:
+                    - name: zot-external-gateway
+                      namespace: kgateway-system
+                      kind: Gateway
+    - name: selfsigned-cluster-issuer
+      spec:
+        selfSigned: {}
+  issuers: []
+cert-manager:
+  global:
+    podSecurityPolicy:
+      enabled: false
+  crds:
+    enabled: true
+    keep: true
+  config:
+    apiVersion: controller.config.cert-manager.io/v1alpha1
+    kind: ControllerConfiguration
+    enableGatewayAPI: true
+    

@@ -1,0 +1,80 @@
+{{- if .Values.externalGateway.networkPolicy.enabled }}
+---
+# Deny all ingress to the external gateway pod by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "zot-infra.externalGwName" . }}-deny-all
+  namespace: {{ .Values.namespaces.kgateway }}
+  annotations:
+    helm.sh/resource-policy: keep
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: {{ include "zot-infra.externalGwName" . }}
+  policyTypes:
+  - Ingress
+---
+# Allow port 80 from anywhere.
+# Required for Let's Encrypt HTTP-01 challenge and HTTP -> HTTPS redirects.
+# Port 80 carries no sensitive data.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "zot-infra.externalGwName" . }}-allow-http
+  namespace: {{ .Values.namespaces.kgateway }}
+  annotations:
+    helm.sh/resource-policy: keep
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: {{ include "zot-infra.externalGwName" . }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - ports:
+    - protocol: TCP
+      port: 80
+---
+# Allow port 443 (HTTPS) only from trusted CIDRs
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "zot-infra.externalGwName" . }}-allow-https-cidrs
+  namespace: {{ .Values.namespaces.kgateway }}
+  annotations:
+    helm.sh/resource-policy: keep
+    meta.helm.sh/release-name: {{ .Release.Name }}
+    meta.helm.sh/release-namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/managed-by: Helm
+spec:
+  podSelector:
+    matchLabels:
+      gateway.networking.k8s.io/gateway-name: {{ include "zot-infra.externalGwName" . }}
+  policyTypes:
+  - Ingress
+  ingress:
+  - from:
+    {{- range .Values.externalGateway.networkPolicy.allowedCIDRs }}
+    - ipBlock:
+        cidr: {{ .cidr }}
+        {{- if .except }}
+        except:
+        {{- range .except }}
+        - {{ . }}
+        {{- end }}
+        {{- end }}
+    {{- end }}
+    ports:
+    - protocol: TCP
+      port: 443
+{{- end }}

@@ -1,0 +1,288 @@
+Registry URL: https://10.16.12.10:5000
+
+Concurrency Level: 1
+Total requests:    3
+Working dir:       /tmp/zb-workdir
+
+Preparing test data ...
+Starting tests ...
+============
+Test name:            Get Catalog
+Time taken for tests: 29.07848461s
+Requests per second:  0.10316906
+Complete requests:    3
+Failed requests:      0
+
+1MB:   3
+10MB:  0
+100MB: 0
+
+2xx responses: 3
+
+min: 7.505890259s
+max: 8.895286817s
+p50: 8.68616535s
+p75: 8.895286817s
+p90: 8.895286817s
+p99: 8.895286817s
+
+============
+Test name:            Push Monolith 1MB
+Time taken for tests: 5.79876522s
+Requests per second:  0.5173515
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 878.651711ms
+max: 1.004300458s
+p50: 934.585575ms
+p75: 1.004300458s
+p90: 1.004300458s
+p99: 1.004300458s
+
+============
+Test name:            Push Monolith 10MB
+Time taken for tests: 4.591955034s
+Requests per second:  0.6533165
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 1.025693872s
+max: 1.260417642s
+p50: 1.152349224s
+p75: 1.260417642s
+p90: 1.260417642s
+p99: 1.260417642s
+
+============
+Test name:            Push Monolith 100MB
+Time taken for tests: 9.820995546s
+Requests per second:  0.30546802
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 2.182520169s
+max: 3.761674469s
+p50: 2.356137925s
+p75: 3.761674469s
+p90: 3.761674469s
+p99: 3.761674469s
+
+============
+Test name:            Push Chunk Streamed 1MB
+Time taken for tests: 4.142305995s
+Requests per second:  0.7242343
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 926.573228ms
+max: 972.358365ms
+p50: 938.270485ms
+p75: 972.358365ms
+p90: 972.358365ms
+p99: 972.358365ms
+
+============
+Test name:            Push Chunk Streamed 10MB
+Time taken for tests: 5.860400158s
+Requests per second:  0.51191044
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 1.001571356s
+max: 1.301879368s
+p50: 1.10725124s
+p75: 1.301879368s
+p90: 1.301879368s
+p99: 1.301879368s
+
+============
+Test name:            Push Chunk Streamed 100MB
+Time taken for tests: 9.518508138s
+Requests per second:  0.31517544
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 2.287793304s
+max: 2.363990432s
+p50: 2.359623537s
+p75: 2.363990432s
+p90: 2.363990432s
+p99: 2.363990432s
+
+============
+Test name:            Pull 1MB
+Time taken for tests: 2.052925238s
+Requests per second:  1.4613293
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 112.202352ms
+max: 228.835416ms
+p50: 148.005681ms
+p75: 228.835416ms
+p90: 228.835416ms
+p99: 228.835416ms
+
+============
+Test name:            Pull 10MB
+Time taken for tests: 4.198070726s
+Requests per second:  0.71461403
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 124.903137ms
+max: 213.658538ms
+p50: 125.952625ms
+p75: 213.658538ms
+p90: 213.658538ms
+p99: 213.658538ms
+
+============
+Test name:            Pull 100MB
+Time taken for tests: 4.207856637s
+Requests per second:  0.712952
+Complete requests:    3
+Failed requests:      0
+
+2xx responses: 3
+
+min: 339.204463ms
+max: 578.222626ms
+p50: 473.377146ms
+p75: 578.222626ms
+p90: 578.222626ms
+p99: 578.222626ms
+
+============
+Test name:            Pull Mixed 20% 1MB, 70% 10MB, 10% 100MB
+Time taken for tests: 4.50097433s
+Requests per second:  0.6665224
+Complete requests:    3
+Failed requests:      0
+
+1MB:   1
+10MB:  2
+100MB: 0
+
+2xx responses: 3
+
+min: 88.480768ms
+max: 103.221229ms
+p50: 97.14935ms
+p75: 103.221229ms
+p90: 103.221229ms
+p99: 103.221229ms
+
+============
+Test name:            Push Monolith Mixed 20% 1MB, 70% 10MB, 10% 100MB
+Time taken for tests: 4.236615406s
+Requests per second:  0.7081125
+Complete requests:    3
+Failed requests:      0
+
+1MB:   2
+10MB:  1
+100MB: 0
+
+2xx responses: 3
+
+min: 951.86902ms
+max: 1.248000803s
+p50: 979.861036ms
+p75: 1.248000803s
+p90: 1.248000803s
+p99: 1.248000803s
+
+============
+Test name:            Push Chunk Mixed 33% 1MB, 33% 10MB, 33% 100MB
+Time taken for tests: 6.833829713s
+Requests per second:  0.4389925
+Complete requests:    3
+Failed requests:      0
+
+1MB:   1
+10MB:  1
+100MB: 1
+
+2xx responses: 3
+
+min: 1.170011219s
+max: 2.383789851s
+p50: 2.268567067s
+p75: 2.383789851s
+p90: 2.383789851s
+p99: 2.383789851s
+
+============
+Test name:            Pull 75% and Push 25% Mixed 1MB
+Time taken for tests: 4.341957984s
+Requests per second:  0.6909325
+Complete requests:    3
+Failed requests:      0
+
+Pull: 2
+Push: 0
+
+2xx responses: 3
+
+min: 94.84083ms
+max: 1.069396027s
+p50: 1.03532959s
+p75: 1.069396027s
+p90: 1.069396027s
+p99: 1.069396027s
+
+============
+Test name:            Pull 75% and Push 25% Mixed 10MB
+Time taken for tests: 1.91164685s
+Requests per second:  1.5693275
+Complete requests:    3
+Failed requests:      0
+
+Pull: 3
+Push: 0
+
+2xx responses: 3
+
+min: 96.240914ms
+max: 177.926556ms
+p50: 149.472376ms
+p75: 177.926556ms
+p90: 177.926556ms
+p99: 177.926556ms
+
+============
+Test name:            Pull 75% and Push 25% Mixed 100MB
+Time taken for tests: 6.752010366s
+Requests per second:  0.44431213
+Complete requests:    3
+Failed requests:      0
+
+Pull: 2
+Push: 0
+
+2xx responses: 3
+
+min: 341.888357ms
+max: 2.348039039s
+p50: 382.294065ms
+p75: 2.348039039s
+p90: 2.348039039s
+p99: 2.348039039s

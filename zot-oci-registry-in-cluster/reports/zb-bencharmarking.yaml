@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: zot-benchmark
+  namespace: zot-registry
+spec:
+  ttlSecondsAfterFinished: 3600
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      volumes:
+        - name: ca-cert
+          secret:
+            secretName: zot-infra-ca-secret
+            items:
+              - key: ca.crt
+                path: zot-internal-ca.crt
+      containers:
+        - name: zb
+          image: ubuntu:24.04
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              apt-get update -qq && apt-get install -y -qq wget ca-certificates && \
+              cp /etc/ca-certs/zot-internal-ca.crt /usr/local/share/ca-certificates/zot-internal-ca.crt && \
+              update-ca-certificates && \
+              wget -qO /usr/local/bin/zb \
+                https://github.com/project-zot/zot/releases/download/v2.1.15/zb-linux-amd64 && \
+              chmod +x /usr/local/bin/zb && \
+              zb \
+                -c 1 \
+                -n 3 \
+                -A "$(ZOT_CREDS)" \
+                -d /tmp/zb-workdir \
+                "$(ZOT_URL)"
+          env:
+            - name: ZOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: zot-benchmark-creds
+                  key: username
+            - name: ZOT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: zot-benchmark-creds
+                  key: password
+            - name: ZOT_CREDS
+              value: "$(ZOT_USER):$(ZOT_PASS)"
+            - name: ZOT_URL
+              value: "https://10.16.12.10:5000"
+          volumeMounts:
+            - name: ca-cert
+              mountPath: /etc/ca-certs
+              readOnly: true
+          resources:
+            limits:
+              cpu: 4
+              memory: 4Gi

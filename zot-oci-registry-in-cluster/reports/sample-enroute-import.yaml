@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: zot-credentials
+  namespace: kube-system
+type: Opaque
+stringData:
+  username: admin
+  password: GAC2026lot
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: enroot-test
+  namespace: kube-system
+spec:
+  containers:
+    - name: enroot
+      image: ubuntu:24.04
+      command:
+        - /bin/sh
+        - -c
+        - |
+          set -e
+          apt-get update -q
+          apt-get install -y -q \
+            curl \
+            ca-certificates \
+            squashfs-tools \
+            parallel \
+            pigz \
+            libcap2-bin
+
+          curl -fSsL -O \
+            "https://github.com/NVIDIA/enroot/releases/download/v4.1.2/enroot_4.1.2-1_amd64.deb"
+          curl -fSsL -O \
+            "https://github.com/NVIDIA/enroot/releases/download/v4.1.2/enroot+caps_4.1.2-1_amd64.deb"
+          apt-get install -y ./enroot_4.1.2-1_amd64.deb
+          apt-get install -y ./enroot+caps_4.1.2-1_amd64.deb
+
+          cp /ca/ca.crt /usr/local/share/ca-certificates/zot-internal-ca.crt
+          update-ca-certificates
+          enroot import docker://${ZOT_USERNAME}:${ZOT_PASSWORD}@10.16.12.10:5000#library/nginx:stable
+          sleep infinity
+      env:
+        - name: ZOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: zot-credentials
+              key: username
+        - name: ZOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: zot-credentials
+              key: password
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: ca-secret
+          mountPath: /ca
+          readOnly: true
+  restartPolicy: Never
+  volumes:
+    - name: ca-secret
+      secret:
+        secretName: zot-infra-ca-secret
+        items:
+          - key: ca.crt
+            path: ca.crt

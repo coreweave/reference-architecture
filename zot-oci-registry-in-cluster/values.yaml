@@ -1,0 +1,95 @@
+# =============================================================================
+# zot-infra values
+# All configurable values are here. Resource names are NOT configured here —
+# they are derived from the Helm release name in templates/_helpers.tpl.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# namespaces — installation namespaces for each upstream component
+# Change these if your cluster uses non-default namespace names.
+# -----------------------------------------------------------------------------
+namespaces:
+  # Namespace where cert-manager is installed
+  # The internal CA Certificate is created here so cert-manager can read it
+  certManager: kube-system
+
+  # Namespace where kgateway is installed
+  # Gateway, GatewayParameters, and the internal Certificate live here
+  kgateway: kgateway-system
+
+  # Namespace where zot is installed
+  # HTTPRoutes live here so they resolve the zot ClusterIP Service
+  zot: zot-registry
+
+# -----------------------------------------------------------------------------
+# ca — Internal CA bootstrap
+# Creates a self-signed CA Certificate and the ClusterIssuer backed by it.
+# Wait for ClusterIssuer READY=True before the internal Gateway cert can issue.
+# -----------------------------------------------------------------------------
+ca:
+  # Pre-existing ClusterIssuer used to self-sign the CA certificate
+  # Must already exist (provided by the coreweave/cert-manager Helm chart)
+  bootstrapIssuer: selfsigned-cluster-issuer
+  # Validity duration of the CA certificate
+  duration: 87600h   # 10 years
+  renewBefore: 720h  # 30 days
+
+# -----------------------------------------------------------------------------
+# internalGateway — Private CA TLS + internal-lb VIP
+# Exposes zot on a fixed internal LoadBalancer IP for in-cluster containerd pulls.
+# TLS is terminated at the Gateway using a cert with an IP SAN.
+# Resources land in namespaces.kgateway (Gateway/Cert) and namespaces.zot (HTTPRoute).
+# -----------------------------------------------------------------------------
+internalGateway:
+  # Fixed IP for the internal LoadBalancer Service.
+  # Must be an unused IP from the cluster's internal-lb CIDR pool.
+  lbIP: ""  # e.g. 10.16.12.10
+
+  # Port the internal registry listens on
+  port: 5000
+
+  # Kubernetes Service name for the zot backend (created by the zot Helm chart)
+  zotServiceName: zot
+
+  # Validity duration of the internal leaf certificate
+  duration: 8760h   # 1 year
+  renewBefore: 720h # 30 days
+
+# -----------------------------------------------------------------------------
+# externalGateway — Let's Encrypt TLS + public hostname
+# Exposes zot on a public hostname for docker push / Web UI access.
+# cert-manager handles certificate issuance via the Gateway annotation.
+# Resources land in namespaces.kgateway (Gateway) and namespaces.zot (HTTPRoute).
+# -----------------------------------------------------------------------------
+externalGateway:
+  # Org ID and cluster name segment used to build the public FQDN.
+  # The hostname will be rendered as: registry.<clusterOrgHostname>.coreweave.app
+  clusterOrgHostname: ""  # e.g. cwxxx-cluster03
+
+  # ClusterIssuer used for Let's Encrypt (must already exist)
+  clusterIssuer: letsencrypt-prod
+
+  # Kubernetes Service name for the zot backend (created by the zot Helm chart)
+  zotServiceName: zot
+
+  # Port the zot backend service listens on
+  port: 5000
+  networkPolicy:
+    enabled: false
+    allowedCIDRs:
+      - cidr: 192.168.0.0/16        # on-prem / office range
+      - cidr: 203.0.113.10/32       # specific external IP — replace with your IPs
+        # except:                   # optional: exclude sub-ranges within a CIDR
+        #   - 203.0.113.5/32  
+
+# -----------------------------------------------------------------------------
+# daemonset — containerd node configuration
+# Writes hosts.toml and the internal CA cert to every node so containerd can
+# pull images from the internal registry over TLS without a node restart.
+# -----------------------------------------------------------------------------
+daemonset:
+  # Init container image used to write files to the host filesystem
+  initImage: busybox:1.36
+
+  # Pause container image (keeps the pod alive after init completes)
+  pauseImage: registry.k8s.io/pause:3.10

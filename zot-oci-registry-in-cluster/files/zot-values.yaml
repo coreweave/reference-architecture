@@ -1,0 +1,103 @@
+replicaCount: 1
+
+strategy:
+  type: Recreate
+
+serviceAccount:
+  create: true
+
+service:
+  type: ClusterIP
+  port: 5000
+
+persistence: false
+
+# Startup probe: allows up to 180s (initialDelaySeconds) + 30 * 10s = 5 min
+# for zot to connect to S3 and finish initializing before liveness/readiness
+# probes begin. /startupz returns 200 once zot is ready to serve. Adjust if there are lots of stored images
+startupProbe:
+  httpGet:
+    path: /startupz
+    port: 5000
+    scheme: HTTP
+  initialDelaySeconds: 180  # Allow zot to meta parse/sync with S3 before starting probes
+  periodSeconds: 10
+  failureThreshold: 30      # 180s + 30*10s = up to 7 min total
+  successThreshold: 1
+  timeoutSeconds: 5
+
+# Liveness probe: restarts pod if zot is deadlocked or unresponsive.
+# /livez is a lightweight endpoint — does not check storage or S3.
+livenessProbe:
+  httpGet:
+    path: /livez
+    port: 5000
+    scheme: HTTP
+  periodSeconds: 30
+  failureThreshold: 3       # restart after 3 * 30s = 90s of failures
+  successThreshold: 1
+  timeoutSeconds: 5
+
+# Readiness probe: removes pod from service endpoints if zot cannot serve
+# requests. /readyz checks that the HTTP server is fully operational.
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 5000
+    scheme: HTTP
+  initialDelaySeconds: 5
+  periodSeconds: 15
+  failureThreshold: 3
+  successThreshold: 1
+  timeoutSeconds: 5
+
+mountConfig: true
+configFiles:
+  config.json: |
+    {
+      "storage": {
+        "rootDirectory": "/tmp/zot",
+        "dedupe": false,
+        "storageDriver": {
+          "name": "s3",
+          "rootdirectory": "/zot",
+          "region": "YOUR_REGION",
+          "bucket": "YOUR_BUCKET_NAME",
+          "regionendpoint": "http://cwlota.com",
+          "accesskey": "YOUR_ACCESS_KEY_ID",
+          "secretkey": "YOUR_SECRET_KEY",
+          "forcepathstyle": false,
+          "secure": false,
+          "skipverify": false
+        }
+      },
+      "http": {
+        "address": "0.0.0.0",
+        "port": "5000",
+        "compat": ["docker2s2"],
+        "auth": {
+          "htpasswd": {
+            "path": "/secret/htpasswd"
+          }
+        },
+        "accessControl": {
+          "adminPolicy": {
+            "users": ["YOUR_USERNAME"],
+            "actions": ["read", "create", "update", "delete"]
+          }
+        }
+      },
+      "log": { "level": "info" },
+      "extensions": {
+        "search": {
+          "enable": true
+        },
+        "ui": {
+          "enable": true
+        }
+      }
+    }
+
+mountSecret: true
+secretFiles:
+  htpasswd: ZOT_HTPASSWD_STRING

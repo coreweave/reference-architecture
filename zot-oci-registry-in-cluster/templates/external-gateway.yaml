@@ -1,0 +1,57 @@
+{{- /*
+  External Gateway — namespaces.kgateway
+  Creates:
+    1. A GatewayParameters resource that annotates the LB Service with the
+       public hostname and marks it as a CoreWeave public load balancer
+    2. A Gateway with the cert-manager cluster-issuer annotation so cert-manager
+       issues and renews the Let's Encrypt certificate automatically
+  The helm.sh/resource-policy: keep annotation prevents accidental deletion
+  of the Gateway since it is shared infrastructure.
+*/ -}}
+{{- $hostname := printf "registry.%s.coreweave.app" .Values.externalGateway.clusterOrgHostname }}
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: GatewayParameters
+metadata:
+  name: {{ include "zot-infra.externalGwParamsName" . }}
+  namespace: {{ .Values.namespaces.kgateway }}
+spec:
+  kube:
+    service:
+      extraAnnotations:
+        service.beta.kubernetes.io/external-hostname: {{ $hostname | quote }}
+        service.beta.kubernetes.io/coreweave-load-balancer-type: public
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "zot-infra.externalGwName" . }}
+  namespace: {{ .Values.namespaces.kgateway }}
+  annotations:
+    helm.sh/resource-policy: keep
+    cert-manager.io/cluster-issuer: {{ .Values.externalGateway.clusterIssuer }}
+spec:
+  gatewayClassName: kgateway
+  infrastructure:
+    parametersRef:
+      name: {{ include "zot-infra.externalGwParamsName" . }}
+      group: gateway.kgateway.dev
+      kind: GatewayParameters
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ $hostname | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: {{ include "zot-infra.externalCertSecretName" . }}
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          from: All

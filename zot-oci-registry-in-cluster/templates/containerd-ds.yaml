@@ -1,0 +1,103 @@
+{{- /*
+  containerd DaemonSet — namespaces.certManager
+  Creates:
+    1. A ConfigMap containing the hosts.toml for the internal registry endpoint
+    2. A DaemonSet with an init container that writes hosts.toml and the CA cert
+       from the internal-ca Secret to every node's containerd certs directory
+  The CA cert is sourced directly from the Secret (caSecretName) — no manual
+  cert distribution is needed. Trigger a rollout after CA rotation.
+*/ -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "zot-infra.dsCmName" . }}
+  namespace: {{ .Values.namespaces.certManager }}
+data:
+  hosts.toml: |
+    server = "https://{{ .Values.internalGateway.lbIP }}:{{ .Values.internalGateway.port }}"
+
+    [host."https://{{ .Values.internalGateway.lbIP }}:{{ .Values.internalGateway.port }}"]
+      capabilities = ["pull", "resolve"]
+      ca = ["/etc/containerd/certs.d/{{ .Values.internalGateway.lbIP }}:{{ .Values.internalGateway.port }}/ca.crt"]
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "zot-infra.dsName" . }}
+  namespace: {{ .Values.namespaces.certManager }}
+  labels:
+    app: {{ include "zot-infra.dsName" . }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "zot-infra.dsName" . }}
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "zot-infra.dsName" . }}
+    spec:
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: install-config
+          image: {{ .Values.daemonset.initImage }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+              REGISTRY="{{ .Values.internalGateway.lbIP }}:{{ .Values.internalGateway.port }}"
+              CERTS_DIR="/host/etc/containerd/certs.d/${REGISTRY}"
+              echo "Creating registry config dir: ${CERTS_DIR}"
+              mkdir -p "${CERTS_DIR}"
+              echo "Writing hosts.toml"
+              cp /config/hosts.toml "${CERTS_DIR}/hosts.toml"
+              echo "Writing ca.crt from secret"
+              cp /ca/ca.crt "${CERTS_DIR}/ca.crt"
+              echo "Done."
+              cat "${CERTS_DIR}/hosts.toml"
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: host-containerd-certs
+              mountPath: /host/etc/containerd/certs.d
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: ca-secret
+              mountPath: /ca
+              readOnly: true
+      containers:
+        - name: pause
+          image: {{ .Values.daemonset.pauseImage }}
+          resources:
+            requests:
+              cpu: 1m
+              memory: 8Mi
+            limits:
+              cpu: 10m
+              memory: 16Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+      volumes:
+        - name: host-containerd-certs
+          hostPath:
+            path: /etc/containerd/certs.d
+            type: DirectoryOrCreate
+        - name: config
+          configMap:
+            name: {{ include "zot-infra.dsCmName" . }}
+        - name: ca-secret
+          secret:
+            secretName: {{ include "zot-infra.caSecretName" . }}
+            items:
+              - key: ca.crt
+                path: ca.crt

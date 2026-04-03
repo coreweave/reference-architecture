@@ -1,0 +1,25 @@
+{{- /*
+  Internal Gateway HTTPRoute — namespaces.zot
+  Routes all traffic entering the internal Gateway to the zot backend Service.
+*/ -}}
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "zot-infra.internalRouteName" . }}
+  namespace: {{ .Values.namespaces.zot }}
+spec:
+  parentRefs:
+    - name: {{ include "zot-infra.internalGwName" . }}
+      namespace: {{ .Values.namespaces.kgateway }}
+      sectionName: https
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      timeouts:
+        request: 3600s       # 1 hour — needed for large blob uploads
+        backendRequest: 3600s
+      backendRefs:
+        - name: {{ .Values.internalGateway.zotServiceName }}
+          port: {{ .Values.internalGateway.port }}

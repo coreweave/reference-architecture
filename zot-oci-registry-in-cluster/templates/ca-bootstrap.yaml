@@ -1,0 +1,33 @@
+{{- /*
+  Internal CA Bootstrap — namespaces.certManager
+  Creates:
+    1. A self-signed CA Certificate (isCA: true)
+    2. A ClusterIssuer backed by that CA
+  The internal leaf Certificate will be retried by cert-manager automatically
+  once the ClusterIssuer reaches READY=True.
+*/ -}}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "zot-infra.caName" . }}
+  namespace: {{ .Values.namespaces.certManager }}
+spec:
+  isCA: true
+  commonName: {{ include "zot-infra.caName" . }}
+  secretName: {{ include "zot-infra.caSecretName" . }}
+  duration: {{ .Values.ca.duration }}
+  renewBefore: {{ .Values.ca.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: {{ .Values.ca.bootstrapIssuer }}
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: {{ include "zot-infra.caIssuerName" . }}
+spec:
+  ca:
+    secretName: {{ include "zot-infra.caSecretName" . }}

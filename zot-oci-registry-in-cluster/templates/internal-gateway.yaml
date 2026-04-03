@@ -1,0 +1,70 @@
+{{- /*
+  Internal Gateway — namespaces.kgateway
+  Creates:
+    1. A GatewayParameters resource configuring a LoadBalancer Service
+    2. A cert-manager Certificate with an IP SAN matching the internal-lb VIP
+    3. A Gateway bound to the internal-lb VIP with TLS termination
+  The helm.sh/resource-policy: keep annotation prevents accidental deletion
+  of the Gateway since it is shared infrastructure.
+*/ -}}
+apiVersion: gateway.kgateway.dev/v1alpha1
+kind: GatewayParameters
+metadata:
+  name: {{ include "zot-infra.internalGwParamsName" . }}
+  namespace: {{ .Values.namespaces.kgateway }}
+spec:
+  kube:
+    service:
+      type: LoadBalancer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ include "zot-infra.internalCertName" . }}
+  namespace: {{ .Values.namespaces.kgateway }}
+spec:
+  secretName: {{ include "zot-infra.internalCertSecretName" . }}
+  issuerRef:
+    name: {{ include "zot-infra.caIssuerName" . }}
+    kind: ClusterIssuer
+  duration: {{ .Values.internalGateway.duration }}
+  renewBefore: {{ .Values.internalGateway.renewBefore }}
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  ipAddresses:
+    - {{ .Values.internalGateway.lbIP }}
+  usages:
+    - digital signature
+    - key encipherment
+    - server auth
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ include "zot-infra.internalGwName" . }}
+  namespace: {{ .Values.namespaces.kgateway }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  gatewayClassName: kgateway
+  addresses:
+    - type: IPAddress
+      value: {{ .Values.internalGateway.lbIP | quote }}
+  infrastructure:
+    parametersRef:
+      name: {{ include "zot-infra.internalGwParamsName" . }}
+      group: gateway.kgateway.dev
+      kind: GatewayParameters
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: {{ .Values.internalGateway.port }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: {{ include "zot-infra.internalCertSecretName" . }}
+            kind: Secret
+      allowedRoutes:
+        namespaces:
+          from: All
