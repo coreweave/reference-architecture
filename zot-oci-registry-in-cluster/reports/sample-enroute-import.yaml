@@ -6,7 +6,7 @@ metadata:
 type: Opaque
 stringData:
   username: admin
-  password: GAC2026lot
+  password: xxxxx
 ---
 apiVersion: v1
 kind: Pod
