@@ -11,7 +11,13 @@ LOTA runs as a **DaemonSet** (one instance per node), acting as a node-local acc
 
 ### Cold Cache Caveat
 
-> **Important:** `zb` generates new unique objects on every test run. This means LOTA's cache is always cold during these benchmarks — every pull request results in a cache miss and a full proxy pass-through to CAIOS. This adds an extra network hop compared to hitting CAIOS directly, which explains the pull latency regressions observed below. In production workloads where the same images are pulled repeatedly, LOTA's cache would warm up and pull performance is expected to improve significantly.
+> **Important:** `zb` generates new unique objects on every test run, so LOTA's cache is perpetually cold for all pull operations — every read is a cache miss that proxies through LOTA to CAIOS, adding an extra network hop vs. hitting CAIOS directly.
+>
+> Push operations consistently improved with LOTA across all sizes. This is expected: writes are acknowledged by the LOTA DaemonSet process running locally on the node, reducing observed write latency before the data is fully persisted to CAIOS.
+>
+> Cold pull behavior was asymmetric by object size:
+> - **Small objects (1MB, 10MB):** Still faster with LOTA, even cold. LOTA maintains persistent authenticated connections to CAIOS, so the connection setup cost is already absorbed — the request is one fast local hop away from an already-open pipe.
+> - **Large objects (100MB):** Slower with LOTA when cold. At that size the connection reuse benefit is negligible, and the cost of buffering 100MB through LOTA as a proxy layer outweighs any gain.
 
 ---
 
@@ -123,7 +129,7 @@ The 1MB mixed scenario shows the most dramatic benefit from LOTA, with p50 laten
 
 ### Key Takeaways
 
-1. **LOTA accelerates push operations** across all image sizes, with throughput gains ranging from 12% to 75%.
-2. **Pull performance benefits are cache-dependent.** The `zb` tool generates new objects per test, ensuring a perpetual cold cache. In real registry usage where the same objects are pulled repeatedly on the same node, LOTA's node-local cache warms up and pull performance improves. Note that LOTA's cache does not carry over to other nodes.
-3. **Mixed workloads favor LOTA strongly.** Real-world registry traffic (a mix of pushes and repeated pulls) aligns well with LOTA's design — the write path benefits are immediate, and the read path improves as the cache warms.
-4. **The 100MB pull regression is a benchmark artifact**, not a production concern. It reflects the cost of LOTA proxying an uncached object through to CAIOS, which adds one extra network hop relative to hitting CAIOS directly.
+1. **LOTA accelerates push operations** across all image sizes, with throughput gains ranging from 12% to 75%, by acknowledging writes locally before persisting to CAIOS.
+2. **Cold pull behavior is asymmetric by size.** Small objects benefit from LOTA's persistent connections to CAIOS absorbing connection setup overhead. Large objects regress because buffering through the proxy layer at that size costs more than any connection reuse saves.
+3. **For Kubernetes workloads (containerd), LOTA provides limited ongoing benefit.** After the first cold pull, containerd and kubelet cache the image layers on the node — subsequent pod starts never contact the registry again. LOTA would also retain a copy of the same data, resulting in the image being stored twice on the same node with no access advantage.
+4. **The clearest LOTA benefit is for multiple SLURM users on the same node running enroot.** Each SLURM user has a separate enroot cache under their own `$HOME`, so every distinct user pays the full download cost on their first pull. With LOTA's node-local cache warm from the first user, all subsequent users on that node are served locally without hitting CAIOS again.
