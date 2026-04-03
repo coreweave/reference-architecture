@@ -1,11 +1,9 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "boto3==1.42.45",
 #     "k8s==0.28.0",
 #     "kubernetes==35.0.0",
 #     "marimo>=0.20.2",
-#     "mypy-boto3-s3>=1.42.37",
 #     "ruamel-yaml>=0.19.1",
 #     "typing-extensions>=4.15.0"
 # ]
