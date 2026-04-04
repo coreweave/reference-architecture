@@ -16,6 +16,11 @@ spec:
   kube:
     service:
       type: LoadBalancer
+    {{- if .Values.internalGateway.nodeAffinity }}
+    podTemplate:
+      affinity:
+        nodeAffinity: {{ .Values.internalGateway.nodeAffinity | toYaml | nindent 10 }}
+    {{- end }}
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

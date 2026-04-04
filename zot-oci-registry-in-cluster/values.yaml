@@ -55,6 +55,20 @@ internalGateway:
   duration: 8760h   # 1 year
   renewBefore: 720h # 30 days
 
+  # Node affinity for the gateway proxy pod.
+  # Uses preferredDuringSchedulingIgnoredDuringExecution so the pod is steered
+  # toward CPU nodes but will still schedule elsewhere if none are available.
+  # Set nodeAffinity: {} to disable.
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: node.coreweave.cloud/class
+              operator: In
+              values:
+                - cpu
+
 # -----------------------------------------------------------------------------
 # externalGateway — Let's Encrypt TLS + public hostname
 # Exposes zot on a public hostname for docker push / Web UI access.
@@ -74,6 +88,21 @@ externalGateway:
 
   # Port the zot backend service listens on
   port: 5000
+
+  # Node affinity for the gateway proxy pod.
+  # Uses preferredDuringSchedulingIgnoredDuringExecution so the pod is steered
+  # toward CPU nodes but will still schedule elsewhere if none are available.
+  # Set nodeAffinity: {} to disable.
+  nodeAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        preference:
+          matchExpressions:
+            - key: node.coreweave.cloud/class
+              operator: In
+              values:
+                - cpu
+
   networkPolicy:
     enabled: false
     allowedCIDRs:

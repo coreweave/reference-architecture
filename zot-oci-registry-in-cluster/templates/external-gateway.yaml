@@ -20,6 +20,11 @@ spec:
       extraAnnotations:
         service.beta.kubernetes.io/external-hostname: {{ $hostname | quote }}
         service.beta.kubernetes.io/coreweave-load-balancer-type: public
+    {{- if .Values.externalGateway.nodeAffinity }}
+    podTemplate:
+      affinity:
+        nodeAffinity: {{ .Values.externalGateway.nodeAffinity | toYaml | nindent 10 }}
+    {{- end }}
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
