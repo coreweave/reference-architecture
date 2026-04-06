@@ -14,23 +14,15 @@ import marimo
 __generated_with = "0.19.7"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ![CoreWeave ARENA Banner](public/banner.jpg)
-    """)
-    return
+with app.setup:
+    import marimo as mo
+    from lib.remote_execution_helpers import shell
+    from lib.k8s import K8s
+    from lib.ui import about, banner, security_disclaimer, table_of_contents
 
 
 @app.cell(hide_code=True)
 def _():
-    # setup cell runs before anything else, recommend putting values in here
-    import marimo as mo
-
-    from lib.remote_execution_helpers import shell
-    from lib.k8s import K8s
-
     TEST_NAMES = {                                                                                                                                                                                                                         
     "gb300-4x":        "nccl-test-distributed-gb200-nvl72-enroot.slurm",
     "gb300-4x-e":      "nccl-test-distributed-gb300-roce-nvl72-enroot.slurm",
@@ -42,19 +34,29 @@ def _():
     "gd-8xa100-i128":  "nccl-test-distributed-a100-64.slurm",
     # L40S, L40, GH200, RTX Pro 6000 — no matching nccl test script                                                                                                                                                                               
 }
+    return TEST_NAMES
 
-    return mo, shell, K8s, TEST_NAMES
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    /// details | Table of Contents
-
-    - **Cluster Inspection** - View nodes, partitions, and user info
-    - **NCCL Benchmarks** - Run distributed GPU communication tests
-    - **Job Observability** - Grafana dashboards and monitoring
-    ///
-    """)
+def _():
+    _elements = [
+        banner(),
+        about(
+            "SUNK Cluster Walkthrough",
+            """This notebook provides a walkthrough for inspecting and benchmarking your SUNK (Slurm on Kubernetes) cluster.<br>
+               _If you are running this notebook in edit mode, make sure you start by running all cells in the bottom right._
+            """,
+        ),
+        table_of_contents(
+            [
+                {"title": "Cluster Inspection", "description": "View nodes, partitions, and user info"},
+                {"title": "NCCL Benchmarks", "description": "Run distributed GPU communication tests"},
+                {"title": "Job Observability", "description": "Grafana dashboards and monitoring"},
+            ]
+        ),
+        security_disclaimer(),
+    ]
+    mo.vstack(_elements)
     return
 
 
