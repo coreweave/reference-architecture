@@ -12,6 +12,7 @@ Both references use External Secrets Operator (ESO) to sync provider secrets int
 - No static AWS access keys or GCP service account key files are required for ESO.
 - CKS workload identity is federated into each cloud provider for short-lived credentials.
 - Secret values remain in provider-managed secret managers, encrypted by KMS keys.
+- Terraform can source the CKS OIDC issuer URL automatically from this repo's CKS stack output (`cks_service_account_oidc_issuer_url`).
 
 ## Provider References
 

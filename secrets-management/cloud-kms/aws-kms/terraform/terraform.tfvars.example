@@ -1,6 +1,20 @@
 aws_region        = "us-east-1"
-oidc_issuer_url   = "https://oidc.cks.coreweave.com/id/replace-me"
-oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/oidc.cks.coreweave.com/id/replace-me"
+
+# Recommended: read OIDC issuer URL from this repo's CKS terraform outputs.
+# This expects you've already applied ../../../../terraform and have local state.
+cks_remote_state_backend = "local"
+cks_remote_state_config = {
+  path = "../../../../terraform/terraform.tfstate"
+}
+
+# Optional override if not using terraform_remote_state:
+# oidc_issuer_url = "https://oidc.cks.coreweave.com/id/replace-me"
+
+# Recommended: let this stack create the AWS OIDC provider automatically.
+create_oidc_provider = true
+
+# Only set this when create_oidc_provider = false:
+# oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/oidc.cks.coreweave.com/id/replace-me"
 
 namespace            = "secrets-aws"
 service_account_name = "eso-aws-auth"

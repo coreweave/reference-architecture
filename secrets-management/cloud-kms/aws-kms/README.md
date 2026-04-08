@@ -16,10 +16,10 @@ No static AWS access key or secret key is required.
 - CKS cluster + ESO installed.
 - AWS account with permissions to create:
   - IAM role/policy
+  - IAM OIDC provider (if `create_oidc_provider=true`)
   - KMS key
   - Secrets Manager secrets
-- CKS OIDC issuer URL available from cluster details.
-- IAM OIDC provider configured in AWS for the CKS issuer URL.
+- (Recommended) CKS provisioned with this repository's Terraform stack so `cks_service_account_oidc_issuer_url` is available as an output.
 - Terraform installed.
 
 ## Provision AWS Resources
@@ -32,9 +32,16 @@ cp terraform.tfvars.example terraform.tfvars
 ```
 
 Set values in `terraform.tfvars`:
-- `oidc_issuer_url`
-- `oidc_provider_arn`
+- `cks_remote_state_*` (recommended) to auto-read `cks_service_account_oidc_issuer_url` from the CKS Terraform state.
 - `secret_values` (bootstrap values)
+
+If you cannot use `terraform_remote_state`, set:
+- `oidc_issuer_url` directly.
+
+By default, this stack creates an AWS IAM OIDC provider from the effective issuer URL (`create_oidc_provider=true`).
+If your organization manages that provider elsewhere, set:
+- `create_oidc_provider = false`
+- `oidc_provider_arn = <existing-provider-arn>`
 
 Then apply:
 
@@ -53,6 +60,8 @@ terraform output
 You need:
 - `eso_role_arn`
 - `secret_names`
+- `effective_oidc_issuer_url`
+- `effective_oidc_provider_arn`
 
 ## Configure and Apply Manifests
 

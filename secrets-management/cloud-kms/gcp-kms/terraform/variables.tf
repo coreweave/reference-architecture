@@ -57,8 +57,39 @@ variable "service_account_name" {
 }
 
 variable "workload_identity_pool_id" {
-  description = "Workload Identity Pool ID that trusts the CKS OIDC issuer."
+  description = "Workload Identity Pool ID. Required when create_workload_identity_pool=true, or when reusing an existing pool."
   type        = string
+  default     = null
+}
+
+variable "workload_identity_provider_id" {
+  description = "Workload Identity Pool Provider ID used when create_workload_identity_pool=true."
+  type        = string
+  default     = "cks-oidc"
+}
+
+variable "create_workload_identity_pool" {
+  description = "When true, create Workload Identity Pool + OIDC Provider using the effective CKS OIDC issuer URL."
+  type        = bool
+  default     = true
+}
+
+variable "cks_oidc_issuer_url" {
+  description = "Optional explicit CKS OIDC issuer URL. If unset, this can be sourced from cks_remote_state outputs."
+  type        = string
+  default     = null
+}
+
+variable "cks_remote_state_backend" {
+  description = "Optional terraform_remote_state backend for reading CKS outputs (for example: local, s3, gcs, remote)."
+  type        = string
+  default     = null
+}
+
+variable "cks_remote_state_config" {
+  description = "Optional terraform_remote_state backend config map used when cks_remote_state_backend is set."
+  type        = map(string)
+  default     = {}
 }
 
 variable "wif_subject" {

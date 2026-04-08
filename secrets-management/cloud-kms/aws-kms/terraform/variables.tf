@@ -5,13 +5,33 @@ variable "aws_region" {
 }
 
 variable "oidc_issuer_url" {
-  description = "CKS OIDC issuer URL (for example: https://oidc.cks.coreweave.com/id/xxxxx)."
+  description = "Optional explicit CKS OIDC issuer URL. If unset, this can be sourced from cks_remote_state outputs."
   type        = string
+  default     = null
 }
 
 variable "oidc_provider_arn" {
-  description = "ARN of the AWS IAM OIDC provider registered for the CKS issuer."
+  description = "Optional existing AWS IAM OIDC provider ARN. Required only when create_oidc_provider is false."
   type        = string
+  default     = null
+}
+
+variable "create_oidc_provider" {
+  description = "When true, create an AWS IAM OIDC provider from the effective CKS OIDC issuer URL."
+  type        = bool
+  default     = true
+}
+
+variable "cks_remote_state_backend" {
+  description = "Optional terraform_remote_state backend for reading CKS outputs (for example: local, s3, gcs, remote)."
+  type        = string
+  default     = null
+}
+
+variable "cks_remote_state_config" {
+  description = "Optional terraform_remote_state backend config map used when cks_remote_state_backend is set."
+  type        = map(string)
+  default     = {}
 }
 
 variable "namespace" {

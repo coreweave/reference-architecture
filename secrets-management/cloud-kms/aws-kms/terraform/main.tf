@@ -1,12 +1,61 @@
+data "terraform_remote_state" "cks" {
+  count = var.cks_remote_state_backend == null ? 0 : 1
+
+  backend = var.cks_remote_state_backend
+  config  = var.cks_remote_state_config
+}
+
 locals {
-  oidc_issuer_hostpath = trimsuffix(replace(var.oidc_issuer_url, "https://", ""), "/")
+  effective_oidc_issuer_url = coalesce(
+    var.oidc_issuer_url,
+    try(data.terraform_remote_state.cks[0].outputs.cks_service_account_oidc_issuer_url, null)
+  )
+
+  oidc_issuer_hostpath = trimsuffix(replace(local.effective_oidc_issuer_url, "https://", ""), "/")
   oidc_subject         = "system:serviceaccount:${var.namespace}:${var.service_account_name}"
+  effective_oidc_provider_arn = coalesce(
+    var.oidc_provider_arn,
+    try(aws_iam_openid_connect_provider.cks[0].arn, null)
+  )
 
   secret_names = {
     DB_USERNAME = "${var.secret_name_prefix}/db-username"
     DB_PASSWORD = "${var.secret_name_prefix}/db-password"
     API_TOKEN   = "${var.secret_name_prefix}/api-token"
   }
+}
+
+check "oidc_issuer_url_present" {
+  assert {
+    condition     = local.effective_oidc_issuer_url != null && trim(local.effective_oidc_issuer_url) != ""
+    error_message = "An OIDC issuer URL is required. Set oidc_issuer_url directly or configure cks_remote_state_* to read cks_service_account_oidc_issuer_url from your CKS terraform outputs."
+  }
+}
+
+check "oidc_provider_present" {
+  assert {
+    condition = (
+      var.create_oidc_provider ||
+      (local.effective_oidc_provider_arn != null && trim(local.effective_oidc_provider_arn) != "")
+    )
+    error_message = "An AWS IAM OIDC provider ARN is required when create_oidc_provider=false. Set oidc_provider_arn or enable create_oidc_provider."
+  }
+}
+
+data "tls_certificate" "oidc" {
+  count = var.create_oidc_provider ? 1 : 0
+  url   = local.effective_oidc_issuer_url
+}
+
+resource "aws_iam_openid_connect_provider" "cks" {
+  count = var.create_oidc_provider ? 1 : 0
+
+  url = local.effective_oidc_issuer_url
+
+  client_id_list = ["sts.amazonaws.com"]
+  thumbprint_list = [
+    data.tls_certificate.oidc[0].certificates[0].sha1_fingerprint,
+  ]
 }
 
 resource "aws_kms_key" "secrets" {
@@ -45,7 +94,7 @@ data "aws_iam_policy_document" "assume_role_with_web_identity" {
     principals {
       type = "Federated"
       identifiers = [
-        var.oidc_provider_arn,
+        local.effective_oidc_provider_arn,
       ]
     }
 

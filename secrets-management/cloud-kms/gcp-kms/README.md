@@ -19,12 +19,13 @@ No static GCP service account key file is required.
   - Cloud KMS
   - Secret Manager
   - IAM bindings
-- CKS OIDC issuer URL from cluster details.
+- (Recommended) CKS provisioned with this repository's Terraform stack so `cks_service_account_oidc_issuer_url` is available as an output.
 - Terraform installed.
 
 ## Configure GCP Workload Identity Federation
 
-Create or reuse a Workload Identity Pool and OIDC provider that trust your CKS issuer.
+This Terraform stack can create Workload Identity Pool + OIDC provider automatically from the CKS issuer URL.
+It can also reuse an existing pool/provider if needed.
 
 Your IAM member for a specific Kubernetes service account should resolve to:
 
@@ -44,8 +45,17 @@ cp terraform.tfvars.example terraform.tfvars
 Set values in `terraform.tfvars`:
 - `project_id`
 - `project_number`
+- `cks_remote_state_*` (recommended) to auto-read `cks_service_account_oidc_issuer_url` from the CKS Terraform state.
 - `workload_identity_pool_id`
 - `secret_values`
+
+If you cannot use `terraform_remote_state`, set:
+- `cks_oidc_issuer_url` directly.
+
+By default, this stack creates Workload Identity Pool + Provider (`create_workload_identity_pool=true`).
+If your organization manages those centrally, set:
+- `create_workload_identity_pool = false`
+- `workload_identity_pool_id = <existing-pool-id>`
 
 Then apply:
 
@@ -64,6 +74,7 @@ terraform output
 You need:
 - `secret_names`
 - `workload_identity_principal`
+- `effective_cks_oidc_issuer_url`
 
 ## Configure and Apply Manifests
 

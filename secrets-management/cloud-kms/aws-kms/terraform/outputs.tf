@@ -3,6 +3,16 @@ output "eso_role_arn" {
   value       = aws_iam_role.eso_reader.arn
 }
 
+output "effective_oidc_issuer_url" {
+  description = "Effective CKS OIDC issuer URL used by this stack."
+  value       = local.effective_oidc_issuer_url
+}
+
+output "effective_oidc_provider_arn" {
+  description = "Effective AWS IAM OIDC provider ARN used in IAM trust policy."
+  value       = local.effective_oidc_provider_arn
+}
+
 output "kms_key_arn" {
   description = "KMS key ARN used by Secrets Manager."
   value       = aws_kms_key.secrets.arn
