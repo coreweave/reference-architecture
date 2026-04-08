@@ -22,6 +22,8 @@ No static AWS access key or secret key is required.
 - (Recommended) CKS provisioned with this repository's Terraform stack so `cks_service_account_oidc_issuer_url` is available as an output.
 - Terraform installed.
 
+`cks_service_account_oidc_issuer_url` comes from the read-only `service_account_oidc_issuer_url` field on `coreweave_cks_cluster`.
+
 ## Provision AWS Resources
 
 From this directory:
