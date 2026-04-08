@@ -1,0 +1,15 @@
+aws_region        = "us-east-1"
+oidc_issuer_url   = "https://oidc.cks.coreweave.com/id/replace-me"
+oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/oidc.cks.coreweave.com/id/replace-me"
+
+namespace            = "secrets-aws"
+service_account_name = "eso-aws-auth"
+role_name            = "ra-eso-aws-secrets-reader"
+
+secret_name_prefix = "ra-demo"
+
+secret_values = {
+  DB_USERNAME = "demo-user"
+  DB_PASSWORD = "replace-me"
+  API_TOKEN   = "replace-me"
+}
