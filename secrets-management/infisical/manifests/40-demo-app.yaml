@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: secrets-demo
+  namespace: secrets-infisical
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: secrets-demo
+  template:
+    metadata:
+      labels:
+        app: secrets-demo
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                date
+                [ -n "$DB_USERNAME" ] && echo "DB_USERNAME loaded"
+                [ -n "$DB_PASSWORD" ] && echo "DB_PASSWORD loaded"
+                [ -n "$API_TOKEN" ] && echo "API_TOKEN loaded"
+                sleep 30
+              done
+          envFrom:
+            - secretRef:
+                name: app-runtime-secrets
