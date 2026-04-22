@@ -120,13 +120,19 @@ def cluster_details(nodes_data: dict[str, dict[str, dict]]) -> Html:
                        }
                    }
     """
-    gpu_nodes = nodes_data.get("gpu", {})
-    cpu_nodes = nodes_data.get("cpu", {})
+    if gpu_nodes := nodes_data.get("gpu", {}):
+        total_gpu_nodes = sum(node_type["node_count"] for node_type in gpu_nodes.values())
+        total_gpus = sum(node_type["total_gpus"] for node_type in gpu_nodes.values())
+    else:
+        total_gpu_nodes = 0
+        total_gpus = 0
 
-    total_gpu_nodes = sum(node_type["node_count"] for node_type in gpu_nodes.values())
-    total_gpus = sum(node_type["total_gpus"] for node_type in gpu_nodes.values())
-    total_cpu_nodes = sum(node_type["node_count"] for node_type in cpu_nodes.values())
-    total_cpu_cores = sum(node_type.get("total_cpus", 0) for node_type in cpu_nodes.values())
+    if cpu_nodes := nodes_data.get("cpu", {}):
+        total_cpu_nodes = sum(node_type["node_count"] for node_type in cpu_nodes.values())
+        total_cpu_cores = sum(node_type.get("total_cpus", 0) for node_type in cpu_nodes.values())
+    else:
+        total_cpu_nodes = 0
+        total_cpu_cores = 0
 
     gpu_rows = []
     if gpu_nodes:
