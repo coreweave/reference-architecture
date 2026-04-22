@@ -1,0 +1,32 @@
+project_id     = "replace-me"
+project_number = "123456789012"
+
+gcp_region              = "us-central1"
+kms_location            = "us-central1"
+secret_replica_location = "us-central1"
+
+# Recommended: read OIDC issuer URL from this repo's CKS terraform outputs.
+# This expects you've already applied ../../../../terraform and have local state.
+cks_remote_state_backend = "local"
+cks_remote_state_config = {
+  path = "../../../../terraform/terraform.tfstate"
+}
+
+# Optional override if not using terraform_remote_state:
+# cks_oidc_issuer_url = "https://oidc.cks.coreweave.com/id/replace-me"
+
+create_workload_identity_pool = true
+workload_identity_pool_id     = "cw-cks-secrets-pool"
+workload_identity_provider_id = "cks-oidc"
+wif_subject               = "system:serviceaccount:secrets-gcp:eso-gcp-auth"
+
+namespace            = "secrets-gcp"
+service_account_name = "eso-gcp-auth"
+
+secret_name_prefix = "ra-demo"
+
+secret_values = {
+  DB_USERNAME = "demo-user"
+  DB_PASSWORD = "replace-me"
+  API_TOKEN   = "replace-me"
+}
