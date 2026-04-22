@@ -1,0 +1,11 @@
+installCRDs: true
+
+# Run controller components with >1 replica for better availability.
+replicaCount: 2
+controllerClass: platform-secrets
+
+webhook:
+  replicaCount: 2
+
+certController:
+  replicaCount: 2
