@@ -71,7 +71,11 @@ def _(auto_k8s: K8s, kubeconfig_form: mo.ui.form):
 
 @app.cell(hide_code=True)
 def _(k8s: K8s):
-    cluster_details(k8s.nodes)
+    if k8s:
+        _ui = cluster_details(k8s.nodes)
+    else:
+        _ui = None
+    _ui
 
 
 @app.cell(hide_code=True)
