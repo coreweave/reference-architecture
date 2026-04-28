@@ -4,7 +4,7 @@
 #     "boto3==1.42.45",
 #     "k8s==0.28.0",
 #     "kubernetes==35.0.0",
-#     "marimo>=0.20.2",
+#     "marimo>=0.23.0",
 #     "mypy-boto3-s3>=1.42.37",
 #     "ruamel-yaml>=0.19.1",
 #     "typing-extensions>=4.15.0",
@@ -329,8 +329,10 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
                 _current_logs = warp_results.get("logs", [])
                 if len(_current_logs) > len(_log_text):
                     _log_text = _current_logs
-                    _log_lines = _log_text.split("\n") if _log_text else []
-                    _recent_logs = "\n".join(_log_lines[-30:])
+                    _log_lines = _log_text.split("
+") if _log_text else []
+                    _recent_logs = "
+".join(_log_lines[-30:])
 
                 mo.output.replace(
                     mo.vstack(
@@ -342,7 +344,10 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
     **Operation:** {warp_operation}
     **Endpoint:** {storage.endpoint_url}
                             """),
-                            mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
+                            mo.md(f"#### Recent Logs (last 30 lines)
+```
+{_recent_logs}
+```"),
                         ]
                     )
                 )
@@ -357,7 +362,9 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
     **Operation:** {warp_operation}
     **Endpoint:** {storage.endpoint_url}
     **Status:** {_status}
-    ```\n{_log_text}\n```
+    ```
+{_log_text}
+```
     """)
         mo.output.replace(_final_output)
     return
