@@ -329,10 +329,8 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
                 _current_logs = warp_results.get("logs", [])
                 if len(_current_logs) > len(_log_text):
                     _log_text = _current_logs
-                    _log_lines = _log_text.split("
-") if _log_text else []
-                    _recent_logs = "
-".join(_log_lines[-30:])
+                    _log_lines = _log_text.split("\n") if _log_text else []
+                    _recent_logs = "\n".join(_log_lines[-30:])
 
                 mo.output.replace(
                     mo.vstack(
@@ -344,10 +342,7 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
     **Operation:** {warp_operation}
     **Endpoint:** {storage.endpoint_url}
                             """),
-                            mo.md(f"#### Recent Logs (last 30 lines)
-```
-{_recent_logs}
-```"),
+                            mo.md(f"#### Recent Logs (last 30 lines)\n```\n{_recent_logs}\n```"),
                         ]
                     )
                 )
@@ -362,9 +357,7 @@ def _(storage: ObjectStorage | None, warp_form: mo.ui.form, warp_operation: str,
     **Operation:** {warp_operation}
     **Endpoint:** {storage.endpoint_url}
     **Status:** {_status}
-    ```
-{_log_text}
-```
+    ```\n{_log_text}\n```
     """)
         mo.output.replace(_final_output)
     return
