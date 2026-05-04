@@ -344,7 +344,7 @@ class ObjectStorage(ABC):
             return False
 
     def empty_bucket(self, bucket_name: str) -> int:
-        """Delete all objects in a bucket.
+        """Delete all objects and abort all incomplete multipart uploads in a bucket.
 
         Args:
             bucket_name (str): Name of the bucket to empty.
@@ -354,9 +354,23 @@ class ObjectStorage(ABC):
 
         Note:
             Deletes objects in batches of up to 1000. Warns about individual deletion failures.
+            Also aborts any incomplete multipart uploads, which are invisible to list_objects
+            but prevent bucket deletion.
+        """
+        print(f"Emptying bucket '{bucket_name}'...")
+        self.abort_multipart_uploads(bucket_name)
+        return self.delete_all_objects(bucket_name)
+
+    def delete_all_objects(self, bucket_name: str) -> int:
+        """Delete all objects in a bucket in batches of 1000.
+
+        Args:
+            bucket_name (str): Name of the bucket.
+
+        Returns:
+            int: Count of deleted objects.
         """
         total_deleted = 0
-        print(f"Emptying bucket '{bucket_name}'...")
         continuation_token = None
         try:
             while True:
@@ -379,11 +393,53 @@ class ObjectStorage(ABC):
                 if not list_result.get("is_truncated"):
                     break
                 continuation_token = list_result.get("next_continuation_token")
-            print(f"Finished emptying bucket '{bucket_name}', total deleted: {total_deleted}")
+            print(f"Finished deleting objects from '{bucket_name}', total deleted: {total_deleted}")
             return total_deleted
         except Exception as e:
-            print(f"Error emptying bucket: {e}")
+            print(f"Error deleting objects: {e}")
             return total_deleted
+
+    def abort_multipart_uploads(self, bucket_name: str) -> int:
+        """Abort all incomplete multipart uploads in a bucket.
+
+        Args:
+            bucket_name (str): Name of the bucket.
+
+        Returns:
+            int: Count of aborted uploads.
+        """
+        total_aborted = 0
+        key_marker = None
+        upload_id_marker = None
+        try:
+            while True:
+                params = {"Bucket": bucket_name}
+                if key_marker:
+                    params["KeyMarker"] = key_marker
+                if upload_id_marker:
+                    params["UploadIdMarker"] = upload_id_marker
+                mpu_resp = self.s3_client.list_multipart_uploads(**params)
+                for upload in mpu_resp.get("Uploads", []):
+                    key = upload.get("Key")
+                    upload_id = upload.get("UploadId")
+                    if not key or not upload_id:
+                        continue
+                    self.s3_client.abort_multipart_upload(
+                        Bucket=bucket_name,
+                        Key=key,
+                        UploadId=upload_id,
+                    )
+                    total_aborted += 1
+                if not mpu_resp.get("IsTruncated"):
+                    break
+                key_marker = mpu_resp.get("NextKeyMarker")
+                upload_id_marker = mpu_resp.get("NextUploadIdMarker")
+            if total_aborted:
+                print(f"Aborted {total_aborted} incomplete multipart uploads in '{bucket_name}'")
+            return total_aborted
+        except Exception as e:
+            print(f"Error aborting multipart uploads: {e}")
+            return total_aborted
 
     def put_bucket_policy(self, bucket_name: str, policy: dict[str, Any]) -> bool:
         """Apply an S3 bucket policy.
