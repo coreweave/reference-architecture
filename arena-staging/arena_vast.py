@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.12"
 # dependencies = [
-#     "marimo>=0.23.0",
+#     "marimo>=0.23.6",
 #     "moutils==0.4.3",
 #     "pandas==3.0.0"
 # ]
