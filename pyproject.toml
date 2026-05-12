@@ -11,7 +11,7 @@ dependencies = [
     "evaluate>=0.4.6",
     "httpx>=0.28.1",
     "kubernetes>=35.0.0",
-    "marimo>=0.23.0",
+    "marimo>=0.23.6",
     "moutils>=0.3.12",
     "ray>=2.53.0",
     "ruamel-yaml>=0.19.1",
@@ -27,7 +27,7 @@ dev = [
     "boto3-stubs[s3]>=1.42.48",
     "pre-commit>=4.5.1",
     "ruff>=0.15.0",
-    "marimo[lsp]>=0.23.0",
+    "marimo[lsp]>=0.23.6",
     "mypy-boto3-s3>=1.42.37",
     "basedpyright>=1.38.2",
 ]
