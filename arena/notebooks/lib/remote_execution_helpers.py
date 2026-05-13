@@ -227,12 +227,17 @@ class ShellResult(str):
         command: str = "",
         ok: bool = True,
     ) -> "ShellResult":
+        """Create a string result with subprocess metadata attached."""
         instance = super().__new__(cls, stdout)
         instance.returncode = returncode
         instance.stderr = stderr
         instance.command = command
         instance.ok = ok
         return instance
+
+    def __bool__(self) -> bool:
+        """Treat failed commands as false while preserving string truthiness for stdout."""
+        return self.ok and len(self) > 0
 
 
 def shell(  # noqa: C901

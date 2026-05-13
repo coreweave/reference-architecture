@@ -16,7 +16,7 @@ with app.setup:
     import os
 
     import marimo as mo
-    from lib.k8s import K8s, KubernetesConfigError
+    from lib.k8s import ensure_kubectl_access
     from lib.remote_execution_helpers import shell
     from lib.ui import about, banner, security_disclaimer, table_of_contents
 
@@ -31,89 +31,11 @@ with app.setup:
     SERVICE_NAME = "arena-k8s-web"
     JOB_NAME = "arena-k8s-job"
 
-    SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-    SERVICE_ACCOUNT_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-    KUBECTL_KUBECONFIG_PATH = "/tmp/arena-incluster-kubectl.yaml"
-
     def truncate(text: str, max_chars: int = 4000) -> str:
+        """Limit command output to a readable size for notebook display."""
         if len(text) <= max_chars:
             return text
         return f"{text[:max_chars]}\n...output truncated..."
-
-    def write_incluster_kubeconfig(kubeconfig_path: str) -> tuple[bool, str]:
-        """Write a kubeconfig that references the mounted service-account token via `tokenFile:`.
-
-        Using `tokenFile:` (rather than inlining `token:`) keeps the bearer token in the
-        kernel-protected `/var/run/secrets/...` mount and picks up token rotation automatically.
-        """
-        host = os.getenv("KUBERNETES_SERVICE_HOST", "")
-        port = os.getenv("KUBERNETES_SERVICE_PORT_HTTPS", "") or os.getenv("KUBERNETES_SERVICE_PORT", "443")
-
-        if not host:
-            return False, "KUBERNETES_SERVICE_HOST is not set."
-        if not os.path.exists(SERVICE_ACCOUNT_TOKEN_PATH):
-            return False, f"Service account token not found at {SERVICE_ACCOUNT_TOKEN_PATH}."
-        if not os.path.exists(SERVICE_ACCOUNT_CA_PATH):
-            return False, f"Service account CA cert not found at {SERVICE_ACCOUNT_CA_PATH}."
-
-        kubeconfig = f"""apiVersion: v1
-kind: Config
-clusters:
-- name: in-cluster
-  cluster:
-    server: https://{host}:{port}
-    certificate-authority: {SERVICE_ACCOUNT_CA_PATH}
-users:
-- name: service-account
-  user:
-    tokenFile: {SERVICE_ACCOUNT_TOKEN_PATH}
-contexts:
-- name: in-cluster
-  context:
-    cluster: in-cluster
-    user: service-account
-current-context: in-cluster
-"""
-        with open(kubeconfig_path, "w", encoding="utf-8") as file:
-            file.write(kubeconfig)
-        return True, kubeconfig_path
-
-    def ensure_kubectl_access() -> tuple[bool, str]:
-        """Make sure kubectl has a usable context, without disturbing the user's existing KUBECONFIG.
-
-        Order of preference:
-          1. An existing `kubectl config current-context` (local or already-configured) — leave env alone.
-          2. Generated in-cluster kubeconfig at `KUBECTL_KUBECONFIG_PATH` — only then set `KUBECONFIG`.
-        """
-        kubectl_check = shell("kubectl version --client", quiet=True)
-        if not kubectl_check.ok:
-            return (
-                False,
-                "`kubectl` is not available. Install it in this environment and rerun all cells.",
-            )
-
-        local_context = shell("kubectl config current-context", quiet=True)
-        if local_context.ok:
-            # Probe Python-side connectivity via the shared K8s helper. Failure is non-fatal — the
-            # lab's shell-kubectl commands will still work.
-            try:
-                K8s().validate_config()
-            except KubernetesConfigError:
-                pass
-            return True, f"Using local kubectl context `{local_context.strip()}`."
-
-        incluster_ok, incluster_message = write_incluster_kubeconfig(KUBECTL_KUBECONFIG_PATH)
-        if incluster_ok:
-            os.environ["KUBECONFIG"] = KUBECTL_KUBECONFIG_PATH
-            return True, f"Using in-cluster service-account context via `{KUBECTL_KUBECONFIG_PATH}`."
-
-        details = local_context.stderr.strip() or incluster_message
-        return (
-            False,
-            "kubectl is installed but no cluster context is usable. "
-            "If running locally, set a context with `kubectl config use-context <name>`. "
-            f"Details: `{details}`",
-        )
 
     def step_cell(title: str, cmd: str, btn, clicked: bool, explanation: str = "") -> mo.Html:
         """Render an imperative step: optional explanation, title + button, command, and result if clicked."""
@@ -184,7 +106,7 @@ current-context: in-cluster
         with open(os.path.join(MANIFEST_DIR, filename), "r", encoding="utf-8") as file:
             return file.read()
 
-    RUN_BUTTON = dict(value=0, on_click=lambda v: v + 1, label="Run")
+    RUN_BUTTON = {"value": 0, "on_click": lambda v: v + 1, "label": "Run"}
 
     # ----------------------------------------------------------------
     # Manifests (the source of truth for each lab object).

@@ -38,8 +38,8 @@ def _():
     _elements = [
         banner(),
         about(
-            """This notebook provides a walkthrough for benchmarking CoreWeave AI Object Storage (CAIOS) and LOTA inside a CoreWeave cluster using the Minio Warp tool.<br>
             "Warp",
+            """This notebook provides a walkthrough for benchmarking CoreWeave AI Object Storage (CAIOS) and LOTA inside a CoreWeave cluster using the Minio Warp tool.<br>
                _If you are running this notebook in edit mode, make sure you start by running all cells in the bottom right._
             """,
         ),
