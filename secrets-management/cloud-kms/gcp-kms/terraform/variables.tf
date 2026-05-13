@@ -122,9 +122,8 @@ variable "service_account_name" {
 }
 
 variable "workload_identity_pool_id" {
-  description = "Workload Identity Pool ID. Required when create_workload_identity_pool=true, or when reusing an existing pool."
+  description = "Workload Identity Pool ID. Required: used both when create_workload_identity_pool=true and when reusing an existing pool."
   type        = string
-  default     = null
 }
 
 variable "workload_identity_provider_id" {
