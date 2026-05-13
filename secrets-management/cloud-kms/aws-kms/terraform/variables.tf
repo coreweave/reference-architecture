@@ -1,13 +1,72 @@
+variable "coreweave_api_token" {
+  description = "CoreWeave API token used to provision the VPC and CKS cluster. Prefer TF_VAR_coreweave_api_token."
+  type        = string
+  sensitive   = true
+}
+
+variable "zone" {
+  description = "CoreWeave zone for the VPC and CKS cluster."
+  type        = string
+}
+
+variable "vpc_name" {
+  description = "CoreWeave VPC name."
+  type        = string
+  default     = "ra-secrets-aws-vpc"
+}
+
+variable "vpc_prefixes" {
+  description = "Named VPC CIDR prefixes for CKS. Order: first=pod, second=service, remaining=internal LB."
+  type = list(object({
+    name  = string
+    value = string
+  }))
+  default = [
+    { name = "pod cidr", value = "10.0.0.0/13" },
+    { name = "service cidr", value = "10.16.0.0/22" },
+    { name = "internal lb cidr", value = "10.32.4.0/22" },
+  ]
+
+  validation {
+    condition     = length(var.vpc_prefixes) >= 3
+    error_message = "vpc_prefixes must include at least pod, service, and one internal load balancer CIDR."
+  }
+}
+
+variable "host_prefixes" {
+  description = "CoreWeave VPC host prefix definitions."
+  type = set(object({
+    name     = string
+    type     = string
+    prefixes = list(string)
+  }))
+  default = [
+    { name = "primary", type = "PRIMARY", prefixes = ["10.16.192.0/18"] }
+  ]
+}
+
+variable "cluster_name" {
+  description = "CKS cluster name."
+  type        = string
+  default     = "ra-secrets-aws-cks"
+}
+
+variable "kubernetes_version" {
+  description = "CKS Kubernetes minor version."
+  type        = string
+  default     = "v1.35"
+}
+
+variable "cks_public" {
+  description = "Whether the CKS API server is publicly reachable."
+  type        = bool
+  default     = true
+}
+
 variable "aws_region" {
   description = "AWS region for KMS and Secrets Manager."
   type        = string
   default     = "us-east-1"
-}
-
-variable "oidc_issuer_url" {
-  description = "Optional explicit CKS OIDC issuer URL. If unset, this can be sourced from cks_remote_state outputs."
-  type        = string
-  default     = null
 }
 
 variable "oidc_provider_arn" {
@@ -20,18 +79,6 @@ variable "create_oidc_provider" {
   description = "When true, create an AWS IAM OIDC provider from the effective CKS OIDC issuer URL."
   type        = bool
   default     = true
-}
-
-variable "cks_remote_state_backend" {
-  description = "Optional terraform_remote_state backend for reading CKS outputs (for example: local, s3, gcs, remote)."
-  type        = string
-  default     = null
-}
-
-variable "cks_remote_state_config" {
-  description = "Optional terraform_remote_state backend config map used when cks_remote_state_backend is set."
-  type        = map(string)
-  default     = {}
 }
 
 variable "namespace" {

@@ -1,18 +1,10 @@
-data "terraform_remote_state" "cks" {
-  count = var.cks_remote_state_backend == null ? 0 : 1
-
-  backend = var.cks_remote_state_backend
-  config  = var.cks_remote_state_config
-}
-
 locals {
-  effective_oidc_issuer_url = coalesce(
-    var.oidc_issuer_url,
-    try(data.terraform_remote_state.cks[0].outputs.cks_service_account_oidc_issuer_url, null)
-  )
-
-  oidc_issuer_hostpath = trimsuffix(replace(local.effective_oidc_issuer_url, "https://", ""), "/")
-  oidc_subject         = "system:serviceaccount:${var.namespace}:${var.service_account_name}"
+  cks_pod_cidr_name          = var.vpc_prefixes[0].name
+  cks_service_cidr_name      = var.vpc_prefixes[1].name
+  cks_internal_lb_cidr_names = toset([for i in range(2, length(var.vpc_prefixes)) : var.vpc_prefixes[i].name])
+  effective_oidc_issuer_url  = module.cks.service_account_oidc_issuer_url
+  oidc_issuer_hostpath       = trimsuffix(replace(local.effective_oidc_issuer_url, "https://", ""), "/")
+  oidc_subject               = "system:serviceaccount:${var.namespace}:${var.service_account_name}"
   effective_oidc_provider_arn = coalesce(
     var.oidc_provider_arn,
     try(aws_iam_openid_connect_provider.cks[0].arn, null)
@@ -25,21 +17,36 @@ locals {
   }
 }
 
-check "oidc_issuer_url_present" {
-  assert {
-    condition     = local.effective_oidc_issuer_url != null && trim(local.effective_oidc_issuer_url) != ""
-    error_message = "An OIDC issuer URL is required. Set oidc_issuer_url directly or configure cks_remote_state_* to read cks_service_account_oidc_issuer_url from your CKS terraform outputs."
-  }
-}
-
 check "oidc_provider_present" {
   assert {
     condition = (
       var.create_oidc_provider ||
-      (local.effective_oidc_provider_arn != null && trim(local.effective_oidc_provider_arn) != "")
+      (local.effective_oidc_provider_arn != null && trimspace(local.effective_oidc_provider_arn) != "")
     )
     error_message = "An AWS IAM OIDC provider ARN is required when create_oidc_provider=false. Set oidc_provider_arn or enable create_oidc_provider."
   }
+}
+
+module "network" {
+  source = "../../../../terraform/modules/network"
+
+  name          = var.vpc_name
+  zone          = var.zone
+  vpc_prefixes  = var.vpc_prefixes
+  host_prefixes = var.host_prefixes
+}
+
+module "cks" {
+  source = "../../../../terraform/modules/cks"
+
+  cluster_name           = var.cluster_name
+  kubernetes_version     = var.kubernetes_version
+  zone                   = module.network.vpc_zone
+  vpc_id                 = module.network.vpc_id
+  public                 = var.cks_public
+  pod_cidr_name          = local.cks_pod_cidr_name
+  service_cidr_name      = local.cks_service_cidr_name
+  internal_lb_cidr_names = local.cks_internal_lb_cidr_names
 }
 
 data "tls_certificate" "oidc" {

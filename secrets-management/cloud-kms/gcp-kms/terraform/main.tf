@@ -1,17 +1,9 @@
-data "terraform_remote_state" "cks" {
-  count = var.cks_remote_state_backend == null ? 0 : 1
-
-  backend = var.cks_remote_state_backend
-  config  = var.cks_remote_state_config
-}
-
 locals {
-  effective_cks_oidc_issuer_url = coalesce(
-    var.cks_oidc_issuer_url,
-    try(data.terraform_remote_state.cks[0].outputs.cks_service_account_oidc_issuer_url, null)
-  )
-
-  effective_wif_subject = coalesce(var.wif_subject, "system:serviceaccount:${var.namespace}:${var.service_account_name}")
+  cks_pod_cidr_name             = var.vpc_prefixes[0].name
+  cks_service_cidr_name         = var.vpc_prefixes[1].name
+  cks_internal_lb_cidr_names    = toset([for i in range(2, length(var.vpc_prefixes)) : var.vpc_prefixes[i].name])
+  effective_cks_oidc_issuer_url = module.cks.service_account_oidc_issuer_url
+  effective_wif_subject         = coalesce(var.wif_subject, "system:serviceaccount:${var.namespace}:${var.service_account_name}")
   effective_workload_identity_pool_id = coalesce(
     var.workload_identity_pool_id,
     try(google_iam_workload_identity_pool.cks[0].workload_identity_pool_id, null)
@@ -26,19 +18,31 @@ locals {
 
 check "workload_identity_pool_id_present" {
   assert {
-    condition     = var.workload_identity_pool_id != null && trim(var.workload_identity_pool_id) != ""
+    condition     = var.workload_identity_pool_id != null && trimspace(var.workload_identity_pool_id) != ""
     error_message = "workload_identity_pool_id must be set."
   }
 }
 
-check "oidc_issuer_url_present_when_creating_pool" {
-  assert {
-    condition = (
-      !var.create_workload_identity_pool ||
-      (local.effective_cks_oidc_issuer_url != null && trim(local.effective_cks_oidc_issuer_url) != "")
-    )
-    error_message = "An OIDC issuer URL is required when create_workload_identity_pool=true. Set cks_oidc_issuer_url directly or configure cks_remote_state_* to read cks_service_account_oidc_issuer_url from your CKS terraform outputs."
-  }
+module "network" {
+  source = "../../../../terraform/modules/network"
+
+  name          = var.vpc_name
+  zone          = var.zone
+  vpc_prefixes  = var.vpc_prefixes
+  host_prefixes = var.host_prefixes
+}
+
+module "cks" {
+  source = "../../../../terraform/modules/cks"
+
+  cluster_name           = var.cluster_name
+  kubernetes_version     = var.kubernetes_version
+  zone                   = module.network.vpc_zone
+  vpc_id                 = module.network.vpc_id
+  public                 = var.cks_public
+  pod_cidr_name          = local.cks_pod_cidr_name
+  service_cidr_name      = local.cks_service_cidr_name
+  internal_lb_cidr_names = local.cks_internal_lb_cidr_names
 }
 
 resource "google_iam_workload_identity_pool" "cks" {

@@ -1,3 +1,33 @@
+output "vpc_id" {
+  description = "CoreWeave VPC ID created for this example."
+  value       = module.network.vpc_id
+}
+
+output "cks_cluster_id" {
+  description = "CKS cluster ID created for this example."
+  value       = module.cks.cluster_id
+}
+
+output "cks_cluster_name" {
+  description = "CKS cluster name created for this example."
+  value       = module.cks.cluster_name
+}
+
+output "cks_api_server_endpoint" {
+  description = "CKS Kubernetes API server endpoint."
+  value       = module.cks.api_server_endpoint
+}
+
+output "cks_status" {
+  description = "Current CKS cluster status."
+  value       = module.cks.status
+}
+
+output "cks_service_account_oidc_issuer_url" {
+  description = "CKS service-account OIDC issuer URL trusted by AWS IAM."
+  value       = module.cks.service_account_oidc_issuer_url
+}
+
 output "eso_role_arn" {
   description = "IAM role ARN to place in manifests/20-secret-store.yaml."
   value       = aws_iam_role.eso_reader.arn
