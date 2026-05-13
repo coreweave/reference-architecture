@@ -14,10 +14,10 @@ app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
 with app.setup:
     import os
-    import subprocess
 
     import marimo as mo
     from lib.k8s import K8s, KubernetesConfigError
+    from lib.remote_execution_helpers import shell
     from lib.ui import about, banner, security_disclaimer, table_of_contents
 
     MANIFEST_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cks_kubernetes")
@@ -39,57 +39,6 @@ with app.setup:
         if len(text) <= max_chars:
             return text
         return f"{text[:max_chars]}\n...output truncated..."
-
-    def run_command(command: str, timeout_seconds: int = 180) -> dict:
-        """Run a shell command and return structured result."""
-        try:
-            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=timeout_seconds)
-            return {
-                "command": command,
-                "returncode": result.returncode,
-                "stdout": result.stdout.strip(),
-                "stderr": result.stderr.strip(),
-                "ok": result.returncode == 0,
-            }
-        except subprocess.TimeoutExpired as err:
-            stdout = str(err.stdout or "").strip() if err.stdout else ""
-            stderr = str(err.stderr or "").strip() if err.stderr else ""
-            return {
-                "command": command,
-                "returncode": 124,
-                "stdout": stdout,
-                "stderr": f"Command timed out after {timeout_seconds}s. {stderr}".strip(),
-                "ok": False,
-            }
-
-    def apply_manifest(manifest: str, namespace: str | None = None, timeout_seconds: int = 180) -> dict:
-        """Apply a YAML manifest by piping it to `kubectl apply -f -` via stdin."""
-        ns_flag = f"-n {namespace} " if namespace else ""
-        command = f"kubectl {ns_flag}apply -f -"
-        try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                input=manifest,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-            )
-            return {
-                "command": f"{command}   # manifest piped via stdin",
-                "returncode": result.returncode,
-                "stdout": result.stdout.strip(),
-                "stderr": result.stderr.strip(),
-                "ok": result.returncode == 0,
-            }
-        except subprocess.TimeoutExpired:
-            return {
-                "command": command,
-                "returncode": 124,
-                "stdout": "",
-                "stderr": f"Apply timed out after {timeout_seconds}s.",
-                "ok": False,
-            }
 
     def write_incluster_kubeconfig(kubeconfig_path: str) -> tuple[bool, str]:
         """Write a kubeconfig that references the mounted service-account token via `tokenFile:`.
@@ -136,29 +85,29 @@ current-context: in-cluster
           1. An existing `kubectl config current-context` (local or already-configured) — leave env alone.
           2. Generated in-cluster kubeconfig at `KUBECTL_KUBECONFIG_PATH` — only then set `KUBECONFIG`.
         """
-        kubectl_check = run_command("kubectl version --client")
-        if not bool(kubectl_check["ok"]):
+        kubectl_check = shell("kubectl version --client", quiet=True)
+        if not kubectl_check.ok:
             return (
                 False,
                 "`kubectl` is not available. Install it in this environment and rerun all cells.",
             )
 
-        local_context = run_command("kubectl config current-context")
-        if bool(local_context["ok"]):
+        local_context = shell("kubectl config current-context", quiet=True)
+        if local_context.ok:
             # Probe Python-side connectivity via the shared K8s helper. Failure is non-fatal — the
             # lab's shell-kubectl commands will still work.
             try:
                 K8s().validate_config()
             except KubernetesConfigError:
                 pass
-            return True, f"Using local kubectl context `{local_context['stdout']}`."
+            return True, f"Using local kubectl context `{local_context.strip()}`."
 
         incluster_ok, incluster_message = write_incluster_kubeconfig(KUBECTL_KUBECONFIG_PATH)
         if incluster_ok:
             os.environ["KUBECONFIG"] = KUBECTL_KUBECONFIG_PATH
             return True, f"Using in-cluster service-account context via `{KUBECTL_KUBECONFIG_PATH}`."
 
-        details = str(local_context["stderr"]) if local_context["stderr"] else incluster_message
+        details = local_context.stderr.strip() or incluster_message
         return (
             False,
             "kubectl is installed but no cluster context is usable. "
@@ -170,12 +119,14 @@ current-context: in-cluster
         """Render an imperative step: optional explanation, title + button, command, and result if clicked."""
         _output = None
         if clicked:
-            _r = run_command(cmd)
-            _status = "SUCCESS" if _r["ok"] else "FAILED"
-            _stdout = truncate(str(_r["stdout"])) if _r["stdout"] else "(no output)"
+            _r = shell(cmd, quiet=True, timeout=180)
+            _status = "SUCCESS" if _r.ok else "FAILED"
+            _stdout_text = _r.strip()
+            _stdout = truncate(_stdout_text) if _stdout_text else "(no output)"
             _stderr_block = ""
-            if _r["stderr"] and not _r["ok"]:
-                _stderr_block = f"\n**stderr:**\n```\n{truncate(str(_r['stderr']))}\n```"
+            _stderr_text = _r.stderr.strip()
+            if _stderr_text and not _r.ok:
+                _stderr_block = f"\n**stderr:**\n```\n{truncate(_stderr_text)}\n```"
             _output = mo.md(f"`{_status}`\n```\n{_stdout}\n```{_stderr_block}")
         parts = [
             mo.hstack([mo.md(f"**{title}**"), btn], justify="space-between", align="center"),
@@ -202,12 +153,15 @@ current-context: in-cluster
         """
         _output = None
         if clicked:
-            _r = apply_manifest(editor.value, namespace)
-            _status = "SUCCESS" if _r["ok"] else "FAILED"
-            _stdout = truncate(str(_r["stdout"])) if _r["stdout"] else "(no output)"
+            ns_flag = f"-n {namespace} " if namespace else ""
+            _r = shell(f"kubectl {ns_flag}apply -f -", quiet=True, timeout=180, input=editor.value)
+            _status = "SUCCESS" if _r.ok else "FAILED"
+            _stdout_text = _r.strip()
+            _stdout = truncate(_stdout_text) if _stdout_text else "(no output)"
             _stderr_block = ""
-            if _r["stderr"] and not _r["ok"]:
-                _stderr_block = f"\n**stderr:**\n```\n{truncate(str(_r['stderr']))}\n```"
+            _stderr_text = _r.stderr.strip()
+            if _stderr_text and not _r.ok:
+                _stderr_block = f"\n**stderr:**\n```\n{truncate(_stderr_text)}\n```"
             _output = mo.md(f"`{_status}`\n```\n{_stdout}\n```{_stderr_block}")
         ns_label = f"  *(namespace: `{namespace}`)*" if namespace else ""
         parts = [

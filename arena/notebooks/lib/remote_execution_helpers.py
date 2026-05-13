@@ -205,8 +205,48 @@ def ssh(command: str, verbose: bool = True, stream: bool = False) -> str:
         return result.stdout
 
 
-def shell(command: str | list, quiet: bool = False, check: bool = False, stream: bool = False) -> str:  # noqa: C901
+class ShellResult(str):
+    """String-like result from shell()/bash() that also carries structured fields.
+
+    Subclasses str so existing callers that treat the return value as a string
+    keep working. New callers can read .returncode, .stderr, .ok, .command for
+    structured access.
+    """
+
+    returncode: int
+    stderr: str
+    command: str
+    ok: bool
+
+    def __new__(
+        cls,
+        stdout: str,
+        *,
+        returncode: int = 0,
+        stderr: str = "",
+        command: str = "",
+        ok: bool = True,
+    ) -> "ShellResult":
+        instance = super().__new__(cls, stdout)
+        instance.returncode = returncode
+        instance.stderr = stderr
+        instance.command = command
+        instance.ok = ok
+        return instance
+
+
+def shell(  # noqa: C901
+    command: str | list,
+    quiet: bool = False,
+    check: bool = False,
+    stream: bool = False,
+    timeout: int | None = None,
+    input: str | None = None,
+) -> ShellResult:
     """Run a local shell command with clean output.
+
+    Returns a ShellResult — a str subclass equal to the captured stdout, with
+    .returncode, .stderr, .ok, .command for callers that need structured access.
 
     Args:
         command: Command string or list of arguments
@@ -215,15 +255,18 @@ def shell(command: str | list, quiet: bool = False, check: bool = False, stream:
         stream: If True, stream stdout/stderr in real-time (for long-running commands).
                 Note: In Marimo notebooks, streaming may still buffer until
                 cell completion due to Marimo's output capture mechanism.
-
-    Returns:
-        The stdout output as a string (empty if streaming)
+        timeout: Optional timeout in seconds (non-stream mode only). On timeout
+                 the result has returncode=124 and ok=False.
+        input: Optional string piped to the command's stdin (non-stream mode only).
 
     Example:
-        shell("aws s3 ls")
-        shell("aws configure set s3.addressing_style virtual")
+        result = shell("aws s3 ls")
+        if not result.ok:
+            print(result.stderr)
+
         shell(["kubectl", "get", "pods"])
-        shell("s5cmd cp ...", stream=True)  # Stream output in real-time
+        shell("kubectl apply -f -", input=manifest_yaml)
+        shell("s5cmd cp ...", stream=True)
     """
     if isinstance(command, str):
         cmd_display = command
@@ -261,44 +304,92 @@ def shell(command: str | list, quiet: bool = False, check: bool = False, stream:
                 output_lines.append(line)
 
         proc.wait()
+        stdout = "".join(output_lines)
 
         if proc.returncode == 0:
             if not quiet:
                 sys.stdout.write("✓ Done (exit: 0)\n")
                 sys.stdout.flush()
         else:
-            sys.stdout.write(f"✗ Failed (exit: {proc.returncode})\n")
-            sys.stdout.flush()
+            if not quiet:
+                sys.stdout.write(f"✗ Failed (exit: {proc.returncode})\n")
+                sys.stdout.flush()
             if check:
                 raise subprocess.CalledProcessError(proc.returncode, command)
 
-        return "".join(output_lines)
+        return ShellResult(
+            stdout,
+            returncode=proc.returncode,
+            stderr="",
+            command=cmd_display,
+            ok=proc.returncode == 0,
+        )
 
-    else:
-        # Capture output (original behavior)
+    try:
         result = subprocess.run(
             command,
             shell=shell_mode,
             capture_output=True,
             text=True,
+            timeout=timeout,
+            input=input,
+        )
+    except subprocess.TimeoutExpired as err:
+        out = err.stdout or ""
+        err_text = err.stderr or ""
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", errors="replace")
+        if isinstance(err_text, bytes):
+            err_text = err_text.decode("utf-8", errors="replace")
+        stderr_msg = f"Command timed out after {timeout}s. {err_text.strip()}".strip()
+        if not quiet:
+            print(f"✗ {cmd_display}")
+            print(f"  Error: {stderr_msg}")
+        if check:
+            raise
+        return ShellResult(
+            out,
+            returncode=124,
+            stderr=stderr_msg,
+            command=cmd_display,
+            ok=False,
         )
 
-        if result.returncode == 0:
-            if not quiet:
-                print(f"✓ {cmd_display}")
-            if result.stdout.strip():
-                print(result.stdout.rstrip())
-            return result.stdout
-        else:
-            print(f"✗ {cmd_display}")
-            if result.stderr.strip():
-                print(f"  Error: {result.stderr.strip()}")
-            if check:
-                raise subprocess.CalledProcessError(result.returncode, command)
-            return ""
+    if result.returncode == 0:
+        if not quiet:
+            print(f"✓ {cmd_display}")
+        if result.stdout.strip():
+            print(result.stdout.rstrip())
+        return ShellResult(
+            result.stdout,
+            returncode=0,
+            stderr=result.stderr,
+            command=cmd_display,
+            ok=True,
+        )
+
+    if not quiet:
+        print(f"✗ {cmd_display}")
+        if result.stderr.strip():
+            print(f"  Error: {result.stderr.strip()}")
+    if check:
+        raise subprocess.CalledProcessError(result.returncode, command)
+    return ShellResult(
+        result.stdout,
+        returncode=result.returncode,
+        stderr=result.stderr,
+        command=cmd_display,
+        ok=False,
+    )
 
 
-def bash(command: str, quiet: bool = False, stream: bool = False) -> str:
+def bash(
+    command: str,
+    quiet: bool = False,
+    stream: bool = False,
+    timeout: int | None = None,
+    input: str | None = None,
+) -> ShellResult:
     """Alias for shell() - run a bash command.
 
     Example:
@@ -306,7 +397,7 @@ def bash(command: str, quiet: bool = False, stream: bool = False) -> str:
         bash("aws s3 ls")
         bash("s5cmd cp ...", stream=True)
     """
-    return shell(command, quiet=quiet, stream=stream)
+    return shell(command, quiet=quiet, stream=stream, timeout=timeout, input=input)
 
 
 if __name__ == "__main__":
