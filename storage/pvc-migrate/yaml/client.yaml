@@ -1,0 +1,66 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rclone-client
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      volumes:
+        - name: pvc-data
+          persistentVolumeClaim:
+            claimName: $PVC_NAME
+        - name: rclone-config
+          secret:
+            secretName: rclone-config
+      containers:
+        - name: rclone
+          image: rclone/rclone:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              #!/bin/sh
+              sleep 2
+              echo "Starting migration..."
+              rclone sync remote:/data /data \
+                --progress \
+                --transfers 16 \
+                --checkers 64 \
+                --buffer-size 64M \
+                --sftp-concurrency 16 \
+                --multi-thread-streams 4 \
+                --fast-list \
+                --copy-links \
+                --no-check-certificate
+              echo "Migration complete."
+          volumeMounts:
+            - name: pvc-data
+              mountPath: /data
+            - name: rclone-config
+              mountPath: /config/rclone
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "200m"
+            limits:
+              memory: "8Gi"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rclone-config
+type: Opaque
+stringData:
+  rclone.conf: |
+    [remote]
+    type = webdav
+    url = https://$RCLONE_SERVER_HOST:443
+    user = rcloneuser
+    pass = $RCLONE_OBSCURED_PASS
+    vendor = other

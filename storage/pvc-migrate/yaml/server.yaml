@@ -1,0 +1,83 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rclone-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rclone-server
+  template:
+    metadata:
+      labels:
+        app: rclone-server
+    spec:
+      volumes:
+        - name: pvc-data
+          persistentVolumeClaim:
+            claimName: $PVC_NAME
+        - name: tls
+          secret:
+            secretName: rclone-server-tls
+      containers:
+        - name: rclone
+          image: rclone/rclone:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              exec rclone serve webdav / \
+                --addr :443 \
+                --read-only \
+                --user "$USER" \
+                --pass "$PASS" \
+                --cert /etc/certs/tls.crt \
+                --key /etc/certs/tls.key
+          ports:
+            - containerPort: 443
+              name: webdav
+          envFrom:
+            - secretRef:
+                name: rclone-server-secret
+          volumeMounts:
+            - name: pvc-data
+              mountPath: /data
+            - name: tls
+              mountPath: /etc/certs
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "200m"
+            limits:
+              memory: "8Gi"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rclone-server-secret
+type: Opaque
+stringData:
+  USER: rcloneuser
+  PASS: $RCLONE_PASS
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rclone-server
+  annotations:
+    service.beta.kubernetes.io/coreweave-load-balancer-type: public
+spec:
+  type: LoadBalancer
+  selector:
+    app: rclone-server
+  ports:
+    - port: 443
+      targetPort: 443
+      name: webdav

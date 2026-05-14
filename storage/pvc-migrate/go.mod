@@ -1,0 +1,3 @@
+module pvcmigrate
+
+go 1.26.2
