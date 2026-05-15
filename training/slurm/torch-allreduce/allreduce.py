@@ -21,7 +21,7 @@ import torch.distributed as dist
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-if int(os.getenv("SLURM_NODEID", "0")) != 0:
+if int(os.getenv("SLURM_PROCID", "0")) != 0:
     logger.setLevel(logging.WARNING)
 
 
@@ -31,11 +31,12 @@ if int(os.getenv("SLURM_NODEID", "0")) != 0:
 
 
 def main() -> None:
-    # Set the torch env vars from Slurm's env vars
-    rank = int(os.environ["SLURM_NODEID"])
+    # Set the torch env vars from Slurm's env vars. One Slurm task = one rank
+    # = one GPU; the sbatch sets --ntasks-per-node to the number of GPUs.
+    rank = int(os.environ["SLURM_PROCID"])
     os.environ["RANK"] = str(rank)
 
-    world_size = int(os.environ["SLURM_JOB_NUM_NODES"])
+    world_size = int(os.environ["SLURM_NTASKS"])
     os.environ["WORLD_SIZE"] = str(world_size)
 
     local_rank = int(os.environ["SLURM_LOCALID"])
