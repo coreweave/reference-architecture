@@ -136,13 +136,19 @@ def _(create_bucket_form: mo.ui.form, storage: ObjectStorage | None):
             _name = create_bucket_form.value.get("bucket_name")
             storage.create_bucket(_name)
             bucket_created = time.time()  # timestamp so that multiple bucket creation cause re-run
-            _bucket_creation_result = mo.callout(mo.md(f"Successfully created bucket **{_name}**"), kind="success")
+            _bucket_creation_result = mo.callout(
+                mo.md(f"""
+Successfully created bucket **{_name}**\n
+*Note:* It may take some time for the DNS to propagate and your bucket to be reachable.
+                """),
+                kind="success",
+            )
         except Exception as _e:
             _bucket_creation_result = mo.callout(mo.md(f"Failed to create bucket: {_e}"), kind="danger")
 
     _ui = mo.md(f"""
-    ### Create CoreWeave AI Object Storage Bucket
-    {create_bucket_form}
+### Create CoreWeave AI Object Storage Bucket
+{create_bucket_form}
     """)
 
     _output = mo.vstack([_ui, _bucket_creation_result] if _bucket_creation_result else [_ui])
@@ -258,7 +264,7 @@ def _(bucket_name: str, storage: ObjectStorage | None, upload_form: mo.ui.form, 
                     mo.md(f"""
                     ### Boto3 Upload Complete
                     - **File**: `{_result["file_key"]}`
-                    - **Size**: {_result["size_gb"]:.2f} GB
+                    - **Size**: {_result["total_gb"]:.2f} GB
                     - **Time**: {_result["elapsed"]:.2f} seconds
                     - **Bandwidth**: {_result["bandwidth_mbs"]:.2f} MB/s ({_result["bandwidth_gbps"]:.2f} Gbps)
                     """),
@@ -298,14 +304,10 @@ def _(object_key_dropdown: mo.ui.dropdown):
             mo.md("""
             ### Configure CoreWeave AI Object Storage Download Test
             - Object: {object_key}
-            - Multipart Threshold (MB): {multipart_threshold_mb}
-            - Chunk Size (MB): {multipart_chunksize_mb}
             - Max Concurrency: {max_concurrency}
             """)
             .batch(
                 object_key=object_key_dropdown,
-                multipart_threshold_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
-                multipart_chunksize_mb=mo.ui.number(start=1, stop=1000, value=50),  # type: ignore
                 max_concurrency=mo.ui.number(start=1, stop=10000, value=300),  # type: ignore
             )
             .form(submit_button_label="Run Download Test", clear_on_submit=False)
