@@ -1,0 +1,67 @@
+{{/* PVC, workbench Pod, and marimo RBAC. The HF Secret is created out-of-band
+     (`kubectl create secret generic hf-token --from-literal=HF_TOKEN=...`) so a
+     real token never lives in values.yaml. */}}
+{{- if .Values.pvc.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Values.pvc.name }}
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: {{ .Values.pvc.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.pvc.size }}
+{{- end }}
+{{- if .Values.workbench.enabled }}
+---
+{{/* Long-lived CPU-only workbench Pod for kubectl-exec diagnostics + scratch. */}}
+apiVersion: v1
+kind: Pod
+metadata:
+  name: workbench
+  labels:
+    app: cosmos3-workbench
+spec:
+  restartPolicy: Always
+  containers:
+    - name: workbench
+      image: {{ .Values.image }}
+      command: ["sleep", "infinity"]
+      env:
+        {{- include "cosmos3.env" (dict "hfSecretName" .Values.hfSecret.name "extraEnv" (dict "LD_LIBRARY_PATH" "")) | nindent 8 }}
+      volumeMounts:
+        {{- include "cosmos3.volumeMounts" (dict) | nindent 8 }}
+      resources:
+        {{- include "cosmos3.resources" (dict "gpu" 0) | nindent 8 }}
+  volumes:
+    {{- include "cosmos3.volumes" (dict "pvcName" .Values.pvc.name) | nindent 4 }}
+{{- end }}
+{{- if .Values.rbac.marimoView }}
+---
+{{/* The built-in `view` ClusterRole does NOT include cluster-scoped resources
+     like nodes — only namespaced ones. We grant exactly what the marimo § 1
+     cluster-context cell needs (nodes/pods/namespaces, read-only). */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: cosmos3-marimo-cluster-view
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cosmos3-marimo-cluster-view
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: cosmos3-marimo-cluster-view
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}

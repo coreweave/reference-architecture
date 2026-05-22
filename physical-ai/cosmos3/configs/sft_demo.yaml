@@ -1,0 +1,72 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 CoreWeave. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# SFT config for the recorded CW demo — OVERFIT-AS-DEMO ONLY.
+#
+# This is a Hydra override layered on top of the upstream
+# `cosmos3/configs/experiment/action_policy_sft_nano.yaml`. We do not copy the
+# full config; we only override the keys that matter for the demo so that any
+# upstream changes flow through automatically.
+#
+# Run with:
+#   torchrun --nproc-per-node=8 -m cosmos3.scripts.train \
+#     experiment=action_policy_sft_nano \
+#     +experiment_overrides=sft_demo \
+#     checkpoint.load_path=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp \
+#     trainer.max_iter=500 \
+#     +dataset_path=/mnt/cosmos3/datasets/libero
+#
+# (The actual Hydra wiring lives in demo/k8s/job-sft.yaml. This file is the
+# "what changed vs the upstream config" reference for human reviewers.)
+
+# --- What we override vs upstream action_policy_sft_nano.yaml ---
+#
+# trainer.max_iter:             16000 → 500           # Overfit-as-demo, not real training
+# checkpoint.save_iter:           100 → 100           # (unchanged) — keep so we get a final ckpt
+# job.wandb_mode:             offline → offline       # (unchanged) — no wandb key on cluster
+# job.name:        action_policy_sft_8b → sft_demo_cw
+# job.group:             action_libero → cw_demo
+# job.project:    cosmos3_action_libero → cosmos3_cw_demo
+#
+# checkpoint.load_path:           ??? → /mnt/cosmos3/checkpoints/cosmos3-nano-dcp
+#                                       (path populated by job-convert-to-dcp.yaml)
+#
+# Dataset paths via ${oc.env:DATASET_PATH}: set DATASET_PATH=/mnt/cosmos3/datasets in the Job env
+# (matches the ${oc.env:DATASET_PATH}/libero_* references in the upstream config).
+#
+# VLM checkpoint_path:
+#   upstream: s3://nv-00-10206-checkpoint/cosmos3/pretrained/huggingface/Qwen/Qwen3-VL-8B-Instruct/
+#   demo:     /mnt/cosmos3/pretrained/Qwen3-VL-8B-Instruct
+#
+# (populated by job-prefetch-checkpoints.yaml via prefetch_hf_checkpoints)
+
+# The Hydra-compatible override block. Apply via `+experiment_overrides=sft_demo`
+# OR pass each as a +foo=bar on the torchrun command line — both are equivalent.
+# We use the explicit command-line form in job-sft.yaml so reviewers can see every
+# override at the launch site without cross-referencing this file.
+
+defaults:
+  - /experiment: action_policy_sft_nano
+  - _self_
+
+trainer:
+  max_iter: 500
+
+checkpoint:
+  load_path: /mnt/cosmos3/checkpoints/cosmos3-nano-dcp
+  save_iter: 100
+
+job:
+  name: sft_demo_cw
+  group: cw_demo
+  project: cosmos3_cw_demo
+  wandb_mode: offline
+
+# VLM checkpoint local path — populated by job-prefetch-checkpoints.yaml
+# Note: this requires the upstream config to accept a local FS path here, which it
+# does because S3 vs local is resolved by checkpoint loader at runtime. If a
+# future upstream change tightens the type, this is the first thing to revisit.
+model:
+  config:
+    vlm_config:
+      checkpoint_path: /mnt/cosmos3/pretrained/Qwen3-VL-8B-Instruct
