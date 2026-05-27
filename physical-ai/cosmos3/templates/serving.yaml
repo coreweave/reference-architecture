@@ -25,7 +25,7 @@ spec:
       {{- end }}
       containers:
         - name: serve
-          image: {{ .Values.image }}
+          image: {{ required "image must be set — build the Dockerfile in this directory, push to a registry your cluster can pull from, then pass --set image=<registry>/<repo>:<tag>" .Values.image }}
           command: ["/bin/bash", "-c"]
           args:
             - |
@@ -89,7 +89,7 @@ spec:
     spec:
       containers:
         - name: marimo
-          image: {{ .Values.image }}
+          image: {{ required "image must be set — build the Dockerfile in this directory, push to a registry your cluster can pull from, then pass --set image=<registry>/<repo>:<tag>" .Values.image }}
           command: ["/bin/bash", "-c"]
           args:
             - |

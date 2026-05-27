@@ -27,7 +27,7 @@ spec:
   restartPolicy: Always
   containers:
     - name: workbench
-      image: {{ .Values.image }}
+      image: {{ required "image must be set — build the Dockerfile in this directory, push to a registry your cluster can pull from, then pass --set image=<registry>/<repo>:<tag>" .Values.image }}
       command: ["sleep", "infinity"]
       env:
         {{- include "cosmos3.env" (dict "hfSecretName" .Values.hfSecret.name "extraEnv" (dict "LD_LIBRARY_PATH" "")) | nindent 8 }}

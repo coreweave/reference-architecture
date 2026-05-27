@@ -50,16 +50,29 @@ Full step list, GPU counts, wraps, and outputs are in **[TUTORIAL.md § Pipeline
 
 ## Quick reference
 
+The chart has no default container image — you build the `Dockerfile` in this
+directory yourself and push to a registry your cluster can pull from. See
+[TUTORIAL.md § Build and push the demo image](TUTORIAL.md#step-3-build-and-push-the-demo-image)
+for the two-stage build (upstream base, then this demo overlay) including the
+`--platform linux/amd64` requirement.
+
+Once your image is pushed, plumb it through every `helm template` invocation
+via `--set image=…`:
+
 ```bash
+export IMG=<your-registry>/cosmos3-demo:<tag>     # the image you built and pushed
+export NS=<your-namespace>
+
 # Render + apply prerequisites only
-helm template physical-ai/cosmos3 | kubectl -n "$NS" apply -f -
+helm template physical-ai/cosmos3 --set image="$IMG" | kubectl -n "$NS" apply -f -
 
 # Enable one step
-helm template physical-ai/cosmos3 --set steps.smoke.enabled=true \
+helm template physical-ai/cosmos3 --set image="$IMG" \
+  --set steps.smoke.enabled=true \
   | kubectl -n "$NS" apply -f -
 
 # Enable everything
-helm template physical-ai/cosmos3 \
+helm template physical-ai/cosmos3 --set image="$IMG" \
   --set rayServe.enabled=true --set marimo.enabled=true \
   --set steps.prefetch.enabled=true \
   --set steps.convert.enabled=true \
@@ -77,6 +90,9 @@ helm template physical-ai/cosmos3 \
   --set steps.compare.enabled=true \
   | kubectl -n "$NS" apply -f -
 ```
+
+Forgetting `--set image=…` fails loud at `helm template` time with a clear
+message — beats a Pod stuck in `ImagePullBackOff` 30 seconds later.
 
 ## Important gotchas
 

@@ -8,8 +8,10 @@
 #
 # ...or set multiple at once with a -f overrides file, or hand-edit this file.
 
-# Container image (built from the Dockerfile in this directory).
-image: cwnnadkarni/cosmos3-demo:0.9
+# Container image. No default — build the Dockerfile in this directory yourself
+# (see README § "Build the image") and push to a registry your cluster can pull
+# from. Pass via:  helm template . --set image=<your-registry>/cosmos3-demo:<tag>
+image: ""
 
 # HF token Secret — create out-of-band:
 #   kubectl create secret generic hf-token --from-literal=HF_TOKEN=<token>
