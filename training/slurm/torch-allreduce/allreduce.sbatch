@@ -8,7 +8,8 @@
 #SBATCH --job-name=torch-allreduce
 #SBATCH --nodes=16                # adjust as needed
 #SBATCH --exclusive
-#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks-per-node=8       # one task (rank) per GPU
+#SBATCH --gpus-per-node=8         # all GPUs visible to every task; rank pins via SLURM_LOCALID
 #SBATCH --time=00:10:00
 # --------------------------------------------------
 set -euo pipefail
@@ -25,7 +26,6 @@ export SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1
 export NCCL_COLLNET_ENABLE=0
 
 export NVIDIA_IMEX_CHANNELS=0
-export NCCL_NVLS_ENABLE=0
 export NCCL_NET_GDR_C2C=1
 export PMIX_MCA_gds='^ds12'
 

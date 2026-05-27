@@ -8,7 +8,8 @@
 #SBATCH --job-name=torch-allreduce
 #SBATCH --nodes=16                # adjust as needed
 #SBATCH --exclusive
-#SBATCH --ntasks-per-node=1
+#SBATCH --ntasks-per-node=1       # one srun task per node; torchrun spawns the workers
+#SBATCH --gpus-per-node=8         # expose all GPUs to the torchrun parent
 #SBATCH --time=00:10:00
 # --------------------------------------------------
 set -euo pipefail
@@ -25,7 +26,6 @@ export SHARP_COLL_ENABLE_PCI_RELAXED_ORDERING=1
 export NCCL_COLLNET_ENABLE=0
 
 export NVIDIA_IMEX_CHANNELS=0
-export NCCL_NVLS_ENABLE=0
 export NCCL_NET_GDR_C2C=1
 export PMIX_MCA_gds='^ds12'
 
