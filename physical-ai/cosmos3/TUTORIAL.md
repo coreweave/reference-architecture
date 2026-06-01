@@ -416,6 +416,5 @@ You just:
 
 **If something broke:**
 
-- See `UPSTREAM_BUGS.md` — eight known upstream issues with file:line, repro, and the workaround already wired into each step's bash payload.
 - `kubectl -n "$NS" logs job/cosmos3-<step-name>` is your friend.
 - The workbench Pod (`kubectl -n "$NS" exec -it workbench -- bash`) has the same image and can poke around the PVC interactively.

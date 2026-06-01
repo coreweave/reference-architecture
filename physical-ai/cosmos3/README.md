@@ -14,7 +14,6 @@ Validated single-node on 8× RTX Pro 6000 Blackwell + VAST CSI. Pure CKS — no 
 physical-ai/cosmos3/
 ├── TUTORIAL.md                       # ← start here: step-by-step walkthrough
 ├── README.md                         # this file
-├── UPSTREAM_BUGS.md                  # upstream patches + PR candidates back to NVIDIA
 ├── Chart.yaml                        # Helm chart metadata
 ├── values.yaml                       # one entry per pipeline step
 ├── templates/                        # _helpers.tpl + jobs + prerequisites + serving
@@ -99,8 +98,6 @@ These are wired into the chart already but worth knowing:
 - **`use_torch_compile=false`** — Inductor's auto-tuned kernels exceed sm_120 shared-memory limits on Blackwell. Re-enable on H100.
 - **`/tmp` symlink to PVC** — `cosmos_framework.scripts.train` writes DCP checkpoints under `/tmp/imaginaire4-output` by convention; without the symlink they evaporate with the Pod. The `sft` and `sftMixed` step scripts handle this.
 - **HF token** — gated `nvidia/*` Cosmos3 model repos may require a classic Read token in some environments. Fine-grained tokens silently 404 on gated repos. Get one from https://huggingface.co/settings/tokens.
-
-See **[UPSTREAM_BUGS.md](UPSTREAM_BUGS.md)** for the full list of upstream issues with file:line, repro, and the candidate fix for each.
 
 ## Status
 

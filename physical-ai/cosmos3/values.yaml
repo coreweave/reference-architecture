@@ -261,9 +261,9 @@ steps:
       export BASE_CHECKPOINT_PATH=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp
       export WAN_VAE_PATH=$(ls /mnt/cosmos3/hf_cache/hub/models--Wan-AI--Wan2.2-TI2V-5B/snapshots/*/Wan2.2_VAE.pth | head -1)
       export WANDB_MODE=offline
-      # /tmp persistence fix (UPSTREAM_BUGS.md #6) — cosmos-framework writes DCP
-      # checkpoints under /tmp/imaginaire4-output by convention; symlink to
-      # PVC so they survive Pod termination.
+      # /tmp persistence fix — cosmos-framework writes DCP checkpoints under
+      # /tmp/imaginaire4-output by convention; symlink to the PVC so they
+      # survive Pod termination.
       mkdir -p /mnt/cosmos3/imaginaire4-output
       rm -rf /tmp/imaginaire4-output
       ln -sfn /mnt/cosmos3/imaginaire4-output /tmp/imaginaire4-output

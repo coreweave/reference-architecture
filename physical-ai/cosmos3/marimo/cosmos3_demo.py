@@ -75,10 +75,9 @@ def __(mo):
         4. We **serve** the fine-tuned model via Ray Serve as a real HTTP endpoint.
         5. We call that endpoint from this notebook with new prompts and watch it generate.
 
-        Every component runs on CoreWeave. The repo is upstream `NVIDIA/cosmos-framework` —
-        unmodified except for a handful of small patches documented in `UPSTREAM_BUGS.md`
-        and contributed back to NVIDIA. Demo orchestration adds a Helm chart and
-        this notebook; no forks of NVIDIA code.
+        Every component runs on CoreWeave. The repo is upstream `NVIDIA/cosmos-framework`,
+        used unmodified. Demo orchestration adds a Helm chart and this notebook;
+        no forks of NVIDIA code.
 
         > **Honest framing**: bulk synthetic data generation and SFT each take ~hour(s)
         > of GPU time and were run as separate Jobs before opening this notebook —
