@@ -209,9 +209,8 @@ def __(mo):
         to the shared volume — the kind of artifact that would normally
         take a teleop operator hours per sample.
 
-        A gallery of clips from that batch is below. The **live "Generate"
-        button** further down sends a fresh prompt to the running Ray Serve
-        endpoint and renders the result inline.
+        The **live "Generate" button** further down sends a fresh prompt to
+        the running Ray Serve endpoint and renders the result inline.
         """
     )
     return
