@@ -79,7 +79,7 @@ docker buildx version
 ```bash
 export KUBECONFIG=/path/to/your/CWKubeconfig
 export NS=<your-namespace>
-export REGISTRY=<your-dockerhub-user>      # e.g. cwnnadkarni
+export REGISTRY=<your-registry>            # e.g. docker.io/<your-org> or ghcr.io/<your-org>
 export HF_TOKEN=<your-hf-token>            # never commit this
 ```
 
@@ -107,31 +107,33 @@ kubectl -n "$NS" get secret hf-token
 
 ### Step 3: Build and push the demo image
 
-The image extends the upstream `NVIDIA/cosmos-framework` Dockerfile with marimo, `kubectl`, and the cosmos-framework source baked in (so `import cosmos_framework` works in Pods without bind-mounts).
+The image is a single-stage build on top of `nvcr.io/nvidia/pytorch:25.06-py3` — NVIDIA's recommended NGC PyTorch base for cosmos-framework (`cosmos-framework/docs/setup.md` Quickstart path). Inside the Dockerfile we apt-install the system deps cosmos-framework needs, `uv sync --group=cu128-train`, install the cosmos-framework editable, then layer marimo + kubectl + the chart's demo assets on top — so `import cosmos_framework` works in Pods without bind-mounts.
+
+The build context is a clone of `NVIDIA/cosmos-framework` with the chart's `demo/` assets staged into it:
 
 ```bash
-# First clone the upstream repo if you haven't:
-# git clone https://github.com/NVIDIA/cosmos-framework.git
+# 1. Clone cosmos-framework (one-time)
+git clone https://github.com/NVIDIA/cosmos-framework.git /tmp/cf-build
 
-# Step 3a: upstream base image (~7 min)
-cd /path/to/cosmos-framework
-docker buildx build --platform linux/amd64 \
-  --build-arg=CUDA_VERSION=12.8.1 \
-  -t cosmos-framework-base:cu128 --load .
+# 2. Stage the chart's demo assets as cosmos-framework/demo/
+rsync -a physical-ai/cosmos3/{prompts,marimo,configs,scripts} /tmp/cf-build/demo/
 
-# Step 3b: demo image on top (~2 min)
-cd /path/to/this/physical-ai/cosmos3
+# 3. One docker build (~15 min on amd64-native, longer via QEMU on Apple Silicon)
 docker buildx build --platform linux/amd64 \
-  -f Dockerfile -t "$REGISTRY/cosmos3-demo:0.9" --push .
+  -f physical-ai/cosmos3/Dockerfile \
+  -t "$REGISTRY/cosmos3-demo:<tag>" --push \
+  /tmp/cf-build
 ```
 
 > **Why `--platform linux/amd64`?** CW nodes are amd64; a default `docker build` on Apple Silicon produces arm64 and Pods fail with `no match for platform in manifest`.
 >
-> **Why two stages?** The base image installs the `cu128-train` uv group (CUDA 12.8 + torchao + transformer-engine + triton — required for FSDP training). The demo layer adds marimo + kubectl + the cosmos3 source. Re-building only the demo layer is fast.
+> **Why the 25.06 NGC tag, not 25.09?** 25.09 ships CUDA 13 and requires the `cu130-train` uv group; on x86_64 RTX Pro 6000 Blackwell (sm_120) we validate against `cu128-train`. 25.06 is the most recent NGC PyTorch tag on CUDA 12 lineage. Bump to 25.09 + cu130-train once you've validated against your specific Blackwell silicon.
+>
+> **NGC pull credentials?** `nvcr.io/nvidia/pytorch` images are publicly pullable, but the first `docker pull` from `nvcr.io` on a host requires accepting NVIDIA's NGC terms — see https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch. CKS nodes have this already configured.
 
 **How you know it worked:**
 ```bash
-docker manifest inspect "$REGISTRY/cosmos3-demo:0.9" | grep architecture
+docker manifest inspect "$REGISTRY/cosmos3-demo:<tag>" | grep architecture
 # "architecture": "amd64",
 ```
 

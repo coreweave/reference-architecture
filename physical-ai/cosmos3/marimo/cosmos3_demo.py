@@ -40,7 +40,7 @@ def __():
 @app.cell(hide_code=True)
 def __(NS, SERVE_URL, mo):
     # Fail loud at notebook open time if the env isn't set. Avoids surprising
-    # 404s / unbound NS errors three cells down. (Marcus's review on #76.)
+    # 404s / unbound NS errors three cells down.
     missing = [k for k, v in (("COSMOS3_SERVE_URL", SERVE_URL), ("COSMOS3_NS", NS)) if not v]
     if missing:
         mo.stop(

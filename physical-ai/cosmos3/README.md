@@ -48,8 +48,10 @@ Full step list, GPU counts, wraps, and outputs are in **[TUTORIAL.md § Pipeline
 The chart has no default container image — you build the `Dockerfile` in this
 directory yourself and push to a registry your cluster can pull from. See
 [TUTORIAL.md § Build and push the demo image](TUTORIAL.md#step-3-build-and-push-the-demo-image)
-for the two-stage build (upstream base, then this demo overlay) including the
-`--platform linux/amd64` requirement.
+for the build pattern. The chart's `Dockerfile` is a single-stage build on top
+of `nvcr.io/nvidia/pytorch:25.06-py3` (NVIDIA's recommended NGC PyTorch base
+for cosmos-framework, CUDA 12 lineage for sm_120 Blackwell compatibility).
+`--platform linux/amd64` is required (CW nodes are amd64).
 
 Once your image is pushed, plumb it through every `helm template` invocation
 via `--set image=…`:
