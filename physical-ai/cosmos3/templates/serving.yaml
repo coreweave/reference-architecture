@@ -32,6 +32,7 @@ spec:
               set -euxo pipefail
               export LD_LIBRARY_PATH=''
               export PYTORCH_ALLOC_CONF='expandable_segments:True'
+{{ include "cosmos3.preludePatches" . | indent 14 }}
               python -m cosmos_framework.inference.ray.serve \
                 --parallelism-preset=latency \
                 -o /mnt/cosmos3/outputs/ray_serve \

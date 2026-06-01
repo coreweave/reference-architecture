@@ -33,6 +33,34 @@ limits:
 {{- end -}}
 
 {{/*
+In-Pod workaround patches applied before any cosmos_framework invocation.
+Currently patches `cosmos_framework.inference.ray.serve`'s `ray.serve.run(...)`
+call to add `http_options=HTTPOptions(host="0.0.0.0", port=8000, request_timeout_s=1800)`.
+Upstream binds to 127.0.0.1 by default, which is unreachable from a K8s
+Service. Pending upstream PR.
+Usage: {{ include "cosmos3.preludePatches" . }}
+*/}}
+{{- define "cosmos3.preludePatches" -}}
+# --- upstream workarounds ---
+python - <<'__COSMOS3_PRELUDE_PATCHES__'
+import pathlib, re
+p = pathlib.Path("/workspace/cosmos_framework/inference/ray/serve.py")
+text = p.read_text()
+needle = 'ray.serve.run(router_app, name="cosmos3_omni", blocking=True)'
+patched = (
+    'import ray.serve.config as _cw_serve_config\n'
+    '    ray.serve.start(http_options=_cw_serve_config.HTTPOptions(\n'
+    '        host="0.0.0.0", port=8000, request_timeout_s=1800,\n'
+    '    ))\n'
+    '    ' + needle
+)
+if needle in text and 'host="0.0.0.0"' not in text:
+    p.write_text(text.replace(needle, patched, 1))
+__COSMOS3_PRELUDE_PATCHES__
+# --- end upstream workarounds ---
+{{- end -}}
+
+{{/*
 Standard env block — HF token + HF_HOME, plus any extraEnv on the step.
 Usage: {{ include "cosmos3.env" $step | nindent 12 }}
 */}}
