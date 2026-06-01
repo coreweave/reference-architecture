@@ -33,31 +33,6 @@ limits:
 {{- end -}}
 
 {{/*
-Workaround patches applied at Pod startup before any cosmos3 invocation.
-Currently:
-  - UPSTREAM_BUGS.md #9: cosmos3._src.imaginaire.utils.checkpoint_db._hf_download
-    shells out to `uvx hf@1.13.0`, but huggingface_hub 1.13.0's CLI imports
-    `click` without declaring it as a runtime dep. Inject "--with click" into
-    the hardcoded uvx invocation. Idempotent.
-Usage: {{ include "cosmos3.preludePatches" . }}
-*/}}
-{{- define "cosmos3.preludePatches" -}}
-# --- upstream workarounds (see UPSTREAM_BUGS.md) ---
-python - <<'__COSMOS3_PRELUDE_PATCHES__'
-import pathlib
-p = pathlib.Path("/workspace/cosmos3/_src/imaginaire/utils/checkpoint_db.py")
-text = p.read_text()
-if '"--with", "click"' not in text:
-    p.write_text(text.replace(
-        '"uvx",\n        f"hf@{HF_VERSION}",',
-        '"uvx",\n        "--with", "click",\n        f"hf@{HF_VERSION}",',
-        1,
-    ))
-__COSMOS3_PRELUDE_PATCHES__
-# --- end upstream workarounds ---
-{{- end -}}
-
-{{/*
 Standard env block — HF token + HF_HOME, plus any extraEnv on the step.
 Usage: {{ include "cosmos3.env" $step | nindent 12 }}
 */}}

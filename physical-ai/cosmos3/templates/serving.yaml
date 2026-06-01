@@ -1,8 +1,8 @@
 {{- if .Values.rayServe.enabled }}
 {{/* Ray Serve Deployment exposing the fine-tuned Cosmos3 checkpoint over HTTP.
      Single-Pod single-node Ray cluster started in-process via
-     `ray.serve.run(..., blocking=True)` (cosmos3/ray/serve.py). No KubeRay
-     operator required. POST /generate is the inference endpoint. */}}
+     `ray.serve.run(..., blocking=True)` (cosmos_framework/inference/ray/serve.py).
+     No KubeRay operator required. POST /generate is the inference endpoint. */}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -32,8 +32,7 @@ spec:
               set -euxo pipefail
               export LD_LIBRARY_PATH=''
               export PYTORCH_ALLOC_CONF='expandable_segments:True'
-{{ include "cosmos3.preludePatches" . | indent 14 }}
-              python -m cosmos3.ray.serve \
+              python -m cosmos_framework.inference.ray.serve \
                 --parallelism-preset=latency \
                 -o /mnt/cosmos3/outputs/ray_serve \
                 --checkpoint-path {{ .Values.rayServe.checkpointPath }}
@@ -46,13 +45,26 @@ spec:
           resources:
             {{- include "cosmos3.resources" (dict "gpu" 8) | nindent 12 }}
           readinessProbe:
-            {{/* TCP probe — cosmos3.ray.serve exposes POST /generate, not a health
-                 endpoint at GET /. TCP-on-8000 succeeds once the proxy is bound. */}}
+            {{/* TCP probe — cosmos_framework.inference.ray.serve exposes POST
+                 /generate, not a health endpoint at GET /. TCP-on-8000
+                 succeeds once the proxy is bound. */}}
             tcpSocket: { port: 8000 }
             initialDelaySeconds: 120
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 60
+          livenessProbe:
+            {{/* Restart the Pod if the proxy stops responding entirely
+                 (deadlocked sampler, OOM-killed worker, hung Ray serve
+                 actor). Longer initialDelay than readiness — the model
+                 takes minutes to load before /generate becomes routable;
+                 we want readiness to gate traffic earlier than liveness
+                 trips a restart. */}}
+            tcpSocket: { port: 8000 }
+            initialDelaySeconds: 600
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
       volumes:
         {{- include "cosmos3.volumes" (dict "pvcName" .Values.pvc.name "dshmSize" "128Gi") | nindent 8 }}
 ---
@@ -106,6 +118,10 @@ spec:
           env:
             - name: COSMOS3_SERVE_URL
               value: {{ .Values.marimo.serveUrl | quote }}
+            - name: COSMOS3_NS
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
             - name: COSMOS3_SHARED
               value: /mnt/cosmos3
             - name: HF_HOME

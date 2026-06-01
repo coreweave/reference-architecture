@@ -33,7 +33,6 @@ spec:
           command: ["/bin/bash", "-c"]
           args:
             - |
-{{ include "cosmos3.preludePatches" . | indent 14 }}
 {{ $step.script | indent 14 }}
           env:
             {{- include "cosmos3.env" (dict "hfSecretName" $.Values.hfSecret.name "extraEnv" $step.extraEnv) | nindent 12 }}

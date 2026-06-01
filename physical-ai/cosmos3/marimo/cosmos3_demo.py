@@ -26,13 +26,36 @@ def __():
     import pathlib
     import subprocess
 
-    SERVE_URL = os.environ.get(
-        "COSMOS3_SERVE_URL",
-        "http://cosmos3-serve.<your-namespace>.svc.cluster.local:8000",
-    )
+    # Required env vars — when this notebook is launched by the Helm chart's
+    # cosmos3-marimo Deployment, both are populated automatically. When
+    # launched standalone (e.g. `marimo edit cosmos3_demo.py`), the user
+    # must set them in the shell, or the cells that hit Ray Serve / kubectl
+    # would silently no-op.
+    SERVE_URL = os.environ.get("COSMOS3_SERVE_URL")
+    NS = os.environ.get("COSMOS3_NS")
     SHARED = pathlib.Path(os.environ.get("COSMOS3_SHARED", "/mnt/cosmos3"))
-    NS = "<your-namespace>"
     return SERVE_URL, SHARED, NS, mo, os, json, pathlib, subprocess
+
+
+@app.cell(hide_code=True)
+def __(NS, SERVE_URL, mo):
+    # Fail loud at notebook open time if the env isn't set. Avoids surprising
+    # 404s / unbound NS errors three cells down. (Marcus's review on #76.)
+    missing = [k for k, v in (("COSMOS3_SERVE_URL", SERVE_URL), ("COSMOS3_NS", NS)) if not v]
+    if missing:
+        mo.stop(
+            True,
+            mo.md(
+                f"### ⚠️  Missing env: `{', '.join(missing)}`\n\n"
+                "This notebook needs the following set before launch:\n\n"
+                "```bash\n"
+                "export COSMOS3_SERVE_URL=http://cosmos3-serve.<your-namespace>.svc.cluster.local:8000\n"
+                "export COSMOS3_NS=<your-namespace>\n"
+                "```\n\n"
+                "When run from the chart's `cosmos3-marimo` Deployment, both are populated automatically."
+            ),
+        )
+    return
 
 
 @app.cell(hide_code=True)
@@ -52,9 +75,9 @@ def __(mo):
         4. We **serve** the fine-tuned model via Ray Serve as a real HTTP endpoint.
         5. We call that endpoint from this notebook with new prompts and watch it generate.
 
-        Every component runs on CoreWeave. The repo is upstream `nvidia-cosmos/cosmos3` —
-        unmodified except for seven small patches documented in `demo/UPSTREAM_BUGS.md`
-        and contributed back to NVIDIA. Demo orchestration adds ~14 K8s manifests and
+        Every component runs on CoreWeave. The repo is upstream `NVIDIA/cosmos-framework` —
+        unmodified except for a handful of small patches documented in `UPSTREAM_BUGS.md`
+        and contributed back to NVIDIA. Demo orchestration adds a Helm chart and
         this notebook; no forks of NVIDIA code.
 
         > **Honest framing**: bulk synthetic data generation and SFT each take ~hour(s)
@@ -487,7 +510,7 @@ def __(mo):
 
         ---
 
-        _Built on commit `$(git rev-parse --short HEAD)` of `nvidia-cosmos/cosmos3-ea-external`._
+        _Built on commit `$(git rev-parse --short HEAD)` of `NVIDIA/cosmos-framework`._
         """
     )
     return

@@ -58,7 +58,7 @@ Tick these off before you start:
 - [ ] **8× GPU node available** in that cluster. RTX Pro 6000 Blackwell (sm_120), H100, or equivalent. 80GB+ HBM per GPU.
 - [ ] **VAST CSI** as the storage class (CoreWeave default is `shared-vast`).
 - [ ] **CLI tools** installed locally: `kubectl` (matching your cluster), `helm ≥3.10`, `docker` with `buildx`, `gh` (optional, for PRs).
-- [ ] **Hugging Face token** with read access to `nvidia-cosmos-ea/*` repos. You must be a member of the [nvidia-cosmos-ea](https://huggingface.co/nvidia-cosmos-ea) org. Use a classic "Read" token; fine-grained tokens silently 404 on gated repos.
+- [ ] **Hugging Face token** with read access to the public [`nvidia/Cosmos3-Nano`](https://huggingface.co/nvidia/Cosmos3-Nano) model and `Qwen/Qwen3-VL-8B-Instruct`. A classic "Read" token works; fine-grained tokens can silently 404 on gated repos.
 - [ ] **Docker Hub** account (or any container registry your cluster can pull from).
 - [ ] **15 minutes of attention** for the active steps. Long-running steps run unattended.
 
@@ -107,17 +107,17 @@ kubectl -n "$NS" get secret hf-token
 
 ### Step 3: Build and push the demo image
 
-The image extends the upstream `cosmos3-ea-external` Dockerfile with marimo, `kubectl`, and the cosmos3 source baked in (so `import cosmos3` works in Pods without bind-mounts).
+The image extends the upstream `NVIDIA/cosmos-framework` Dockerfile with marimo, `kubectl`, and the cosmos-framework source baked in (so `import cosmos_framework` works in Pods without bind-mounts).
 
 ```bash
 # First clone the upstream repo if you haven't:
-# git clone https://github.com/nvidia-cosmos/cosmos3-ea-external.git
+# git clone https://github.com/NVIDIA/cosmos-framework.git
 
 # Step 3a: upstream base image (~7 min)
-cd /path/to/cosmos3-ea-external
+cd /path/to/cosmos-framework
 docker buildx build --platform linux/amd64 \
   --build-arg=CUDA_VERSION=12.8.1 \
-  -t cosmos3-base:cu128 --load .
+  -t cosmos-framework-base:cu128 --load .
 
 # Step 3b: demo image on top (~2 min)
 cd /path/to/this/physical-ai/cosmos3
@@ -178,7 +178,7 @@ Pulls **Cosmos3-Nano (~46 GB)** + **Qwen3-VL-8B (~16 GB)** from Hugging Face ont
 **How you know it worked:**
 ```bash
 kubectl -n "$NS" exec workbench -- du -sh /mnt/cosmos3/hf_cache/hub/*
-# ~46G  models--nvidia-cosmos-ea--Cosmos3-Nano
+# ~46G  models--nvidia--Cosmos3-Nano
 # ~16G  models--Qwen--Qwen3-VL-8B-Instruct
 ```
 
@@ -192,7 +192,7 @@ helm template . --set image="$REGISTRY/cosmos3-demo:0.9" \
 kubectl -n "$NS" wait --for=condition=complete --timeout=30m job/cosmos3-convert
 ```
 
-DCP (Distributed Checkpoint) is the on-disk format `cosmos3.scripts.train` expects. ~2 min on 1 GPU.
+DCP (Distributed Checkpoint) is the on-disk format `cosmos_framework.scripts.train` expects. ~2 min on 1 GPU.
 
 ### Step 7: Run a smoke inference — see your first generated video
 
@@ -240,7 +240,7 @@ helm template . --set image="$REGISTRY/cosmos3-demo:0.9" \
 kubectl -n "$NS" wait --for=condition=complete --timeout=90m job/cosmos3-generate-synthetic
 ```
 
-Expands one seed prompt (in `prompts/synthetic/example_pick_and_place.json`) into 16 variations using `prompts/expand.py`, then runs `cosmos3.scripts.inference` across 8 GPUs at 256p × 30 steps. ~60 min wall-clock.
+Expands one seed prompt (in `prompts/synthetic/example_pick_and_place.json`) into 16 variations using `prompts/expand.py`, then runs `cosmos_framework.scripts.inference` across 8 GPUs at 256p × 30 steps. ~60 min wall-clock.
 
 **While you wait** is a good time to skim `prompts/expand.py` — it's a 70-line standalone script you can extend to thousands of prompts for a real production flywheel.
 
@@ -288,7 +288,7 @@ helm template . --set image="$REGISTRY/cosmos3-demo:0.9" \
 kubectl -n "$NS" wait --for=condition=complete --timeout=30m job/cosmos3-sft-smoke
 ```
 
-Runs `cosmos3.scripts.train --dry-run` to validate that FSDP wiring, dataloader, optimizer, and checkpoint-load chain all come up. ~5 min. **Always run this before the real SFT** — it catches misconfig in minutes instead of hours.
+Runs `cosmos_framework.scripts.train --sft-toml=…` with `trainer.max_iter=2` to validate FSDP wiring, dataloader, optimizer, and checkpoint-load chain. ~5 min. **Always run this before the real SFT** — it catches misconfig in minutes instead of hours.
 
 **How you know it worked:** the Job completes (`Succeeded`) and the logs end with `--dry-run complete`.
 
@@ -332,7 +332,7 @@ helm template . --set image="$REGISTRY/cosmos3-demo:0.9" \
 kubectl -n "$NS" wait --for=condition=complete --timeout=30m job/cosmos3-export
 ```
 
-Converts the DCP-format SFT output to HF safetensors at `/mnt/cosmos3/checkpoints/cosmos3-nano-sft-hf`, which is what `cosmos3.ray.serve` will load.
+Converts the DCP-format SFT output to HF safetensors at `/mnt/cosmos3/checkpoints/cosmos3-nano-sft-hf`, which is what `cosmos_framework.inference.ray.serve` will load.
 
 ### Step 15: Quantitative evaluation
 
@@ -407,9 +407,9 @@ You just:
 
 **Where to go next:**
 
-- **Scale the SFT.** At 100–1000 iters the diffusion expert barely shifts. The multi-node H100 variant (in `cosmos3-ea-external` on a separate branch) targets ~10,000 iters with `torch.compile` re-enabled and FSDP-32 across 4 nodes via `cw-mpijob` over InfiniBand.
+- **Scale the SFT.** At 100–1000 iters the diffusion expert barely shifts. The multi-node H100 variant targets ~10,000 iters with `torch.compile` re-enabled and FSDP-32 across 4 nodes via `cw-mpijob` over InfiniBand.
 - **Extend `prompts/expand.py`.** The seed file produces 16 variations from one prompt; bump the corpus to thousands by adding new (object, target, scene) tuples.
-- **Wire in real-world rollouts.** Replace bridge-v2 with your own robot trajectories. The JSONL format is documented in upstream `cosmos3-ea-external/docs/training.md`.
+- **Wire in real-world rollouts.** Replace bridge-v2 with your own robot trajectories. The JSONL format is documented in upstream `NVIDIA/cosmos-framework`'s `docs/training.md`.
 - **Try Cosmos3-Super.** The 32B variant uses LoRA for SFT and trains at 720p. Single-node 8× H100 80GB fits with `data_parallel_shard_degree=4, context_parallel_shard_degree=2`. See the multi-node variant for the multi-node version.
 
 **If something broke:**

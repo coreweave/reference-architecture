@@ -1,8 +1,10 @@
 # Upstream bugs discovered while building the CW demo
 
-Running tally of bugs in the upstream `cosmos3-ea-external` repo that we worked around to make this reference architecture run on stock CKS. Each one is a candidate PR to file with NVIDIA.
+Running tally of bugs that surfaced while building this reference architecture on stock CKS. Each one is a candidate PR back to NVIDIA.
 
 For each: **Repro**, **Symptom**, **Workaround applied here**, **Suggested upstream fix**.
+
+> **Heads-up:** entries 1–8 were captured against the **EA codebase** (`nvidia-cosmos/cosmos3-ea-external`). On migration to the public `NVIDIA/cosmos-framework` release, the Python package was renamed `cosmos3` → `cosmos_framework` and several internal paths moved (e.g. `cosmos3/_src/imaginaire/utils/` → `cosmos_framework/utils/`). The symptoms below likely still reproduce, but **file:line and module paths may differ on the public release** — treat them as starting points and re-confirm against the current source before filing upstream PRs. Bug #9 from the EA catalog was already fixed upstream (`HF_VERSION` bumped from `1.13.0` to `1.16.4`) and has been removed.
 
 ---
 
@@ -249,7 +251,6 @@ The HTTP proxy is bound to localhost only. K8s Services (which route to the Pod'
 | 6 | `train.py` writes checkpoints to `/tmp` regardless of `-o` | ✅ symlink workaround in `values.yaml` (`steps.sft`) | pending |
 | 7 | `cosmos3.ray.serve` binds 127.0.0.1, unreachable from K8s | ✅ applied | pending |
 | 8 | `cosmos3.ray.serve` doesn't set Ray Serve `request_timeout_s` — 5-min default truncates inference | ✅ applied | pending (bundle with #7) |
-| 9 | `_hf_download` invokes `uvx hf@1.13.0` but huggingface_hub 1.13.0 CLI imports `click` without declaring it as a runtime dep | ✅ chart-level prelude patch in `templates/_helpers.tpl` | pending |
 
 ---
 
@@ -275,52 +276,5 @@ ray.serve.start(http_options=ray.serve.config.HTTPOptions(
 30-minute ceiling — comfortably covers even 480p × 35-step requests.
 
 **Suggested upstream fix:** Set `request_timeout_s` to something like 1800 (or a config-driven value) in the `HTTPOptions` constructor. The current default exists for low-latency microservices, not for inference servers. Worth bundling with the 0.0.0.0 bind fix.
-
----
-
-## 9. `_hf_download` calls `uvx hf@1.13.0` but huggingface_hub 1.13.0's CLI is missing the `click` runtime dep
-
-**Files:** `cosmos3/_src/imaginaire/utils/checkpoint_db.py:148-160` (the `_hf_download(cmd_args)` function and its hardcoded `cmd = ["uvx", f"hf@{HF_VERSION}", ...]`).
-
-**Repro:** Run any cosmos3 entry point that resolves an HF-registered checkpoint — even when the artifact is already fully cached on disk:
-```bash
-python -m cosmos3.scripts.inference \
-  --parallelism-preset=latency \
-  -i /workspace/inputs/omni/t2v.json \
-  -o /tmp/smoke \
-  --checkpoint-path Cosmos3-Nano --seed 0
-```
-
-**Symptom:**
-```
-Installed 22 packages in 60ms
-Traceback (most recent call last):
-  File ".../bin/hf", line 6, in <module>
-    from huggingface_hub.cli.hf import main
-  File ".../huggingface_hub/cli/_cli_utils.py", line 31, in <module>
-    import click
-ModuleNotFoundError: No module named 'click'
-subprocess.CalledProcessError: Command '['uvx', 'hf@1.13.0', 'download', ...]'
-returned non-zero exit status 1.
-```
-The process exits before consulting the local HF cache, so even pre-staged checkpoints don't save you — every Pod that calls a cosmos3 entry point fails identically.
-
-**Root cause:** `huggingface_hub==1.13.0` ships `huggingface_hub.cli._cli_utils` which does an unconditional `import click` at module load, but `click` is not listed under `[project.dependencies]` in that wheel. `uvx`'s ephemeral environment for `hf@1.13.0` therefore installs the 22 declared deps and nothing else; the CLI then explodes at import. The version is pinned via `HF_VERSION = "1.13.0"` in `checkpoint_db.py`, so users can't trivially route around it by upgrading.
-
-**Workaround applied** — chart-level, idempotent, runs once per Pod startup before any cosmos3 invocation. Lives in `templates/_helpers.tpl` as `cosmos3.preludePatches` and is included by every Job in `templates/jobs.yaml` and the Ray Serve Deployment in `templates/serving.yaml`:
-```python
-# Inject "--with", "click" between "uvx" and f"hf@{HF_VERSION}" in the
-# hardcoded cmd list:
-text = pathlib.Path(".../checkpoint_db.py").read_text()
-if '"--with", "click"' not in text:
-    text = text.replace(
-        '"uvx",\n        f"hf@{HF_VERSION}",',
-        '"uvx",\n        "--with", "click",\n        f"hf@{HF_VERSION}",',
-        1,
-    )
-```
-After the patch, every cosmos3-launched `uvx hf@1.13.0 …` becomes `uvx --with click hf@1.13.0 …`, which materialises a `click`-bearing env and resolves the import cleanly.
-
-**Suggested upstream fix:** Either (a) bump `HF_VERSION` to a release where huggingface_hub's wheel declares `click` as a real dep, or (b) add `--with click` (and any other CLI-only deps that surface) to the `cmd` list in `_hf_download` itself. (a) is preferable — it gets cosmos3 off the workaround entirely. Worth filing against huggingface_hub too: the CLI subpackage importing an undeclared dep is the underlying bug.
 
 Add new entries to this file as we trip over them.

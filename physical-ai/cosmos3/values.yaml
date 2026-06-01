@@ -4,7 +4,7 @@
 # so a vanilla `helm template . | kubectl apply -f -` is a no-op. Enable steps
 # one at a time as you work through the pipeline:
 #
-#   helm template . --set steps.prefetch.enabled=true | kubectl apply -f -
+#   helm template . --set image=$IMG --set steps.prefetch.enabled=true | kubectl apply -f -
 #
 # ...or set multiple at once with a -f overrides file, or hand-edit this file.
 
@@ -48,8 +48,8 @@ rayServe:
 marimo:
   enabled: false
   serveUrl: "http://cosmos3-serve:8000"
-  # Bumped from marimo's 8MB default so the §6 comparison cell can base64-embed
-  # the 50MB MP4s without truncation.
+  # Bumped from marimo's 8MB default so the comparison cell can base64-embed
+  # three ~50MB MP4s (base × action-SFT × mixed-SFT) without truncation.
   outputMaxBytes: "300000000"
 
 # ---------------------------------------------------------------------------
@@ -57,21 +57,20 @@ marimo:
 # Step keys are camelCase for ease of --set; rendered Job names are kebab-case
 # (e.g. sftMixed -> cosmos3-sft-mixed). Enable in order:
 #
-#   1. prefetch        — pull base checkpoints from HF
+#   1. prefetch        — pull base checkpoints from HF (public nvidia/* org)
 #   2. convert         — HF -> DCP for training
 #   3. smoke           — 1-GPU T2V smoke test
-#   4. bridge / libero — datasets
+#   4. bridge          — bridge-v2 dataset
 #   5. generateSynthetic / sdgExtra — SDG (the flywheel upstroke)
 #   6. caption         — VLM-caption clips into SFT JSONL (needs external VLM)
-#   7. sftSmoke        — --dry-run SFT to validate FSDP wiring
-#   8. sft / sftMixed  — the actual fine-tuning runs
+#   7. sftSmoke        — short SFT to validate FSDP wiring
+#   8. sft / sftMixed  — the actual fine-tuning runs (TOML-driven)
 #   9. export / exportMixed — DCP -> HF for serving
-#  10. eval            — quantitative metrics (PSNR + action-MSE)
-#  11. compare*        — qualitative MP4 comparisons
+#  10. compare*        — qualitative MP4 comparisons
 #
 # Re-running a step: Jobs are immutable once created. To re-run:
 #   kubectl delete job cosmos3-<name>
-#   helm template . --set steps.<key>.enabled=true | kubectl apply -f -
+#   helm template . --set image=$IMG --set steps.<key>.enabled=true | kubectl apply -f -
 # ---------------------------------------------------------------------------
 steps:
 
@@ -85,21 +84,17 @@ steps:
       export LD_LIBRARY_PATH=''
       mkdir -p /mnt/cosmos3/hf_cache
       python - <<'PY'
-      from cosmos3.common.checkpoints import register_checkpoints
-      register_checkpoints()
-      from cosmos3.args import _CHECKPOINTS_EA
-      # Download Cosmos3-Nano (8B). Skip Cosmos3-Super (32B) for demo budget.
-      for key, cfg in _CHECKPOINTS_EA.items():
-          if "Nano" in cfg.hf.repository:
-              print(f"--- {cfg.hf.repository}@{cfg.hf.revision[:7]} ---", flush=True)
-              cfg.hf.download()
-              print(f"    done -> {cfg.hf._path}", flush=True)
-      # VLM backbone (public).
-      from cosmos3._src.imaginaire.utils.checkpoint_db import CheckpointDirHf
-      print("--- Qwen/Qwen3-VL-8B-Instruct@main ---", flush=True)
-      qwen = CheckpointDirHf(repository="Qwen/Qwen3-VL-8B-Instruct", revision="main")
-      qwen.download()
-      print(f"    done -> {qwen._path}", flush=True)
+      # Public HF orgs as of cosmos-framework v1.2.x: nvidia/Cosmos3-Nano,
+      # Qwen/Qwen3-VL-8B-Instruct (VLM backbone), Wan-AI/Wan2.2-TI2V-5B (VAE).
+      from huggingface_hub import snapshot_download
+      for repo, allow in [
+          ("nvidia/Cosmos3-Nano",            None),
+          ("Qwen/Qwen3-VL-8B-Instruct",      None),
+          ("Wan-AI/Wan2.2-TI2V-5B",          ["Wan2.2_VAE.pth"]),
+      ]:
+          print(f"--- {repo} ---", flush=True)
+          path = snapshot_download(repo, allow_patterns=allow)
+          print(f"    done -> {path}", flush=True)
       PY
       du -sh /mnt/cosmos3/hf_cache/hub/* 2>/dev/null || true
 
@@ -109,7 +104,7 @@ steps:
     script: |
       set -euxo pipefail
       export LD_LIBRARY_PATH=''
-      python -m cosmos3.scripts.convert_model_to_dcp \
+      python -m cosmos_framework.scripts.convert_model_to_dcp \
         --checkpoint-path Cosmos3-Nano \
         -o /mnt/cosmos3/checkpoints/cosmos3-nano-dcp
 
@@ -122,7 +117,7 @@ steps:
       export LD_LIBRARY_PATH=''
       export PYTORCH_ALLOC_CONF='expandable_segments:True'
       mkdir -p /mnt/cosmos3/outputs/smoke
-      python -m cosmos3.scripts.inference \
+      python -m cosmos_framework.scripts.inference \
         --parallelism-preset=latency \
         -i /workspace/inputs/omni/t2v.json \
         -o /mnt/cosmos3/outputs/smoke \
@@ -138,39 +133,16 @@ steps:
       export LD_LIBRARY_PATH=''
       mkdir -p /mnt/cosmos3/hf_cache
       python - <<'PY'
-      from cosmos3.common.checkpoints import register_checkpoints, _DATASETS_EA
-      register_checkpoints()
-      ds = _DATASETS_EA["nvidia/bridge-v2-subset-synthetic-captions"]
-      print(f"--- downloading {ds.hf.repository}@{ds.hf.revision[:7]} ---", flush=True)
-      ds.hf.download()
-      print(f"    done -> {ds.hf._path}", flush=True)
+      from huggingface_hub import snapshot_download
+      path = snapshot_download(
+          "nvidia/bridge-v2-subset-synthetic-captions", repo_type="dataset"
+      )
+      print(f"done -> {path}", flush=True)
       PY
-      SNAP=$(ls -d /mnt/cosmos3/hf_cache/hub/datasets--nvidia-cosmos-ea--bridge-v2-subset-synthetic-captions/snapshots/*/ | head -1)
+      SNAP=$(ls -d /mnt/cosmos3/hf_cache/hub/datasets--nvidia--bridge-v2-subset-synthetic-captions/snapshots/*/ | head -1)
       mkdir -p /mnt/cosmos3/datasets
       ln -sfn "${SNAP}sft_dataset_bridge" /mnt/cosmos3/datasets/bridge_v2
       ls -la /mnt/cosmos3/datasets/bridge_v2/
-
-  libero:
-    enabled: false
-    gpu: 0
-    script: |
-      set -euxo pipefail
-      export LD_LIBRARY_PATH=''
-      mkdir -p /mnt/cosmos3/hf_cache
-      python - <<'PY'
-      from cosmos3.common.checkpoints import register_checkpoints, _DATASETS_EA
-      register_checkpoints()
-      ds = _DATASETS_EA["nvidia/LIBERO_LeRobot_v3"]
-      print(f"--- downloading {ds.hf.repository}@{ds.hf.revision[:7]} ---", flush=True)
-      ds.hf.download()
-      print(f"    done -> {ds.hf._path}", flush=True)
-      PY
-      SNAP=$(ls -d /mnt/cosmos3/hf_cache/hub/datasets--nvidia-cosmos-ea--LIBERO_LeRobot_v3/snapshots/*/ | head -1)
-      mkdir -p /mnt/cosmos3/datasets
-      for s in libero_10 libero_object libero_spatial libero_goal libero_90; do
-        ln -sfn "${SNAP}${s}" /mnt/cosmos3/datasets/${s}
-      done
-      ls -la /mnt/cosmos3/datasets/
 
   # --- Phase 2: synthetic data generation (the flywheel) -----------------
 
@@ -188,7 +160,7 @@ steps:
         --seed   /workspace/demo/prompts/synthetic/example_pick_and_place.json \
         --output /tmp/prompts \
         --count  16
-      torchrun --nproc_per_node=8 -m cosmos3.scripts.inference \
+      torchrun --nproc_per_node=8 -m cosmos_framework.scripts.inference \
         --parallelism-preset=throughput \
         -i "/tmp/prompts/*.json" \
         -o /mnt/cosmos3/outputs/synthetic \
@@ -217,7 +189,7 @@ steps:
           d["seed"]       = d.get("seed", 0) + 100
           p.write_text(json.dumps(d, indent=2))
       PY
-      torchrun --nproc_per_node=8 -m cosmos3.scripts.inference \
+      torchrun --nproc_per_node=8 -m cosmos_framework.scripts.inference \
         --parallelism-preset=throughput \
         -i "/tmp/prompts_extra/*.json" \
         -o /mnt/cosmos3/outputs/synthetic_extra \
@@ -236,17 +208,23 @@ steps:
     script: |
       set -euxo pipefail
       export LD_LIBRARY_PATH=''
-      python -m cosmos3.scripts.caption_from_video \
+      python -m cosmos_framework.scripts.caption_from_video \
         --video       /mnt/cosmos3/outputs/synthetic \
         -o            /mnt/cosmos3/outputs/synthetic_captions \
         --server      "${VLM_SERVER}"
-      python -m cosmos3.scripts.captions_to_sft_jsonl \
+      python -m cosmos_framework.scripts.captions_to_sft_jsonl \
         --captions-dir /mnt/cosmos3/outputs/synthetic_captions \
         --videos-dir   /mnt/cosmos3/outputs/synthetic \
         -o             /mnt/cosmos3/datasets/sft_demo.jsonl
       wc -l /mnt/cosmos3/datasets/sft_demo.jsonl
 
   # --- Phase 3: SFT fine-tuning -------------------------------------------
+  #
+  # cosmos-framework drives SFT via a pydantic-validated TOML recipe and the
+  # `--sft-toml=<path>` arg on `cosmos_framework.scripts.train`. The chart ships
+  # `configs/vision_sft_nano.toml` as the baseline recipe (lifted from upstream
+  # examples/toml/sft_config/vision_sft_nano.toml). Overrides go after `--` as
+  # dotted key=value pairs.
 
   sftSmoke:
     enabled: false
@@ -258,16 +236,16 @@ steps:
       set -euxo pipefail
       export LD_LIBRARY_PATH=''
       export PYTORCH_ALLOC_CONF='expandable_segments:True'
-      export DATASET_PATH=/mnt/cosmos3/datasets
+      export DATASET_PATH=/mnt/cosmos3/datasets/bridge_v2
+      export BASE_CHECKPOINT_PATH=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp
+      export WAN_VAE_PATH=$(ls /mnt/cosmos3/hf_cache/hub/models--Wan-AI--Wan2.2-TI2V-5B/snapshots/*/Wan2.2_VAE.pth | head -1)
       export WANDB_MODE=offline
       cd /workspace
-      torchrun --nproc_per_node=8 -m cosmos3.scripts.train \
-        -o /mnt/cosmos3/outputs/sft_smoke \
-        --config-file cosmos3/configs/experiment/action_policy_sft_nano.yaml \
-        --dry-run \
-        --config-overrides \
-          "checkpoint.load_path=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp" \
-          "model.config.vlm_config.checkpoint_path=/mnt/cosmos3/pretrained/Qwen3-VL-8B-Instruct"
+      torchrun --nproc_per_node=8 -m cosmos_framework.scripts.train \
+        --sft-toml=/workspace/demo/configs/vision_sft_nano.toml \
+        -- \
+        trainer.max_iter=2 \
+        checkpoint.save_iter=2
 
   sft:
     enabled: false
@@ -279,28 +257,27 @@ steps:
       set -euxo pipefail
       export LD_LIBRARY_PATH=''
       export PYTORCH_ALLOC_CONF='expandable_segments:True'
-      export DATASET_PATH=/mnt/cosmos3/datasets
+      export DATASET_PATH=/mnt/cosmos3/datasets/bridge_v2
+      export BASE_CHECKPOINT_PATH=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp
+      export WAN_VAE_PATH=$(ls /mnt/cosmos3/hf_cache/hub/models--Wan-AI--Wan2.2-TI2V-5B/snapshots/*/Wan2.2_VAE.pth | head -1)
       export WANDB_MODE=offline
-      # /tmp persistence fix (UPSTREAM_BUGS.md #6) — cosmos3 writes DCP
+      # /tmp persistence fix (UPSTREAM_BUGS.md #6) — cosmos-framework writes DCP
       # checkpoints under /tmp/imaginaire4-output by convention; symlink to
       # PVC so they survive Pod termination.
       mkdir -p /mnt/cosmos3/imaginaire4-output
       rm -rf /tmp/imaginaire4-output
       ln -sfn /mnt/cosmos3/imaginaire4-output /tmp/imaginaire4-output
       cd /workspace
-      torchrun --nproc_per_node=8 -m cosmos3.scripts.train \
-        -o /mnt/cosmos3/outputs/sft_demo_cw \
-        --config-file cosmos3/configs/experiment/action_policy_sft_nano.yaml \
-        --config-overrides \
-          "trainer.max_iter=100" \
-          "checkpoint.load_path=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp" \
-          "checkpoint.save_iter=50" \
-          "job.name=sft_demo_cw" \
-          "job.group=cw_demo" \
-          "job.project=cosmos3_cw_demo" \
-          "job.wandb_mode=offline" \
-          "model.config.parallelism.use_torch_compile=false" \
-          "model.config.vlm_config.checkpoint_path=/mnt/cosmos3/pretrained/Qwen3-VL-8B-Instruct"
+      torchrun --nproc_per_node=8 -m cosmos_framework.scripts.train \
+        --sft-toml=/workspace/demo/configs/vision_sft_nano.toml \
+        -- \
+        trainer.max_iter=100 \
+        checkpoint.save_iter=50 \
+        job.name=sft_demo_cw \
+        job.group=cw_demo \
+        job.project=cosmos3_cw_demo \
+        job.wandb_mode=disabled \
+        model.compile.enabled=false
 
   sftMixed:
     enabled: false
@@ -313,26 +290,25 @@ steps:
       export LD_LIBRARY_PATH=''
       export PYTORCH_ALLOC_CONF='expandable_segments:True'
       export DATASET_PATH=/mnt/cosmos3/datasets/closed_loop
+      export BASE_CHECKPOINT_PATH=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp
+      export WAN_VAE_PATH=$(ls /mnt/cosmos3/hf_cache/hub/models--Wan-AI--Wan2.2-TI2V-5B/snapshots/*/Wan2.2_VAE.pth | head -1)
       export WANDB_MODE=offline
       mkdir -p /mnt/cosmos3/imaginaire4-output
       rm -rf /tmp/imaginaire4-output
       ln -sfn /mnt/cosmos3/imaginaire4-output /tmp/imaginaire4-output
       cd /workspace
-      torchrun --nproc_per_node=8 -m cosmos3.scripts.train \
-        -o /mnt/cosmos3/outputs/sft_mixed_cw \
-        --config-file cosmos3/configs/experiment/mixed_modality_sft_nano.yaml \
-        --config-overrides \
-          "trainer.max_iter=1000" \
-          "checkpoint.load_path=/mnt/cosmos3/checkpoints/cosmos3-nano-dcp" \
-          "checkpoint.save_iter=250" \
-          "job.name=sft_mixed_cw" \
-          "job.group=cw_demo" \
-          "job.project=cosmos3_cw_demo" \
-          "job.wandb_mode=offline" \
-          "model.config.parallelism.use_torch_compile=false" \
-          "model.config.vlm_config.checkpoint_path=/mnt/cosmos3/pretrained/Qwen3-VL-8B-Instruct"
+      torchrun --nproc_per_node=8 -m cosmos_framework.scripts.train \
+        --sft-toml=/workspace/demo/configs/vision_sft_nano.toml \
+        -- \
+        trainer.max_iter=1000 \
+        checkpoint.save_iter=250 \
+        job.name=sft_mixed_cw \
+        job.group=cw_demo \
+        job.project=cosmos3_cw_demo \
+        job.wandb_mode=disabled \
+        model.compile.enabled=false
 
-  # --- Phase 4: export + eval --------------------------------------------
+  # --- Phase 4: export ----------------------------------------------------
 
   export:
     enabled: false
@@ -347,7 +323,7 @@ steps:
       CKPT_PATH="/mnt/cosmos3/imaginaire4-output/cosmos3_cw_demo/cw_demo/sft_demo_cw/checkpoints/${CKPT_ITER}"
       CFG_PATH="/mnt/cosmos3/outputs/sft_demo_cw/config.yaml"
       OUT_PATH="/mnt/cosmos3/checkpoints/cosmos3-nano-sft-hf"
-      python -m cosmos3.scripts.export_model \
+      python -m cosmos_framework.scripts.export_model \
         --checkpoint-path "$CKPT_PATH" \
         --config-file "$CFG_PATH" \
         -o "$OUT_PATH" \
@@ -368,44 +344,11 @@ steps:
       CKPT_PATH="$SFT_ROOT/checkpoints/${CKPT_ITER}"
       CFG_PATH=/mnt/cosmos3/outputs/sft_mixed_cw/config.yaml
       OUT_PATH=/mnt/cosmos3/checkpoints/cosmos3-nano-mixed-hf
-      python -m cosmos3.scripts.export_model \
+      python -m cosmos_framework.scripts.export_model \
         --checkpoint-path "$CKPT_PATH" \
         --config-file    "$CFG_PATH" \
         -o "$OUT_PATH" \
         --no-use-torch-compile
-
-  eval:
-    enabled: false
-    gpu: 8
-    dshmSize: 256Gi
-    extraEnv:
-      NCCL_DEBUG: WARN
-    script: |
-      set -euxo pipefail
-      export LD_LIBRARY_PATH=''
-      export PYTORCH_ALLOC_CONF='expandable_segments:True'
-      export DATASET_PATH=/mnt/cosmos3/datasets
-      cd /workspace
-      CFG=/mnt/cosmos3/outputs/sft_demo_cw/config.yaml
-      for variant in base sft; do
-        case "$variant" in
-          base) CKPT="Cosmos3-Nano" ;;
-          sft)  CKPT="/mnt/cosmos3/checkpoints/cosmos3-nano-sft-hf" ;;
-        esac
-        echo "=== eval $variant ($CKPT) ==="
-        torchrun --nproc_per_node=8 -m cosmos3.scripts.eval \
-          --checkpoint-path "$CKPT" \
-          --dataset.config-file "$CFG" \
-          --dataset.dataset-split val \
-          --dataset.model-mode policy \
-          --dataset.num-samples 16 \
-          -o /mnt/cosmos3/outputs/eval_${variant} \
-          --no-use-torch-compile
-      done
-      echo "--- metrics ---"
-      cat /mnt/cosmos3/outputs/eval_base/metrics_aggregate.json || true
-      echo
-      cat /mnt/cosmos3/outputs/eval_sft/metrics_aggregate.json  || true
 
   # --- Phase 5: qualitative comparison ------------------------------------
 
@@ -424,7 +367,7 @@ steps:
         esac
         OUT="/mnt/cosmos3/outputs/comparison/${variant}"
         mkdir -p "$OUT"
-        python -m cosmos3.scripts.inference \
+        python -m cosmos_framework.scripts.inference \
           --parallelism-preset=latency \
           -i /workspace/inputs/omni/t2v.json \
           -o "$OUT" \
@@ -441,7 +384,7 @@ steps:
       export LD_LIBRARY_PATH=''
       export PYTORCH_ALLOC_CONF='expandable_segments:True'
       mkdir -p /mnt/cosmos3/outputs/comparison_mixed/sft
-      python -m cosmos3.scripts.inference \
+      python -m cosmos_framework.scripts.inference \
         --parallelism-preset=latency \
         -i /workspace/inputs/omni/t2v.json \
         -o /mnt/cosmos3/outputs/comparison_mixed/sft \
@@ -476,7 +419,7 @@ steps:
         esac
         OUT="/mnt/cosmos3/outputs/comparison_in_dist/${variant}"
         mkdir -p "$OUT"
-        python -m cosmos3.scripts.inference \
+        python -m cosmos_framework.scripts.inference \
           --parallelism-preset=latency \
           -i /tmp/prompt/in_dist.json \
           -o "$OUT" \
