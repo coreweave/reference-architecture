@@ -2,9 +2,9 @@ apiVersion: v2
 name: cosmos3-data-flywheel
 description: |
   End-to-end Cosmos3 data flywheel on CoreWeave Kubernetes Service —
-  synthetic data generation, SFT fine-tuning, model export, eval, Ray Serve,
-  and a marimo notebook. Every pipeline step is a values.yaml entry; enable
-  the ones you want and `helm template . | kubectl apply -f -`.
+  synthetic data generation, SFT fine-tuning, model export, and live serving
+  via Ray Serve. Every pipeline step is a values.yaml entry; enable the
+  ones you want and `helm template . | kubectl apply -f -`.
 type: application
 version: 0.1.0
 appVersion: "0.9"

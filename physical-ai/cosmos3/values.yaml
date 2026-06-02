@@ -29,11 +29,6 @@ pvc:
 workbench:
   enabled: true
 
-# ClusterRole + Binding the marimo § 1 cluster-status cell needs (nodes/pods/
-# namespaces are cluster-scoped; the built-in `view` role only grants namespaced).
-rbac:
-  marimoView: true
-
 # Ray Serve Deployment exposing POST /generate. Set checkpointPath to the
 # fine-tuned HF safetensors output of the `export` step (or `Cosmos3-Nano` to
 # serve the base model).
@@ -41,16 +36,6 @@ rayServe:
   enabled: false
   checkpointPath: /mnt/cosmos3/checkpoints/cosmos3-nano-sft-hf
   nodeSelector: {}
-
-# Marimo notebook server. CPU-only. The notebook source lives on the PVC at
-# /mnt/cosmos3/marimo/cosmos3_demo.py — the Pod seeds it from the image on
-# first run, then iterate with `kubectl cp + rollout restart`.
-marimo:
-  enabled: false
-  serveUrl: "http://cosmos3-serve:8000"
-  # Bumped from marimo's 8MB default so the comparison cell can base64-embed
-  # three ~50MB MP4s (base × action-SFT × mixed-SFT) without truncation.
-  outputMaxBytes: "300000000"
 
 # ---------------------------------------------------------------------------
 # Pipeline steps. Each entry becomes a Job named cosmos3-{kebab-case key}.

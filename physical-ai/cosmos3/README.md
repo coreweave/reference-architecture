@@ -4,7 +4,7 @@
 
 Reference architecture for running **NVIDIA Cosmos3** (a world-foundation model for physical AI / robotics) on **CoreWeave Kubernetes Service**. Covers the full lifecycle:
 
-**synthetic data generation → SFT fine-tuning → DCP→HF export → live serving via Ray Serve → interactive marimo notebook.**
+**synthetic data generation → SFT fine-tuning → DCP→HF export → live serving via Ray Serve.**
 
 Validated single-node on 8× RTX Pro 6000 Blackwell + VAST CSI. Pure CKS — no SUNK / Slurm, no KubeRay operator. Packaged as a small Helm chart so each pipeline step is a single `values.yaml` flag.
 
@@ -20,8 +20,7 @@ physical-ai/cosmos3/
 ├── Dockerfile                        # demo image (extends upstream cosmos-framework, cu128-train)
 ├── configs/vision_sft_nano.toml      # SFT recipe — lifted from upstream + chart-tunable
 ├── prompts/                          # seed prompts + programmatic expander
-├── scripts/                          # closed-loop JSONL builder
-└── marimo/cosmos3_demo.py            # reactive notebook — calls Ray Serve /generate
+└── scripts/                          # closed-loop JSONL builder
 ```
 
 > Tracks the public **[NVIDIA/cosmos-framework](https://github.com/NVIDIA/cosmos-framework)** release (package: `cosmos_framework`). HF models live under the public `nvidia/Cosmos3-*` org.
@@ -32,12 +31,12 @@ The chart renders to ~27 K8s resources when every step is enabled. Default is a 
 
 | Phase | Steps in `values.yaml` | What you get |
 |---|---|---|
-| **Setup** | `prerequisites` (always-on), build image | PVC + workbench Pod + RBAC + demo container |
+| **Setup** | `prerequisites` (always-on), build image | PVC + workbench Pod + demo container |
 | **Stage** | `prefetch`, `convert`, `bridge` | Base model + datasets on the PVC |
 | **Smoke** | `smoke` | One ~5-second video confirms the inference chain works |
 | **Flywheel** | `generateSynthetic`, `sdgExtra` | Synthetic clips you mix with bridge-v2 |
 | **Fine-tune** | `sftSmoke`, then `sft` and/or `sftMixed` | DCP-format checkpoint driven by `configs/vision_sft_nano.toml` |
-| **Export + serve** | `export`, `exportMixed`, `rayServe`, `marimo` | HF safetensors, live HTTP endpoint, notebook UI |
+| **Export + serve** | `export`, `exportMixed`, `rayServe` | HF safetensors + live HTTP endpoint |
 | **Compare** | `compare`, `compareMixed`, `compareInDist` | Qualitative side-by-side videos |
 
 Full step list, GPU counts, wraps, and outputs are in **[TUTORIAL.md § Pipeline](TUTORIAL.md#part-4--stage-the-models-and-data-30-minutes-mostly-wait)**.
@@ -69,12 +68,11 @@ helm template physical-ai/cosmos3 --set image="$IMG" \
 
 # Enable everything
 helm template physical-ai/cosmos3 --set image="$IMG" \
-  --set rayServe.enabled=true --set marimo.enabled=true \
+  --set rayServe.enabled=true \
   --set steps.prefetch.enabled=true \
   --set steps.convert.enabled=true \
   --set steps.smoke.enabled=true \
   --set steps.bridge.enabled=true \
-  --set steps.libero.enabled=true \
   --set steps.generateSynthetic.enabled=true \
   --set steps.sdgExtra.enabled=true \
   --set steps.sftSmoke.enabled=true \

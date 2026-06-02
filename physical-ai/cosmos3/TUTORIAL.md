@@ -7,7 +7,6 @@ By the end of this tutorial you will have:
 - **Fine-tuned** (SFT) the model on a mix of public data + your synthetic clips
 - **Quantitatively measured** the improvement (we got Action MSE −88% on a 100-iter run)
 - A **live HTTP endpoint** serving the fine-tuned model
-- An **interactive marimo notebook** that calls that endpoint with new prompts
 
 **Time:** ~4 hours of attended work + ~2 hours of wall-clock waiting (1× 8-GPU node).
 **You should be comfortable with:** `kubectl`, `helm`, Docker. No prior Cosmos3 knowledge required.
@@ -107,7 +106,7 @@ kubectl -n "$NS" get secret hf-token
 
 ### Step 3: Build and push the demo image
 
-The image is a single-stage build on top of `nvcr.io/nvidia/pytorch:25.06-py3` — NVIDIA's recommended NGC PyTorch base for cosmos-framework (`cosmos-framework/docs/setup.md` Quickstart path). Inside the Dockerfile we apt-install the system deps cosmos-framework needs, `uv sync --group=cu128-train`, install the cosmos-framework editable, then layer marimo + kubectl + the chart's demo assets on top — so `import cosmos_framework` works in Pods without bind-mounts.
+The image is a single-stage build on top of `nvcr.io/nvidia/pytorch:25.06-py3` — NVIDIA's recommended NGC PyTorch base for cosmos-framework (`cosmos-framework/docs/setup.md` Quickstart path). Inside the Dockerfile we apt-install the system deps cosmos-framework needs, `uv sync --group=cu128-train`, install cosmos-framework editable, then layer the chart's demo assets on top — so `import cosmos_framework` works in Pods without bind-mounts.
 
 The build context is a clone of `NVIDIA/cosmos-framework` with the chart's `demo/` assets staged into it:
 
@@ -116,7 +115,7 @@ The build context is a clone of `NVIDIA/cosmos-framework` with the chart's `demo
 git clone https://github.com/NVIDIA/cosmos-framework.git /tmp/cf-build
 
 # 2. Stage the chart's demo assets as cosmos-framework/demo/
-rsync -a physical-ai/cosmos3/{prompts,marimo,configs,scripts} /tmp/cf-build/demo/
+rsync -a physical-ai/cosmos3/{prompts,configs,scripts} /tmp/cf-build/demo/
 
 # 3. One docker build (~15 min on amd64-native, longer via QEMU on Apple Silicon)
 docker buildx build --platform linux/amd64 \
@@ -145,7 +144,7 @@ helm template . --set image="$REGISTRY/cosmos3-demo:0.9" \
   | kubectl -n "$NS" apply -f -
 ```
 
-This applies the **PVC** (1Ti VAST RWX), **workbench Pod** (CPU only, for shell-into diagnostics), and **marimo RBAC** (read access to nodes/pods).
+This applies the **PVC** (1Ti VAST RWX) and the **workbench Pod** (CPU only, for shell-into diagnostics).
 
 **How you know it worked:**
 ```bash
@@ -366,31 +365,32 @@ Expected on the action-policy SFT path (your numbers will vary):
   "psnr_mean": 18.69
 ```
 
-### Step 16: Stand up Ray Serve + marimo
+### Step 16: Stand up Ray Serve
 
 ```bash
-helm template . --set image="$REGISTRY/cosmos3-demo:0.9" \
+helm template . --set image="$REGISTRY/cosmos3-demo:<tag>" \
   --set rayServe.enabled=true \
-  --set marimo.enabled=true \
   | kubectl -n "$NS" apply -f -
 
 kubectl -n "$NS" wait --for=condition=available --timeout=30m deploy/cosmos3-serve
-kubectl -n "$NS" wait --for=condition=available --timeout=10m deploy/cosmos3-marimo
 ```
 
-Cold start for Ray Serve is ~5–10 min (model load + Ray cluster init). Marimo comes up in ~30 seconds.
+Cold start for Ray Serve is ~5–10 min (model load + Ray cluster init).
 
-**Port-forward and open the notebook:**
+**Call the endpoint:**
 ```bash
-kubectl -n "$NS" port-forward svc/cosmos3-marimo 2718:2718
-# open http://localhost:2718 in your browser
+kubectl -n "$NS" exec workbench -- python -c "
+import httpx
+r = httpx.post('http://cosmos3-serve:8000/generate',
+  json={'name':'demo','model_mode':'text2video',
+        'prompt':'<your structured multi-paragraph prompt>',
+        'seed':0,'num_steps':35,'image_size':480,'fps':5},
+  timeout=900)
+print(r.status_code, r.json())
+"
 ```
 
-The notebook gives you:
-- A cluster status panel
-- Model + dataset summaries with hot links to the PVC contents
-- A base-vs-trained side-by-side comparison player
-- A live `POST /generate` cell where you type a new prompt and a new video comes back
+The endpoint speaks the same JSON shape `inputs/omni/t2v.json` uses — any client targeting the upstream Cosmos3 inference protocol works against this deployment unchanged.
 
 ---
 
