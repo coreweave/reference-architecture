@@ -551,7 +551,7 @@ def _():
     mo.md(r"""
     ## Step 4 — RL with verifiable rewards (parallel rewards)
 
-    **The canonical pattern that drives this product.** A model generates
+     A model generates
     *N* candidate code completions. Each one runs in its own sandbox. The
     unit-test pass/fail of each completion is the reward signal. Training
     consumes the rewards in a policy update.
@@ -564,10 +564,6 @@ def _():
     an RL training step: launch a batch in parallel, harvest rewards as
     each sandbox finishes.
 
-    The pattern below is straight from the docs —
-    [examples/rl\_training/reward\_function.py](https://docs.coreweave.com/products/sandboxes/client/guides/rl-training#try-the-reward-function-example).
-    Wire `extract_xml_answer()` in front of it (parses `<answer>` tags out
-    of model output) and you have a working TRL / GRPO reward function.
     """)
     return
 
