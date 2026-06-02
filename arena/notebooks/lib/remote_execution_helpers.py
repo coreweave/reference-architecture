@@ -236,8 +236,8 @@ class ShellResult(str):
         return instance
 
     def __bool__(self) -> bool:
-        """Treat failed commands as false while preserving string truthiness for stdout."""
-        return self.ok and len(self) > 0
+        """True iff the command exited successfully (returncode 0)."""
+        return self.ok
 
 
 def shell(  # noqa: C901

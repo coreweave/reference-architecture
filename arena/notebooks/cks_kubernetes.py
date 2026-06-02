@@ -62,21 +62,22 @@ with app.setup:
 
     def manifest_step_cell(
         title: str,
-        editor,
+        form,
         namespace: str | None,
-        btn,
-        clicked: bool,
         explanation: str = "",
     ) -> mo.Html:
-        """Render a declarative step: title + button, optional explanation, editable YAML, result on click.
+        """Render a declarative step: title, optional explanation, YAML form, result on submit.
 
-        `editor` is a `mo.ui.code_editor` whose current `.value` is applied to the cluster
-        when the Run button has been clicked. Editing the YAML and re-clicking re-applies.
+        `form` is a `mo.ui.code_editor(...).form()` — `form.value` is None until the user
+        clicks the form's submit button, then becomes the current editor contents. Each
+        subsequent submit re-applies the (possibly edited) manifest; edits made without
+        clicking submit do not trigger a re-apply.
         """
         _output = None
-        if clicked:
+        manifest = form.value
+        if manifest is not None:
             ns_flag = f"-n {namespace} " if namespace else ""
-            _r = shell(f"kubectl {ns_flag}apply -f -", quiet=True, timeout=180, input=editor.value)
+            _r = shell(f"kubectl {ns_flag}apply -f -", quiet=True, timeout=180, input=manifest)
             _status = "SUCCESS" if _r.ok else "FAILED"
             _stdout_text = _r.strip()
             _stdout = truncate(_stdout_text) if _stdout_text else "(no output)"
@@ -86,17 +87,10 @@ with app.setup:
                 _stderr_block = f"\n**stderr:**\n```\n{truncate(_stderr_text)}\n```"
             _output = mo.md(f"`{_status}`\n```\n{_stdout}\n```{_stderr_block}")
         ns_label = f"  *(namespace: `{namespace}`)*" if namespace else ""
-        parts = [
-            mo.hstack(
-                [mo.md(f"**{title}**{ns_label}"), btn],
-                justify="space-between",
-                align="center",
-            ),
-        ]
+        parts = [mo.md(f"**{title}**{ns_label}")]
         if explanation:
             parts.append(mo.md(explanation))
-        parts.append(editor)
-        parts.append(mo.md("_Edit the manifest above if you like, then click **Run** to_ `kubectl apply -f -` _it._"))
+        parts.append(form)
         if _output is not None:
             parts.append(_output)
         return mo.vstack(parts)
@@ -267,26 +261,25 @@ def _(kubectl_ready: bool):
 @app.cell(hide_code=True)
 def _(kubectl_ready: bool):
     mo.stop(not kubectl_ready)
-    cm_editor = mo.ui.code_editor(value=CONFIGMAP_MANIFEST, language="yaml", min_height=200, debounce=True)
-    cm_b1 = mo.ui.button(**RUN_BUTTON)
+    cm_form = mo.ui.code_editor(value=CONFIGMAP_MANIFEST, language="yaml", min_height=200).form(
+        submit_button_label="Apply", bordered=False
+    )
     cm_b2 = mo.ui.button(**RUN_BUTTON)
     cm_b3 = mo.ui.button(**RUN_BUTTON)
     cm_b4 = mo.ui.button(**RUN_BUTTON)
     cm_b5 = mo.ui.button(**RUN_BUTTON)
-    return cm_editor, cm_b1, cm_b2, cm_b3, cm_b4, cm_b5
+    return cm_form, cm_b2, cm_b3, cm_b4, cm_b5
 
 
 @app.cell(hide_code=True)
-def _(cm_editor, cm_b1):
+def _(cm_form):
     manifest_step_cell(
         "1. Apply ConfigMap Manifest",
-        cm_editor,
+        cm_form,
         LAB_NAMESPACE,
-        cm_b1,
-        cm_b1.value > 0,
         explanation=(
             "Two top-level fields matter: `metadata` (identity — name, namespace, labels) "
-            "and `data` (the key/value payload). Edit the YAML and re-click **Run** to see how "
+            "and `data` (the key/value payload). Edit the YAML and click **Apply** to see how "
             "`kubectl apply` reconciles your change."
         ),
     )
@@ -365,8 +358,9 @@ def _(kubectl_ready: bool):
 @app.cell(hide_code=True)
 def _(kubectl_ready: bool):
     mo.stop(not kubectl_ready)
-    dep_editor = mo.ui.code_editor(value=DEPLOYMENT_MANIFEST, language="yaml", min_height=320, debounce=True)
-    dep_b1 = mo.ui.button(**RUN_BUTTON)
+    dep_form = mo.ui.code_editor(value=DEPLOYMENT_MANIFEST, language="yaml", min_height=320).form(
+        submit_button_label="Apply", bordered=False
+    )
     dep_b2 = mo.ui.button(**RUN_BUTTON)
     dep_b3 = mo.ui.button(**RUN_BUTTON)
     dep_b4 = mo.ui.button(**RUN_BUTTON)
@@ -374,17 +368,15 @@ def _(kubectl_ready: bool):
     dep_b6 = mo.ui.button(**RUN_BUTTON)
     dep_b7 = mo.ui.button(**RUN_BUTTON)
     dep_b8 = mo.ui.button(**RUN_BUTTON)
-    return dep_editor, dep_b1, dep_b2, dep_b3, dep_b4, dep_b5, dep_b6, dep_b7, dep_b8
+    return dep_form, dep_b2, dep_b3, dep_b4, dep_b5, dep_b6, dep_b7, dep_b8
 
 
 @app.cell(hide_code=True)
-def _(dep_editor, dep_b1):
+def _(dep_form):
     manifest_step_cell(
         "1. Apply Deployment Manifest",
-        dep_editor,
+        dep_form,
         LAB_NAMESPACE,
-        dep_b1,
-        dep_b1.value > 0,
         explanation=(
             "Three nested layers: the Deployment's `selector.matchLabels` finds Pods whose labels match. "
             "`template.metadata.labels` *stamps* those labels onto every Pod it creates. "
@@ -515,26 +507,25 @@ def _(kubectl_ready: bool):
 @app.cell(hide_code=True)
 def _(kubectl_ready: bool):
     mo.stop(not kubectl_ready)
-    svc_editor = mo.ui.code_editor(value=SERVICE_MANIFEST, language="yaml", min_height=220, debounce=True)
-    svc_b1 = mo.ui.button(**RUN_BUTTON)
+    svc_form = mo.ui.code_editor(value=SERVICE_MANIFEST, language="yaml", min_height=220).form(
+        submit_button_label="Apply", bordered=False
+    )
     svc_b2 = mo.ui.button(**RUN_BUTTON)
     svc_b3 = mo.ui.button(**RUN_BUTTON)
     svc_b4 = mo.ui.button(**RUN_BUTTON)
     svc_b5 = mo.ui.button(**RUN_BUTTON)
-    return svc_editor, svc_b1, svc_b2, svc_b3, svc_b4, svc_b5
+    return svc_form, svc_b2, svc_b3, svc_b4, svc_b5
 
 
 @app.cell(hide_code=True)
-def _(svc_editor, svc_b1):
+def _(svc_form):
     manifest_step_cell(
         "1. Apply Service Manifest",
-        svc_editor,
+        svc_form,
         LAB_NAMESPACE,
-        svc_b1,
-        svc_b1.value > 0,
         explanation=(
             f"`spec.selector: app: {DEPLOYMENT_NAME}` is the only link between this Service and the Deployment's Pods — "
-            "no foreign key, just label matching. Try changing the selector to a label no Pod has and re-run; "
+            "no foreign key, just label matching. Try changing the selector to a label no Pod has and click **Apply**; "
             "the Endpoints in step 3 will go empty."
         ),
     )
@@ -608,12 +599,13 @@ def _(kubectl_ready: bool):
 @app.cell(hide_code=True)
 def _(kubectl_ready: bool):
     mo.stop(not kubectl_ready)
-    job_editor = mo.ui.code_editor(value=JOB_MANIFEST, language="yaml", min_height=280, debounce=True)
+    job_form = mo.ui.code_editor(value=JOB_MANIFEST, language="yaml", min_height=280).form(
+        submit_button_label="Apply", bordered=False
+    )
     job_b1 = mo.ui.button(**RUN_BUTTON)
-    job_b2 = mo.ui.button(**RUN_BUTTON)
     job_b3 = mo.ui.button(**RUN_BUTTON)
     job_b4 = mo.ui.button(**RUN_BUTTON)
-    return job_editor, job_b1, job_b2, job_b3, job_b4
+    return job_form, job_b1, job_b3, job_b4
 
 
 @app.cell(hide_code=True)
@@ -629,13 +621,11 @@ def _(job_b1):
 
 
 @app.cell(hide_code=True)
-def _(job_editor, job_b2):
+def _(job_form):
     manifest_step_cell(
         "2. Apply Job Manifest",
-        job_editor,
+        job_form,
         LAB_NAMESPACE,
-        job_b2,
-        job_b2.value > 0,
         explanation=(
             "`restartPolicy: Never` is required for Jobs (or `OnFailure`) — it tells the kubelet not to restart "
             "a Pod that exits. `backoffLimit: 2` caps retries if the Pod fails."

@@ -579,6 +579,7 @@ current-context: in-cluster
 """
     with open(kubeconfig_path, "w", encoding="utf-8") as file:
         file.write(kubeconfig)
+    os.chmod(kubeconfig_path, 0o600)
 
 
 def ensure_kubectl_access() -> tuple[bool, str]:
