@@ -1,0 +1,46 @@
+{{/* Fan out one Job per enabled step in .Values.steps. Each step entry carries:
+
+     gpu:        0 | 1 | 8         — picks the resource block
+     dshmSize:   optional, e.g. "64Gi"  — adds /dev/shm tmpfs of that size
+     nodeSelector: optional map     — pin to specific node/zone
+     extraEnv:   optional map       — extra env vars (NCCL_DEBUG, VLM_SERVER, etc.)
+     script:     required string    — bash payload, run as `bash -c "$script"`
+     enabled:    default false      — must be true to render
+
+   To run one step:  helm template . --set steps.smoke.enabled=true | kubectl apply -f -
+   To run everything in order, enable each in turn (Jobs are immutable once created;
+   `kubectl delete job <name>` before re-applying with a new payload). */}}
+{{- range $name, $step := .Values.steps }}
+{{- if $step.enabled }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cosmos3-{{ $name | kebabcase }}
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: Never
+      {{- with $step.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ $name | kebabcase }}
+          image: {{ required "image must be set — build the Dockerfile in this directory, push to a registry your cluster can pull from, then pass --set image=<registry>/<repo>:<tag>" $.Values.image }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+{{ $step.script | indent 14 }}
+          env:
+            {{- include "cosmos3.env" (dict "hfSecretName" $.Values.hfSecret.name "extraEnv" $step.extraEnv) | nindent 12 }}
+          volumeMounts:
+            {{- include "cosmos3.volumeMounts" $step | nindent 12 }}
+          resources:
+            {{- include "cosmos3.resources" $step | nindent 12 }}
+      volumes:
+        {{- include "cosmos3.volumes" (dict "pvcName" $.Values.pvc.name "dshmSize" $step.dshmSize) | nindent 8 }}
+{{- end }}
+{{- end }}

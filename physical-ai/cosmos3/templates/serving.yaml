@@ -1,0 +1,82 @@
+{{- if .Values.rayServe.enabled }}
+{{/* Ray Serve Deployment exposing the fine-tuned Cosmos3 checkpoint over HTTP.
+     Single-Pod single-node Ray cluster started in-process via
+     `ray.serve.run(..., blocking=True)` (cosmos_framework/inference/ray/serve.py).
+     No KubeRay operator required. POST /generate is the inference endpoint. */}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cosmos3-serve
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # GPU Pods can't share GPUs across replicas during a rolling update
+  selector:
+    matchLabels:
+      app: cosmos3-serve
+  template:
+    metadata:
+      labels:
+        app: cosmos3-serve
+    spec:
+      {{- with .Values.rayServe.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: serve
+          image: {{ required "image must be set — build the Dockerfile in this directory, push to a registry your cluster can pull from, then pass --set image=<registry>/<repo>:<tag>" .Values.image }}
+          command: ["/bin/bash", "-c"]
+          args:
+            - |
+              set -euxo pipefail
+              export LD_LIBRARY_PATH=''
+              export PYTORCH_ALLOC_CONF='expandable_segments:True'
+{{ include "cosmos3.preludePatches" . | indent 14 }}
+              python -m cosmos_framework.inference.ray.serve \
+                --parallelism-preset=latency \
+                -o /mnt/cosmos3/outputs/ray_serve \
+                --checkpoint-path {{ .Values.rayServe.checkpointPath }}
+          ports:
+            - { name: http, containerPort: 8000 }
+          env:
+            {{- include "cosmos3.env" (dict "hfSecretName" .Values.hfSecret.name "extraEnv" (dict "RAY_SERVE_HTTP_HOST" "0.0.0.0")) | nindent 12 }}
+          volumeMounts:
+            {{- include "cosmos3.volumeMounts" (dict "dshmSize" "128Gi") | nindent 12 }}
+          resources:
+            {{- include "cosmos3.resources" (dict "gpu" 8) | nindent 12 }}
+          readinessProbe:
+            {{/* TCP probe — cosmos_framework.inference.ray.serve exposes POST
+                 /generate, not a health endpoint at GET /. TCP-on-8000
+                 succeeds once the proxy is bound. */}}
+            tcpSocket: { port: 8000 }
+            initialDelaySeconds: 120
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 60
+          livenessProbe:
+            {{/* Restart the Pod if the proxy stops responding entirely
+                 (deadlocked sampler, OOM-killed worker, hung Ray serve
+                 actor). Longer initialDelay than readiness — the model
+                 takes minutes to load before /generate becomes routable;
+                 we want readiness to gate traffic earlier than liveness
+                 trips a restart. */}}
+            tcpSocket: { port: 8000 }
+            initialDelaySeconds: 600
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+      volumes:
+        {{- include "cosmos3.volumes" (dict "pvcName" .Values.pvc.name "dshmSize" "128Gi") | nindent 8 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cosmos3-serve
+spec:
+  type: ClusterIP
+  selector:
+    app: cosmos3-serve
+  ports:
+    - { name: http, port: 8000, targetPort: 8000 }
+{{- end }}
