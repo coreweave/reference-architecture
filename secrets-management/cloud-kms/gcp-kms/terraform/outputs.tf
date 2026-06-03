@@ -58,6 +58,11 @@ output "workload_identity_principal" {
   value       = "principal://iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${local.effective_workload_identity_pool_id}/subject/${local.effective_wif_subject}"
 }
 
+output "eso_audience" {
+  description = "WIF provider audience that the ESO SecretStore must request (paste into manifests/20-secret-store.yaml)."
+  value       = local.eso_audience
+}
+
 output "namespace" {
   description = "Kubernetes namespace expected by the default workload identity subject."
   value       = var.namespace

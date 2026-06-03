@@ -9,11 +9,43 @@ locals {
     try(google_iam_workload_identity_pool.cks[0].workload_identity_pool_id, null)
   )
 
+  eso_audience = "//iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${local.effective_workload_identity_pool_id}/providers/${var.workload_identity_provider_id}"
+
   secret_names = {
     DB_USERNAME = "${var.secret_name_prefix}-db-username"
     DB_PASSWORD = "${var.secret_name_prefix}-db-password"
     API_TOKEN   = "${var.secret_name_prefix}-api-token"
   }
+
+  required_services = toset([
+    "iam.googleapis.com",
+    "iamcredentials.googleapis.com",
+    "sts.googleapis.com",
+    "cloudkms.googleapis.com",
+    "secretmanager.googleapis.com",
+  ])
+}
+
+resource "google_project_service" "required" {
+  for_each = local.required_services
+
+  project            = var.project_id
+  service            = each.value
+  disable_on_destroy = false
+}
+
+resource "google_project_service_identity" "secretmanager" {
+  provider = google-beta
+
+  project = var.project_id
+  service = "secretmanager.googleapis.com"
+
+  depends_on = [google_project_service.required]
+}
+
+resource "time_sleep" "wait_for_sm_service_identity" {
+  depends_on      = [google_project_service_identity.secretmanager]
+  create_duration = "60s"
 }
 
 check "workload_identity_pool_id_present" {
@@ -50,8 +82,10 @@ resource "google_iam_workload_identity_pool" "cks" {
 
   project                   = var.project_id
   workload_identity_pool_id = var.workload_identity_pool_id
-  display_name              = "CKS Secrets Workload Identity Pool"
+  display_name              = "CKS Secrets WIF Pool"
   description               = "OIDC federation pool for CKS service account identities used by ESO."
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_iam_workload_identity_pool_provider" "cks_oidc" {
@@ -67,8 +101,13 @@ resource "google_iam_workload_identity_pool_provider" "cks_oidc" {
     "google.subject" = "assertion.sub"
   }
 
+  attribute_condition = "assertion.sub.startsWith(\"system:serviceaccount:${var.namespace}:\")"
+
   oidc {
     issuer_uri = local.effective_cks_oidc_issuer_url
+    allowed_audiences = [
+      "//iam.googleapis.com/projects/${var.project_number}/locations/global/workloadIdentityPools/${var.workload_identity_pool_id}/providers/${var.workload_identity_provider_id}",
+    ]
   }
 }
 
@@ -76,6 +115,8 @@ resource "google_kms_key_ring" "secrets" {
   name     = var.kms_key_ring_name
   location = var.kms_location
   project  = var.project_id
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_kms_crypto_key" "secrets" {
@@ -87,7 +128,9 @@ resource "google_kms_crypto_key" "secrets" {
 resource "google_kms_crypto_key_iam_member" "secret_manager_service_agent" {
   crypto_key_id = google_kms_crypto_key.secrets.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${var.project_number}@gcp-sa-secretmanager.iam.gserviceaccount.com"
+  member        = "serviceAccount:${google_project_service_identity.secretmanager.email}"
+
+  depends_on = [time_sleep.wait_for_sm_service_identity]
 }
 
 resource "google_secret_manager_secret" "app" {
@@ -106,6 +149,8 @@ resource "google_secret_manager_secret" "app" {
       }
     }
   }
+
+  depends_on = [google_kms_crypto_key_iam_member.secret_manager_service_agent]
 }
 
 resource "google_secret_manager_secret_version" "app" {
