@@ -1,0 +1,9 @@
+apiVersion: compute.coreweave.com/v1alpha1
+kind: NodePool
+metadata:
+  name: cpu
+spec:
+  instanceType: cd-gp-i64-erapids
+  targetNodes: 1
+  nodeConfigurationUpdateStrategy:
+    type: OnSpecUpdate

@@ -1,0 +1,39 @@
+# Set the CoreWeave token with:
+# export TF_VAR_coreweave_api_token="<YOUR_COREWEAVE_API_TOKEN>"
+
+# CoreWeave VPC + CKS cluster created by this example.
+zone               = "US-EAST-04A"
+vpc_name           = "ra-secrets-aws-vpc"
+cluster_name       = "ra-secrets-aws-cks"
+kubernetes_version = "v1.35"
+cks_public         = true
+
+vpc_prefixes = [
+  { name = "pod cidr", value = "10.0.0.0/13" },
+  { name = "service cidr", value = "10.16.0.0/22" },
+  { name = "internal lb cidr", value = "10.32.4.0/22" },
+]
+
+host_prefixes = [
+  { name = "primary", type = "PRIMARY", prefixes = ["10.16.192.0/18"] }
+]
+
+aws_region        = "us-east-1"
+
+# Recommended: let this stack create the AWS OIDC provider automatically.
+create_oidc_provider = true
+
+# Only set this when create_oidc_provider = false:
+# oidc_provider_arn = "arn:aws:iam::123456789012:oidc-provider/oidc.cks.coreweave.com/id/replace-me"
+
+namespace            = "secrets-aws"
+service_account_name = "eso-aws-auth"
+role_name            = "ra-eso-aws-secrets-reader"
+
+secret_name_prefix = "ra-demo"
+
+secret_values = {
+  DB_USERNAME = "demo-user"
+  DB_PASSWORD = "replace-me"
+  API_TOKEN   = "replace-me"
+}

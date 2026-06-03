@@ -1,0 +1,42 @@
+# Set the CoreWeave token with:
+# export TF_VAR_coreweave_api_token="<YOUR_COREWEAVE_API_TOKEN>"
+
+# CoreWeave VPC + CKS cluster created by this example.
+zone               = "US-EAST-04A"
+vpc_name           = "ra-secrets-gcp-vpc"
+cluster_name       = "ra-secrets-gcp-cks"
+kubernetes_version = "v1.35"
+cks_public         = true
+
+vpc_prefixes = [
+  { name = "pod cidr", value = "10.0.0.0/13" },
+  { name = "service cidr", value = "10.16.0.0/22" },
+  { name = "internal lb cidr", value = "10.32.4.0/22" },
+]
+
+host_prefixes = [
+  { name = "primary", type = "PRIMARY", prefixes = ["10.16.192.0/18"] }
+]
+
+project_id     = "replace-me"
+project_number = "123456789012"
+
+gcp_region              = "us-central1"
+kms_location            = "us-central1"
+secret_replica_location = "us-central1"
+
+create_workload_identity_pool = true
+workload_identity_pool_id     = "cw-cks-secrets-pool"
+workload_identity_provider_id = "cks-oidc"
+wif_subject                   = "system:serviceaccount:secrets-gcp:eso-gcp-auth"
+
+namespace            = "secrets-gcp"
+service_account_name = "eso-gcp-auth"
+
+secret_name_prefix = "ra-demo"
+
+secret_values = {
+  DB_USERNAME = "demo-user"
+  DB_PASSWORD = "replace-me"
+  API_TOKEN   = "replace-me"
+}
