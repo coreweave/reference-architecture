@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: arena-k8s-web
+  labels:
+    app.kubernetes.io/part-of: arena-k8s-lab
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: arena-k8s-web
+  template:
+    metadata:
+      labels:
+        app: arena-k8s-web
+        app.kubernetes.io/part-of: arena-k8s-lab
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports:
+            - containerPort: 80

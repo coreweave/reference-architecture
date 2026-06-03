@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: arena-k8s-web
+  labels:
+    app.kubernetes.io/part-of: arena-k8s-lab
+spec:
+  type: ClusterIP
+  selector:
+    app: arena-k8s-web
+  ports:
+    - port: 80
+      targetPort: 80
