@@ -50,6 +50,10 @@ Define volumeMounts and volumes for vLLM containers
 - name: {{ .Values.modelCache.name }}
   mountPath: {{ .Values.modelCache.mountPath }}
 {{- end }}
+{{- if and .Values.vllm.zymtraceProfiler .Values.vllm.zymtraceProfiler.enabled }}
+- name: zymtrace-cuda
+  mountPath: {{ .Values.vllm.zymtraceProfiler.mountPath }}
+{{- end }}
 {{- end }}
 
 {{- define "vllm-basic.volumes" -}}
@@ -61,6 +65,12 @@ Define volumeMounts and volumes for vLLM containers
   persistentVolumeClaim:
     claimName: {{ .Values.modelCache.name | quote }}
 {{- end -}}
+{{- if and .Values.vllm.zymtraceProfiler .Values.vllm.zymtraceProfiler.enabled }}
+- name: zymtrace-cuda
+  hostPath:
+    path: {{ .Values.vllm.zymtraceProfiler.hostPath }}
+    type: Directory
+{{- end }}
 {{- end -}}
 
 {{- /*
@@ -90,5 +100,15 @@ Define common environment variables for vLLM containers
 {{- end }}
 - name: UCX_NET_DEVICES
   value: {{ join "," $devices| quote }}
+{{- end }}
+{{- /* Operator-supplied extra env vars (TORCH_LOGS, NCCL_*, VLLM_*, etc.) */ -}}
+{{- range $env := .Values.vllm.extraEnv }}
+- name: {{ $env.name }}
+  value: {{ $env.value | quote }}
+{{- end }}
+{{- /* zymtrace CUDA profiler injection (opt-in) */ -}}
+{{- if and .Values.vllm.zymtraceProfiler .Values.vllm.zymtraceProfiler.enabled }}
+- name: CUDA_INJECTION64_PATH
+  value: {{ printf "%s/%s" .Values.vllm.zymtraceProfiler.mountPath .Values.vllm.zymtraceProfiler.implantLib | quote }}
 {{- end }}
 {{- end -}}

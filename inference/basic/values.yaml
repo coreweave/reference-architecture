@@ -4,6 +4,12 @@ fullnameOverride: ""
 vllm:
   # ──────────────── container-level defaults ────────────────
   command: ["vllm"]
+
+  # Kubernetes scheduler for the pod. Defaults to the cluster default scheduler.
+  # Set to "tenant-slurm-slurm-scheduler" to route the pod through the SUNK
+  # Slurm pod scheduler (requires the pod to live in the scheduler's watched
+  # namespace, e.g. tenant-slurm).
+  schedulerName: "default-scheduler"
   image:
     repository: ghcr.io/coreweave/ml-containers/vllm-tensorizer
     tag: "8552fbc-v0.10.0"
@@ -11,6 +17,19 @@ vllm:
 
   model: "mistralai/Mistral-7B-Instruct-v0.3"
   extraArgs: []
+
+  # zymtrace CUDA profiler injection (opt-in). When enabled, mounts the node's
+  # zymtrace implant (extracted by the profiler DaemonSet) and points
+  # CUDA_INJECTION64_PATH at it so GPU work is attributed at process start.
+  # Folds the previously-imperative `kubectl patch` into the release so it
+  # survives helm upgrades (the 2026-05-29 migration dropped it). Measured
+  # serving overhead <1% on GLM-5.1 c=192 (observer-effect refuted):
+  # cks-glm51-deploy/cluster-probes/20260530T190607Z-glm51-profiler-overhead-ab/.
+  zymtraceProfiler:
+    enabled: false
+    hostPath: /var/lib/zymtrace/profiler
+    mountPath: /opt/zymtrace-cuda-profiler
+    implantLib: libzymtracecudaprofiler.so
 
   resources:
     limits:
@@ -40,6 +59,32 @@ vllm:
 
   tolerations: []
   affinity: {}
+
+  # ──────────────── patched-vllm overlay (CoreWeave fork addition) ────────────────
+  # Optional. Mounts operator-provided patched vLLM Python files DIRECTLY onto
+  # their site-packages locations via per-file subPath mounts. Python's import
+  # machinery transparently picks up the patched files at the normal module
+  # path. NO PYTHONPATH overlay — that approach shadows the rest of the vllm
+  # package and breaks the engine import chain (failure mode documented in
+  # ~/dev/inference/cks-glm51-deploy/cluster-probes/20260525T164656Z-AG-vllm-mtp-k2-upstream-investigation/).
+  #
+  # Schema:
+  #   patchedVllm:
+  #     enabled: false                  # bool; default false (no-op render)
+  #     configMapName: ""               # required when enabled=true; ConfigMap holding the patched files
+  #     vllmRoot: "/usr/local/lib/python3.12/dist-packages/vllm"  # default; image-specific
+  #     files:                          # required when enabled=true; list of overlays
+  #       - key: deep_gemm.py           # ConfigMap data key
+  #         target: utils/deep_gemm.py  # path RELATIVE to vllmRoot
+  #       - key: indexer.py
+  #         target: v1/attention/backends/mla/indexer.py
+  #
+  # When enabled=false (default), the chart renders zero `subPath` mounts and
+  # zero extra volumes — no impact on baseline behavior. Verified via:
+  #   helm template <chart> -f <values> --set vllm.patchedVllm.enabled=false
+  #     | grep -c subPath   # → 0
+  patchedVllm:
+    enabled: false
 
   # ──────────────── workload selection & settings ────────────────
   workload:

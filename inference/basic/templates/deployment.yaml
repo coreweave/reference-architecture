@@ -15,6 +15,7 @@ spec:
       labels:
         app: {{ include "vllm-basic.name" . }}
     spec:
+      schedulerName: {{ $app.schedulerName | default "default-scheduler" }}
       tolerations: {{ toYaml $app.tolerations | nindent 8 }}
       affinity: {{ toYaml $app.affinity | nindent 8 }}
       containers:
@@ -26,7 +27,7 @@ spec:
             - "serve"
             - "{{ $app.model }}"
             {{- range $arg := $app.extraArgs }}
-            - "{{ $arg }}"
+            - {{ $arg | toJson }}
             {{- end }}
           ports:
             - name: {{ $app.port.name }}
@@ -37,7 +38,21 @@ spec:
           resources: {{ toYaml $app.resources | nindent 12 }}
           env: {{ include "vllm-basic.envVars" . | nindent 12 }}
           volumeMounts: {{ include "vllm-basic.volumeMounts" . | nindent 12 }}
+          {{- if and $app.patchedVllm $app.patchedVllm.enabled }}
+            {{- $vllmRoot := $app.patchedVllm.vllmRoot | default "/usr/local/lib/python3.12/dist-packages/vllm" }}
+            {{- range $f := ($app.patchedVllm.files | default (list)) }}
+            - name: configmap-patches
+              mountPath: {{ printf "%s/%s" $vllmRoot $f.target }}
+              subPath: {{ $f.key }}
+              readOnly: true
+            {{- end }}
+          {{- end }}
       volumes: {{ include "vllm-basic.volumes" . | nindent 10 }}
+          {{- if and $app.patchedVllm $app.patchedVllm.enabled }}
+          - name: configmap-patches
+            configMap:
+              name: {{ $app.patchedVllm.configMapName }}
+          {{- end }}
 ---
 {{- if $app.workload.deployment.autoScale.enabled }}
 apiVersion: keda.sh/v1alpha1
