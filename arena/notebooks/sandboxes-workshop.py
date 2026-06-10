@@ -57,7 +57,7 @@ def _():
             [
                 {"title": "Connect", "description": "Paste your CoreWeave API access token"},
                 {"title": "Step 1 — Author a profile", "description": "Choose namespace + egress + runtime class"},
-                {"title": "Step 2 — Deploy a runner", "description": "Submit + poll until READY/CONNECTED"},
+                {"title": "Step 2 — Deploy a runner", "description": "Submit + poll until ready"},
                 {"title": "Step 3 — First sandbox", "description": "Python SDK round-trip"},
                 {"title": "Step 4 — RL with verifiable rewards", "description": "Parallel sandboxes, rewards arrive as they finish"},
                 {"title": "Step 5 — Observability with Weave", "description": "Trace every reward call to W&B"},
@@ -512,42 +512,89 @@ def _(
     else:
         runner_submitted = True
         _out = mo.callout(
-            mo.md(f"✅ **Runner submitted** as `{runner_id}`. Poll status below — typical 20–60s."),
+            mo.md(f"✅ **Runner submitted** as `{runner_id}`. Polling state below — typical 20–60s."),
             kind="success",
         )
     _out
     return (runner_submitted,)
 
 
-@app.cell
-def _():
-    poll_runner_btn = mo.ui.run_button(label="Poll runner state", kind="neutral")
-    poll_runner_btn
-    return (poll_runner_btn,)
-
-
 @app.cell(hide_code=True)
-def _(cw_token: str | None, poll_runner_btn: mo.ui.run_button, runner_id: str, sandbox_get):
-    mo.stop(not cw_token or not poll_runner_btn.value)
+def _(
+    cw_token: str | None,
+    runner_id: str,
+    runner_submitted: bool,
+    sandbox_get,
+):
+    # Auto-poll until the runner reports READY + CONNECTED, or we hit
+    # the timeout. Progress lines stream into the cell output as each
+    # poll lands so the user can watch state evolve.
+    mo.stop(
+        not cw_token or not runner_submitted,
+        mo.md("_Deploy a runner above to start polling._"),
+    )
 
-    _resp = sandbox_get(f"/managed-runners/{runner_id}")
-    if _resp.status_code >= 300:
-        _out = mo.callout(mo.md(f"❌ HTTP {_resp.status_code}\n\n```\n{_resp.text[:400]}\n```"), kind="danger")
-    else:
+    import time as _time
+
+    _poll_interval = 3.0
+    _max_wait_s = 180.0
+    _t0 = _time.time()
+
+    mo.output.append(
+        mo.md(f"⏳ Polling `{runner_id}` until READY + CONNECTED…")
+    )
+
+    _final_status = None
+    while True:
+        _resp = sandbox_get(f"/managed-runners/{runner_id}")
+        _elapsed = _time.time() - _t0
+
+        if _resp.status_code >= 300:
+            _final_status = mo.callout(
+                mo.md(
+                    f"❌ HTTP {_resp.status_code}\n\n```\n{_resp.text[:400]}\n```"
+                ),
+                kind="danger",
+            )
+            break
+
         _body = _resp.json()
         _r = _body[0] if isinstance(_body, list) and _body else _body
         _install = (_r or {}).get("installStatus", "UNKNOWN")
         _connect = (_r or {}).get("connectionStatus", "UNKNOWN")
         _ready = "READY" in _install.upper() and "CONNECTED" in _connect.upper()
-        _out = mo.callout(
+
+        if _ready:
+            _final_status = mo.callout(
+                mo.md(
+                    f"✅ **Runner `{runner_id}` is READY + CONNECTED** "
+                    f"(took {_elapsed:.0f}s)\n\n"
+                    f"- install: **{_install}**\n- connection: **{_connect}**"
+                ),
+                kind="success",
+            )
+            break
+
+        if _elapsed > _max_wait_s:
+            _final_status = mo.callout(
+                mo.md(
+                    f"⚠️ Timed out after {_max_wait_s:.0f}s. Last state:\n\n"
+                    f"- install: **{_install}**\n- connection: **{_connect}**\n\n"
+                    "_Runner may still be starting up. Re-run this cell to keep polling._"
+                ),
+                kind="warn",
+            )
+            break
+
+        mo.output.append(
             mo.md(
-                f"{'✅' if _ready else '⏳'} Runner `{runner_id}`\n\n"
-                f"- install: **{_install}**\n- connection: **{_connect}**\n\n"
-                "_Re-click the poll button until both reach READY + CONNECTED._"
-            ),
-            kind="success" if _ready else "info",
+                f"  …+{_elapsed:.0f}s: install=`{_install}` "
+                f"connection=`{_connect}`"
+            )
         )
-    _out
+        _time.sleep(_poll_interval)
+
+    _final_status
     return
 
 
