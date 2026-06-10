@@ -21,6 +21,7 @@ with app.setup:
     import httpx
     import marimo as mo
     import weave
+    from lib.coreweave import cw_token_input, detect_cw_token
     from lib.ui import about, banner, security_disclaimer, table_of_contents
 
     _orig_signal = signal.signal
@@ -32,7 +33,7 @@ with app.setup:
             return None
 
     signal.signal = _safe_signal
-    from cwsandbox import Sandbox
+    from cwsandbox import AuthHeaders, Sandbox, set_auth_mode
     signal.signal = _orig_signal
 
 
@@ -81,52 +82,86 @@ def _():
 
     - **A CKS cluster** in your CoreWeave org. 
     - **IAM action `SANDBOX_ADMIN`** on your access policy — grants create/update on profiles and runners (transitively grants `SANDBOX_USER` for launching sandboxes). Add it at [console.coreweave.com → Access Policies](https://console.coreweave.com/security-and-access/access-policies).
-    - **A CoreWeave API access token** *(required)* — generate at [console.coreweave.com → Tokens](https://console.coreweave.com/security-and-access/tokens) and copy the Token Secret. You'll paste it into the Connect form below. The same token is used for both the REST control plane and the Python SDK.
+    - **A CoreWeave API access token** *(required)* — generate at [console.coreweave.com → Tokens](https://console.coreweave.com/security-and-access/tokens) and copy the Token Secret. The notebook will try to discover a token automatically (Arena pod identity, the `CW_TOKEN` env var, or a kubeconfig that carries one) and only fall back to the Connect form below if nothing is found. Same token is used for both the REST control plane and the Python SDK.
     - **A W&B API key** *(optional)* — only needed to see Weave traces in Step 4. Get one at [wandb.ai/authorize](https://wandb.ai/authorize). Skip if you don't need run-level observability.
     """)
     return
 
 
 # ----------------------------------------------------------------- #
-# Connect: CW access token + optional W&B key                       #
+# Connect: auto-detect CW token; fall back to a form                #
 # ----------------------------------------------------------------- #
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
     ## Connect
-
-    Paste your tokens below. The **CW access token** is required (REST control
-    plane + SDK data plane). The **W&B API key** is optional — paste it to
-    enable Weave tracing on Step 4 (each reward call shows up as a row in your
-    Weave dashboard with inputs, outputs, and latency).
     """)
     return
 
 
 @app.cell(hide_code=True)
 def _():
-    cw_token_form = (
-        mo.md("""
-        - CW access token *(required)*: {cw_token}
-        - W&B API key *(optional, for Weave tracing)*: {wandb_token}
-        """)
-        .batch(
-            cw_token=mo.ui.text(kind="password", placeholder="CW-SECRET-...", full_width=True),
-            wandb_token=mo.ui.text(kind="password", placeholder="(optional)", full_width=True),
-        )
-        .form(submit_button_label="Connect", bordered=False)
+    auto_token, auto_source = detect_cw_token()
+    return auto_source, auto_token
+
+
+@app.cell(hide_code=True)
+def _(auto_source: str, auto_token: str):
+    _wandb_widget = mo.ui.text(
+        label="W&B API key (optional, for Weave tracing)",
+        kind="password",
+        placeholder="(optional)",
+        full_width=True,
     )
-    cw_token_form
+    if auto_token:
+        _intro = mo.callout(
+            mo.md(
+                f"✅ **CoreWeave token auto-detected** via `{auto_source}`. "
+                "The notebook is already authenticated. Optionally add a W&B "
+                "key for Weave tracing on Step 4, then press Continue."
+            ),
+            kind="success",
+        )
+        cw_token_form = (
+            mo.md("{wandb_token}")
+            .batch(wandb_token=_wandb_widget)
+            .form(submit_button_label="Continue", bordered=False)
+        )
+        _rendered = mo.vstack([_intro, cw_token_form])
+    else:
+        _rendered, cw_token_form = cw_token_input(
+            extra_fields={"wandb_token": _wandb_widget}
+        )
+    _rendered
     return (cw_token_form,)
 
 
 @app.cell(hide_code=True)
-def _(cw_token_form: mo.ui.form):
-    cw_token = (cw_token_form.value or {}).get("cw_token")
-    wandb_token = (cw_token_form.value or {}).get("wandb_token") or None
-    mo.stop(not cw_token, mo.md("_Paste a CW access token above and press Connect._"))
+def _(auto_token: str, cw_token_form: mo.ui.form):
+    _v = cw_token_form.value or {}
+    if auto_token:
+        cw_token = auto_token
+        wandb_token = _v.get("wandb_token") or None
+    else:
+        # No auto-detected token — the form is the only source.
+        cw_token = _v.get("cw_token")
+        wandb_token = _v.get("wandb_token") or None
+        mo.stop(not cw_token, mo.md("_Submit the Connect form above to continue._"))
 
-    os.environ["CWSANDBOX_API_KEY"] = cw_token
+    # Register the CoreWeave token with the cwsandbox SDK through its
+    # documented auth hook. The token lives only in this lambda's closure
+    # — it never enters the process environment, so it isn't visible to
+    # child processes or persisted to shell history.
+    set_auth_mode(
+        "sandboxes-workshop",
+        lambda: AuthHeaders(
+            headers={"Authorization": f"Bearer {cw_token}"},
+            strategy="api_key",
+        ),
+    )
+
+    # Weave (W&B) reads WANDB_API_KEY from the environment at wandb.init()
+    # and has no equivalent callback hook, so this one has to be env-scoped.
     if wandb_token:
         os.environ["WANDB_API_KEY"] = wandb_token
 
@@ -183,48 +218,87 @@ def _():
     mo.md(r"""
     ## Cluster identity
 
-    The runner is deployed onto a specific CKS cluster. Defaults match the SA
-    workshop cluster; override for your own.
+    The runner is deployed onto a specific CKS cluster. Pick from the clusters
+    your token can access — this list is fetched live from the CoreWeave
+    Platform API.
     """)
     return
 
 
-@app.cell
-def _():
-    cluster_form = (
-        mo.md("""
-        - Cluster zone (e.g. `us-east-04a`): {zone}
-        - Cluster name: {name}
-        - Runner ID (your identifier): {runner_id}
-        """)
-        .batch(
-            zone=mo.ui.text(value="us-east-04a"),
-            name=mo.ui.text(value="sandbox-testing"),
-            runner_id=mo.ui.text(value="workshop-runner"),
-        )
-        .form(submit_button_label="Use these values", bordered=False)
+@app.cell(hide_code=True)
+def _(cw_token: str | None):
+    mo.stop(not cw_token, mo.md("_Connect first to populate the cluster list._"))
+
+    _resp = httpx.get(
+        "https://api.coreweave.com/v1beta1/cks/clusters",
+        headers={"Authorization": f"Bearer {cw_token}"},
+        timeout=15.0,
     )
-    cluster_form
+    if _resp.status_code != 200:
+        cluster_form = None
+        _rendered = mo.callout(
+            mo.md(
+                f"❌ **Couldn't list clusters** — HTTP {_resp.status_code}\n\n"
+                f"```\n{_resp.text[:400]}\n```"
+            ),
+            kind="danger",
+        )
+    else:
+        _running = [
+            c for c in _resp.json().get("items", [])
+            if c.get("status") == "STATUS_RUNNING"
+        ]
+        _running.sort(key=lambda c: (c.get("zone", ""), c.get("name", "")))
+
+        if not _running:
+            cluster_form = None
+            _rendered = mo.callout(
+                mo.md("❌ **No running clusters found in your org.** Provision a CKS cluster first."),
+                kind="danger",
+            )
+        else:
+            # Dropdown options: human label → (zone, name) tuple
+            _options = {
+                f"{c['zone'].lower()} / {c['name']}": (c["zone"].lower(), c["name"])
+                for c in _running
+            }
+            cluster_form = (
+                mo.md("""
+                - CKS cluster: {cluster}
+                - Runner ID: {runner_id}
+                """)
+                .batch(
+                    cluster=mo.ui.dropdown(options=_options),
+                    runner_id=mo.ui.text(value="workshop-runner"),
+                )
+                .form(submit_button_label="Use these values", bordered=False)
+            )
+            _rendered = cluster_form
+    _rendered
     return (cluster_form,)
 
 
 @app.cell(hide_code=True)
-def _(cluster_form: mo.ui.form):
-    _defaults = {"zone": "us-east-04a", "name": "sandbox-testing", "runner_id": "workshop-runner"}
-    _committed = bool(cluster_form.value)
-    _v = cluster_form.value or _defaults
-    cluster_zone = _v["zone"]
-    cluster_name = _v["name"]
-    runner_id = _v["runner_id"]
+def _(cluster_form):
+    mo.stop(cluster_form is None, mo.md("_(no cluster list available — see error above)_"))
+
+    _v = cluster_form.value or {}
+    mo.stop(
+        not _v.get("cluster"),
+        mo.md("_Pick a cluster from the dropdown and press **Use these values**._"),
+    )
+
+    cluster_zone, cluster_name = _v["cluster"]
+    runner_id = _v.get("runner_id") or "workshop-runner"
 
     _status = mo.callout(
         mo.md(
-            f"{'✅ **Using these values:**' if _committed else '⏳ **Defaults (press Use these values to commit):**'}\n\n"
+            "✅ **Using these values:**\n\n"
             f"- Cluster zone: `{cluster_zone}`\n"
             f"- Cluster name: `{cluster_name}`\n"
             f"- Runner ID: `{runner_id}`"
         ),
-        kind="success" if _committed else "info",
+        kind="success",
     )
     _status
     return cluster_name, cluster_zone, runner_id
