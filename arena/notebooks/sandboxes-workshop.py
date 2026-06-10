@@ -316,14 +316,22 @@ def _():
     container image, runtime class, namespace strategy, network policy, and
     pod placement.
 
-    Adjust the form, then press **Create profile**. Re-submitting creates a
-    *new* profile with a new UUID — the cleanup step at the bottom only
-    deletes the most recent one (`profile_id`).
+    Field reference (full schema in the [Profile reference docs](https://docs.coreweave.com/products/sandboxes/reference/profile)):
+
+    - **Profile display name** — Human-readable name for the profile; unique within the org. Step 1 will 409 if you reuse a name — that's handled (we reuse the existing profile).
+    - **Namespace strategy** — How sandboxes are grouped into Kubernetes namespaces. `per-user` isolates per researcher (typical for multi-tenant agent workloads); `per-org`, `per-profile`, and `static` are alternatives for shared-service or single-namespace setups. See [namespace strategies]('https://docs.coreweave.com/products/sandboxes/profiles/configure#choose-a-namespace-strategy').
+    - **Egress mode** — Network policy applied to sandbox pods. `none` blocks all outbound traffic (safe default for untrusted code); `internet` allows public egress; `allowlist` permits only specific CIDRs. See [network policy](https://docs.coreweave.com/products/sandboxes/profiles/configure#network-policy).
+    - **Runtime class** — Container runtime / isolation level. `(default)` uses containerd's `runc` (standard Linux containers, shared kernel — fine for trusted code). `gvisor` adds syscall-level isolation (recommended for untrusted code, requires gVisor-labeled nodes). `nvidia` is required for GPU sandboxes. See [runtime classes](https://docs.coreweave.com/products/sandboxes/profiles/configure#runtime-class).
+    - **CPU / Memory limit** — Per-sandbox resource ceiling. Sandboxes can't exceed these even if the node has spare capacity. Lower = more sandboxes fit on a node; higher = each sandbox can do more work.
+
+    Adjust the form, then press **Create profile**. Re-submitting with the same
+    name reuses the existing profile (no duplicates). The cleanup step at the
+    bottom only deletes the most recent profile ID.
     """)
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     profile_form = (
         mo.md("""
@@ -459,7 +467,7 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     deploy_runner_btn = mo.ui.run_button(label="Deploy runner", kind="success")
     deploy_runner_btn
@@ -626,7 +634,7 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     launch_sandbox_btn = mo.ui.run_button(label="Launch a sandbox and run echo", kind="success")
     launch_sandbox_btn
@@ -689,7 +697,7 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _():
     run_agent_btn = mo.ui.run_button(label="Run parallel reward eval (5 sandboxes)", kind="success")
     run_agent_btn
@@ -856,7 +864,7 @@ def _():
 
     - The **Connect callout** above (✅ Weave tracing enabled → [view
       dashboard])
-    - The **Step 4 summary callout** (🔭 Weave traces → [view dashboard])
+    - The **Step 4 summary callout** (Weave traces → [view dashboard])
 
     You can also navigate manually: [wandb.ai](https://wandb.ai) → your
     entity → the `sandboxes-workshop` project → **Weave** tab on the left
@@ -890,7 +898,7 @@ def _():
     return
 
 
-@app.cell
+@app.cell(hide_code=True)   
 def _():
     delete_runner_btn = mo.ui.run_button(label="🗑️ Delete runner", kind="danger")
     delete_profile_btn = mo.ui.run_button(label="🗑️ Delete profile", kind="danger")
