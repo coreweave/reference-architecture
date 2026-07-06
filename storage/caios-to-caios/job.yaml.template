@@ -1,0 +1,69 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: caios-xregion-copy
+  namespace: data-migration
+spec:
+  backoffLimit: 6
+  ttlSecondsAfterFinished: 345600 # 4 days
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: s5cmd-copy
+        image: alpine:3.20
+        # s5cmd S3->S3 copy is server-side (CopyObject): bytes move between AZs
+        # on the backend, not through this pod. Resources can stay modest; the
+        # pod just drives concurrent copy requests.
+        resources:
+          requests:
+            cpu: "2"
+            memory: "4Gi"
+          limits:
+            memory: "8Gi"
+        envFrom:
+        - secretRef:
+            name: caios-credentials      # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+        env:
+        # Cross-region copy goes through the primary endpoint (TLS v1.3). LOTA
+        # (http://cwlota.com) only caches reads and is not used for the copy.
+        - name: ENDPOINT_URL
+          value: https://cwobject.com
+        - name: SRC_BUCKET
+          value: <YOUR_SOURCE_BUCKET_NAME>        # UPDATE THIS
+        - name: DST_BUCKET
+          value: <YOUR_DESTINATION_BUCKET_NAME>   # UPDATE THIS
+        # Tune for your object-size mix: many small files -> raise NUMWORKERS;
+        # few large files -> lower NUMWORKERS and raise CONCURRENCY.
+        - name: NUMWORKERS
+          value: "256"
+        - name: CONCURRENCY
+          value: "5"
+        # Pinned CoreWeave s5cmd fork release (defaults to virtual-host
+        # addressing for cwobject.com / cwlota.com, required by AI Object Storage).
+        - name: S5CMD_TAG
+          value: v2.3.0-acb67716
+        - name: S5CMD_VER
+          value: 2.3.0-acb67716
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          set -eu
+          apk add --no-cache ca-certificates tar >/dev/null
+          case "$(uname -m)" in
+            x86_64)  ASSET="Linux-64bit" ;;
+            aarch64) ASSET="Linux-arm64" ;;
+            *) echo "unsupported arch: $(uname -m)"; exit 1 ;;
+          esac
+          URL="https://github.com/coreweave/s5cmd/releases/download/${S5CMD_TAG}/s5cmd_${S5CMD_VER}_${ASSET}.tar.gz"
+          echo "[setup] downloading CoreWeave s5cmd fork: ${URL}"
+          cd /tmp
+          wget -q "$URL"
+          tar xzf "s5cmd_${S5CMD_VER}_${ASSET}.tar.gz" s5cmd
+          chmod +x s5cmd
+          echo "[copy] ${SRC_BUCKET} -> ${DST_BUCKET} via ${ENDPOINT_URL}"
+          # sync (not cp) so re-runs are incremental and the Job is resumable.
+          exec ./s5cmd --endpoint-url "$ENDPOINT_URL" \
+              --numworkers "$NUMWORKERS" \
+              sync --concurrency "$CONCURRENCY" \
+              "s3://${SRC_BUCKET}/*" "s3://${DST_BUCKET}/"
