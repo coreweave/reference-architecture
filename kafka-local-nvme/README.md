@@ -7,7 +7,7 @@ This non-production reference deploys Strimzi Kafka with dynamically provisioned
 
 ## Important storage limits
 
-`/mnt/local` is node-local storage. Treat its contents as lost when a node is lost or rebooted; Kubernetes PV/PVC identity does not make the underlying bytes durable. These manifests include no custom repair or cleanup automation.
+`/mnt/local` is node-local storage. Treat its contents as lost when a node is lost or rebooted; Kubernetes PV/PVC identity does not make the underlying bytes durable.
 
 The `kafka-local` StorageClass uses `Retain` and the node pools use `deleteClaim: false`. Removing Kafka can therefore leave PVs, PVCs, and local data behind. Reusing the same namespace and Kafka resource names can reuse the same PVC-named directories; plan cleanup and identity changes deliberately.
 
@@ -68,6 +68,29 @@ After Kafka and `kafka-local-topic` are Ready, run the basic producer/readback c
 ```
 
 It verifies exact readback of a small uniquely tagged message set produced with `acks=all`; it does not test node loss, reboot recovery, HA, performance, or security.
+
+## Optional Repair DaemonSet
+
+The normal Kustomizations do not install repair. The optional Repair DaemonSet only recreates absent directories in the exact managed hierarchy `/mnt/local/kafka/<namespace>/<claim>` after it verifies the host mount and an authorized, unchanged Node identity. It never restores lost bytes, deletes anything, or mutates PVs or PVCs. Kafka can rebuild only from healthy replicas; this is not automatic reboot, replacement, cleanup, or provider-behavior proof.
+
+Use it only during serialized operator maintenance:
+
+1. Build the image with `./scripts/build-kafka-local-pv-repair-image.sh`, then publish it outside this repository and use its immutable `repository@sha256:...` digest. The helper never publishes an image.
+2. Capture each Node's exact `name`, hostname, Kubernetes UID, and nonempty provider ID in a tab-separated allowlist. Any identity difference requires explicit reauthorization and a newly rendered manifest.
+3. Independently verify the host `/mnt/local` mount filesystem, source, and canonical sorted comma-separated mount options; omit the `ro`/`rw` mode because the agent verifies that the host mount is writable itself.
+4. Render and apply the complete generated manifest (including ServiceAccount and RBAC). The renderer requires Python 3.
+
+   ```bash
+   ./scripts/render-kafka-local-pv-repair-manifest.sh \
+     --image registry.example/kafka-local-pv-repair@sha256:REPLACE_WITH_64_HEX \
+     --mount-fs ext4 --mount-source /dev/REPLACE_ME \
+     --mount-options nodev,nosuid \
+     --nodes nodes.tsv | kubectl apply -f -
+   ```
+
+5. Obtain the required Pod Security approval for `hostPID` and a read-write `/mnt/local` hostPath. The container runs as root only to create missing root-owned hierarchy components, with `CHOWN` and `DAC_OVERRIDE` as its only added capabilities. Check DaemonSet readiness and logs, use OnDelete rollout updates, and serialize all related operator maintenance.
+
+The two-node profile can lose controller quorum. Simultaneous local-storage loss can be unrecoverable even with the five-node profile.
 
 ## Validate manifests
 

@@ -22,7 +22,7 @@ The five-node profile enables Cruise Control and uses larger CPU and memory requ
 
 `/mnt/local` is node-local and volatile: loss or reboot of a node can make its data unavailable. A local PV and its PVC keep Kubernetes identity during ordinary Pod replacement on the same running node; they do not preserve data through node loss or reboot.
 
-The StorageClass has `Retain`, and Strimzi node pools set `deleteClaim: false`. Deleting Kafka can leave PVs, PVCs, and local directories. A later deployment with the same namespace and PVC names may encounter or reuse those directories. This package deliberately provides no automated repair or cleanup path; establish an operations and data-retention process before use.
+The StorageClass has `Retain`, and Strimzi node pools set `deleteClaim: false`. Deleting Kafka can leave PVs, PVCs, and local directories. A later deployment with the same namespace and PVC names may encounter or reuse those directories. Establish an operations and data-retention process before use.
 
 PVC sizes are not hard limits for directory-backed local-path volumes. [The capacity check](../scripts/check-node-capacity.sh) is a read-only preflight that checks selected-node space. It is not a quota or an ongoing capacity guarantee.
 
@@ -31,6 +31,14 @@ PVC sizes are not hard limits for directory-backed local-path volumes. [The capa
 Install Strimzi, apply `provisioner/local-path`, label the intended nodes, run the capacity preflight, and apply one profile. See the [package README](../README.md) for commands.
 
 Verify that PVCs bind, Kafka resources become Ready, and every PV reports a local path and node affinity consistent with its Kafka Pod. The included [smoke test](../scripts/smoke-test.sh) produces with `acks=all` and verifies exact readback of a uniquely tagged message set. It is a basic deployment check only.
+
+## Optional repair boundary
+
+The repository does not install the Repair DaemonSet through its normal Kustomizations. When explicitly rendered and applied, it is a privileged host-storage component: it uses `hostPID` to inspect `/proc/1/mountinfo` and a read-write hostPath for `/mnt/local`. Its trust boundary therefore requires a Pod Security exception, deliberate operator ownership, and serialized maintenance.
+
+The agent is narrowly bounded. It may recreate only missing components of the exact managed directory hierarchy for a Bound local PV with an authorized same Node identity and a verified host mount signature. It does not restore data, delete directories, or write Kubernetes PV/PVC objects. Kafka rebuilds only from healthy replicas. It makes no claim of automatic reboot or replacement recovery, cleanup, provider validation, CoreWeave validation, or Kind testing. It runs as root solely to create missing root-owned directories, with only `CHOWN` and `DAC_OVERRIDE` added after dropping all capabilities.
+
+Operators must build the image, publish it externally, and render with an immutable digest; the build helper never publishes. Rendering also requires Python 3, a captured exact Node name/hostname/UID/provider-ID allowlist, and independently verified mount filesystem, source, and canonical sorted options excluding `ro`/`rw`. Any identity mismatch requires reauthorization and a new rendered ConfigMap. Confirm readiness and logs, use OnDelete changes, and keep maintenance serialized. The two-node profile can lose controller quorum; simultaneous loss can be unrecoverable.
 
 ## Customer decisions before deployment
 

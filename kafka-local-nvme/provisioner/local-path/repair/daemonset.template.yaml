@@ -1,0 +1,77 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: __CONFIG_MAP_NAME__
+  namespace: kafka
+immutable: true
+data:
+  config.json: |-
+__CONFIG_JSON_INDENTED__
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kafka-local-pv-repair-reader
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes"]
+    resourceNames: __NODE_NAMES_JSON__
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kafka-local-pv-repair-reader
+subjects:
+  - kind: ServiceAccount
+    name: kafka-local-pv-repair
+    namespace: kafka
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kafka-local-pv-repair-reader
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kafka-local-pv-repair
+  namespace: kafka
+spec:
+  updateStrategy: {type: OnDelete}
+  selector: {matchLabels: {app.kubernetes.io/name: kafka-local-pv-repair}}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: kafka-local-pv-repair}
+      annotations: {kafka.local/repair-config: __CONFIG_HASH__}
+    spec:
+      hostPID: true
+      serviceAccountName: kafka-local-pv-repair
+      nodeSelector: {kafka.local/kafka-local: "true"}
+      containers:
+        - name: repair
+          image: __IMAGE__
+          env:
+            - {name: REPAIR_CONFIG_PATH, value: /etc/repair/config.json}
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+          ports: [{name: health, containerPort: 8080}]
+          resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {cpu: 100m, memory: 128Mi}}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            runAsUser: 0
+            capabilities: {drop: ["ALL"], add: ["CHOWN", "DAC_OVERRIDE"]}
+            seccompProfile: {type: RuntimeDefault}
+          readinessProbe: {httpGet: {path: /readyz, port: health}}
+          livenessProbe: {httpGet: {path: /livez, port: health}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/repair, readOnly: true}
+            - {name: host-mnt-local, mountPath: /mnt/local}
+      volumes:
+        - name: config
+          configMap: {name: __CONFIG_MAP_NAME__}
+        - name: host-mnt-local
+          hostPath: {path: /mnt/local, type: Directory}
