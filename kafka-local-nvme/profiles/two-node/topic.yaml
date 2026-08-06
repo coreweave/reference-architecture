@@ -1,0 +1,15 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaTopic
+metadata:
+  name: kafka-local-topic
+  labels:
+    strimzi.io/cluster: kafka-local
+    app.kubernetes.io/part-of: kafka-local
+    kafka.local/profile: two-node
+spec:
+  partitions: 10
+  replicas: 2
+  config:
+    cleanup.policy: delete
+    min.insync.replicas: 1
+    retention.ms: 86400000

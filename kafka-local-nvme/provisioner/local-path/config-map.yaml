@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: local-path-config
+  namespace: local-path-storage
+  labels:
+    app.kubernetes.io/name: local-path-provisioner
+    kafka.local/component: storage-provisioner
+data:
+  config.json: |-
+    {
+      "nodePathMap": [
+        {
+          "node": "DEFAULT_PATH_FOR_NON_LISTED_NODES",
+          "paths": [
+            "/mnt/local/kafka"
+          ]
+        }
+      ]
+    }
+  # The helper Pod runs this automatically when a PVC is provisioned.
+  setup: |-
+    #!/bin/sh
+    set -eu
+    mkdir -m 0770 -p "$VOL_DIR"
+    chown 1001:0 "$VOL_DIR"
+    chmod 0770 "$VOL_DIR"
+  # reclaimPolicy is Retain, so normal PVC deletion does not invoke teardown.
+  # Keep a path guard in case the policy is deliberately changed in future.
+  teardown: |-
+    #!/bin/sh
+    set -eu
+    case "$VOL_DIR" in
+      /mnt/local/kafka/*)
+        rm -rf -- "$VOL_DIR"
+        ;;
+      *)
+        echo "Refusing to remove unexpected path: $VOL_DIR" >&2
+        exit 1
+        ;;
+    esac
+  helperPod.yaml: |-
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: helper-pod
+    spec:
+      priorityClassName: system-node-critical
+      tolerations:
+        - key: node.kubernetes.io/disk-pressure
+          operator: Exists
+          effect: NoSchedule
+        - key: dedicated
+          operator: Equal
+          value: kafka
+          effect: NoSchedule
+      containers:
+        - name: helper-pod
+          image: docker.io/library/busybox:1.36.1
+          imagePullPolicy: IfNotPresent

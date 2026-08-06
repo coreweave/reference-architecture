@@ -1,0 +1,54 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: controllers
+  labels:
+    strimzi.io/cluster: kafka-local
+    app.kubernetes.io/part-of: kafka-local
+spec:
+  replicas: 3
+  roles:
+    - controller
+  # Controller metadata also uses local PVs. Losing multiple controller
+  # directories can lose KRaft quorum even when broker replicas are healthy.
+  storage:
+    type: persistent-claim
+    size: 20Gi
+    class: kafka-local
+    deleteClaim: false
+  resources:
+    requests:
+      cpu: "500m"
+      memory: 1Gi
+    limits:
+      cpu: "1"
+      memory: 2Gi
+  jvmOptions:
+    -Xms: 1g
+    -Xmx: 1g
+  template:
+    pod:
+      terminationGracePeriodSeconds: 300
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: kafka
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kafka.local/kafka-local
+                    operator: In
+                    values:
+                      - "true"
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    strimzi.io/cluster: kafka-local
+                    strimzi.io/controller-role: "true"

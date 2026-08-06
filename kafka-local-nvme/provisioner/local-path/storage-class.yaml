@@ -1,0 +1,18 @@
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: kafka-local
+  labels:
+    app.kubernetes.io/name: local-path-provisioner
+    kafka.local/component: storage-provisioner
+  annotations:
+    # Create Kubernetes local PVs with topology tied to the selected node.
+    defaultVolumeType: local
+provisioner: rancher.io/local-path
+parameters:
+  # Keep the directory stable for the Strimzi PVC name, matching the
+  # ordinal-style storage identity expected from a stateful workload.
+  nodePath: /mnt/local/kafka
+  pathPattern: "{{ .PVC.Namespace }}/{{ .PVC.Name }}/"
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
