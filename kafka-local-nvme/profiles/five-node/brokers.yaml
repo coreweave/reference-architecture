@@ -14,8 +14,6 @@ spec:
   # /mnt/local/kafka on the node selected for the broker.
   storage:
     type: persistent-claim
-    # One 400 GiB broker plus one 20 GiB controller requests at most 420 GiB
-    # on a node, below 50% of a 1 TiB /mnt/local filesystem.
     size: 400Gi
     class: kafka-local
     deleteClaim: false

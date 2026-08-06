@@ -15,18 +15,6 @@ import (
 
 var ErrUnavailable = errors.New("Kubernetes reader is not configured")
 
-// UnavailableReader prevents accidental mutation-capable fallback behaviour.
-type UnavailableReader struct{}
-
-func (UnavailableReader) ListPVs(context.Context) ([]PV, error)     { return nil, ErrUnavailable }
-func (UnavailableReader) GetPV(context.Context, string) (PV, error) { return PV{}, ErrUnavailable }
-func (UnavailableReader) GetPVC(context.Context, string, string) (PVC, error) {
-	return PVC{}, ErrUnavailable
-}
-func (UnavailableReader) GetNode(context.Context, string) (NodeIdentity, error) {
-	return NodeIdentity{}, ErrUnavailable
-}
-
 type APIReader struct {
 	client      *http.Client
 	base, token string
