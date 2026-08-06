@@ -20,6 +20,16 @@ fail() {
 for script in "$script_directory"/*.sh; do
   bash -n "$script" || fail "invalid Bash syntax: ${script#$root_directory/}"
 done
+bash -n "$root_directory/tests/render-kafka-local-pv-repair-manifest-test.sh" || fail 'invalid renderer test syntax'
+"$root_directory/tests/render-kafka-local-pv-repair-manifest-test.sh" || fail 'renderer test failed'
+
+(
+  cd "$root_directory"
+  GOCACHE="$temporary_directory/go-build" go test ./...
+  GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -c ./internal/repair -o "$temporary_directory/repair-linux.test"
+  GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go vet ./internal/repair ./cmd/kafka-local-pv-repair
+) || fail 'Go validation failed'
+printf 'Linux runtime tests are executed by scripts/build-kafka-local-pv-repair-image.sh (Docker required).\n'
 
 provisioner="$temporary_directory/provisioner.yaml"
 two_node="$temporary_directory/two-node.yaml"
