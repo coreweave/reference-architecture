@@ -1,58 +1,62 @@
+# /// script
+# requires-python = ">=3.12"
+# dependencies = [
+#     "k8s==0.28.0",
+#     "kubernetes==35.0.0",
+#     "marimo>=0.20.2",
+#     "ruamel-yaml>=0.19.1",
+#     "typing-extensions>=4.15.0"
+# ]
+# ///
+
 import marimo
 
 __generated_with = "0.19.7"
 app = marimo.App(width="medium", app_title="CoreWeave ARENA")
 
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    ![CoreWeave ARENA Banner](public/banner.jpg)
-    """)
-    return
+with app.setup:
+    import marimo as mo
+    from lib.remote_execution_helpers import shell
+    from lib.k8s import K8s
+    from lib.ui import about, banner, security_disclaimer, table_of_contents
 
 
 @app.cell(hide_code=True)
 def _():
-    # setup cell runs before anything else, recommend putting values in here
-    import marimo as mo
-
-    """
-    Import SSH helpers from arena library.
-
-    Configuration via environment variables:
-        CW_ARENA_SSH_KEY_PATH: Path to SSH private key (default: /root/.ssh/id_rsa)
-        CW_ARENA_SSH_HOST: SSH host (e.g., user+tenant@sunk.tenant.coreweave.app)
-    """
-    from lib.remote_execution_helpers import shell
-
-    return mo, shell
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    # CoreWeave AI Labs: SUNK Cluster
-
-    /// admonition | About This Notebook
-        type: info
-
-    This notebook provides a walkthrough for inspecting and benchmarking your SUNK (Slurm on Kubernetes) cluster.
-    ///
-    """)
-    return
+    TEST_NAMES = {                                                                                                                                                                                                                         
+    "gb300-4x":        "nccl-test-distributed-gb200-nvl72-enroot.slurm",
+    "gb300-4x-e":      "nccl-test-distributed-gb300-roce-nvl72-enroot.slurm",
+    "gb200-4x":        "nccl-test-distributed-gb200-nvl72-enroot.slurm",
+    "b300-8x":         "nccl-test-distributed-h100-64.slurm",
+    "b200-8x":         "nccl-test-distributed-h100-64.slurm",
+    "gd-8xh200ib-i128":"nccl-test-distributed-h100-64.slurm",
+    "gd-8xh100ib-i128":"nccl-test-distributed-h100-64.slurm",
+    "gd-8xa100-i128":  "nccl-test-distributed-a100-64.slurm",
+    # L40S, L40, GH200, RTX Pro 6000 — no matching nccl test script                                                                                                                                                                               
+}
+    return TEST_NAMES
 
 
 @app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    /// details | Table of Contents
-
-    - **Cluster Inspection** - View nodes, partitions, and user info
-    - **NCCL Benchmarks** - Run distributed GPU communication tests
-    - **Job Observability** - Grafana dashboards and monitoring
-    ///
-    """)
+def _():
+    _elements = [
+        banner(),
+        about(
+            "SUNK Cluster Walkthrough",
+            """This notebook provides a walkthrough for inspecting and benchmarking your SUNK (Slurm on Kubernetes) cluster.<br>
+               _If you are running this notebook in edit mode, make sure you start by running all cells in the bottom right._
+            """,
+        ),
+        table_of_contents(
+            [
+                {"title": "Cluster Inspection", "description": "View nodes, partitions, and user info"},
+                {"title": "NCCL Benchmarks", "description": "Run distributed GPU communication tests"},
+                {"title": "Job Observability", "description": "Grafana dashboards and monitoring"},
+            ]
+        ),
+        security_disclaimer(),
+    ]
+    mo.vstack(_elements)
     return
 
 
@@ -84,21 +88,21 @@ def _(mo):
 @app.cell
 def _(shell):
     # Slurm cluster info:
-    print(shell("sinfo"))
+    shell("sinfo")
     return
 
 
 @app.cell
 def _(shell):
     # Slurm user info:
-    print(shell("sacctmgr show users"))
+    shell("sacctmgr show users")
     return
 
 
 @app.cell
 def _(shell):
     # Slurm accounting info:
-    print(shell("sacctmgr show associations format=User,Account,Partition,QOS"))
+    shell("sacctmgr show associations format=User,Account,Partition,QOS")
     return
 
 
@@ -113,7 +117,7 @@ def _(mo):
 @app.cell
 def _(shell):
     # Node info
-    print(shell("scontrol show nodes"))
+    shell("scontrol show nodes")
     return
 
 
@@ -127,7 +131,7 @@ def _(mo):
 
 @app.cell
 def _(shell):
-    print(shell("scontrol show partition"))
+    shell("scontrol show partition")
     return
 
 
@@ -173,6 +177,24 @@ def _(mo, num_nodes):
 
 
 @app.cell(hide_code=True)
+def _(mo, K8s):
+    k8s = K8s()
+    nodes = k8s.nodes
+    gpu_nodes = nodes.get("gpu") or {}
+    gpu_keys = list(gpu_nodes.keys())
+    if not gpu_keys:
+        gpu_keys = ["(no GPU nodes detected)"]
+    default_node_type = gpu_keys[0]
+    node_type_dropdown = mo.ui.dropdown(
+        options=gpu_keys, value=default_node_type, label="Node type"
+    )
+    _gpu_type_ui = mo.md(
+        f"**GPU node types (from cluster API)**\n\n{node_type_dropdown}"
+    )
+    _gpu_type_ui
+    return (node_type_dropdown,)
+
+@app.cell(hide_code=True)
 def _(mo):
     submit_btn = mo.ui.run_button(label="Submit NCCL Test Job")
     submit_btn
@@ -180,11 +202,22 @@ def _(mo):
 
 
 @app.cell
-def _(num_nodes, shell, submit_btn):
+def _(
+    mo,
+    num_nodes,
+    shell,
+    submit_btn,
+    node_type_dropdown: mo.ui.dropdown,
+    TEST_NAMES,
+):
     if submit_btn.value:
-        cmd = f"cd /mnt/data/arena/benchmarks/nccl/nccl-tests/slurm && sbatch -N {num_nodes.value} nccl-test-distributed-h100-64.slurm"
-        print(f"Running: sbatch -N {num_nodes.value} ...")
-        print(shell(cmd))
+        if node_type_dropdown.value not in TEST_NAMES:
+            print(f"No NCCL slurm script mapped for node type {node_type_dropdown.value!r}.")
+        else:
+            script = TEST_NAMES[node_type_dropdown.value]
+            cmd = f"cd /mnt/data/arena/benchmarks/nccl/nccl-tests/slurm && sbatch -N {num_nodes.value} {script}"
+            print(f"Running: sbatch -N {num_nodes.value} ...")
+            shell(cmd)
     else:
         print("Click 'Submit NCCL Test Job' to run the benchmark")
     return
@@ -192,13 +225,13 @@ def _(num_nodes, shell, submit_btn):
 
 @app.cell
 def _(shell):
-    print(shell("squeue"))
+    shell("squeue")
     return
 
 
 @app.cell
 def _(shell):
-    print(shell("ls /mnt/data/arena/benchmarks/nccl/nccl-tests/slurm/*.out"))
+    shell("ls /mnt/data/arena/benchmarks/nccl/nccl-tests/slurm/*.out")
     return
 
 
