@@ -24,21 +24,21 @@ The five-node profile enables Cruise Control and uses larger CPU and memory requ
 
 The StorageClass has `Retain`, and Strimzi node pools set `deleteClaim: false`. Deleting Kafka can leave PVs, PVCs, and local directories. A later deployment with the same namespace and PVC names may encounter or reuse those directories. Establish an operations and data-retention process before use.
 
-PVC sizes are not hard limits for directory-backed local-path volumes. [The capacity check](../scripts/check-node-capacity.sh) is a read-only preflight that checks selected-node space. It is not a quota or an ongoing capacity guarantee.
+PVC sizes are not hard limits for directory-backed local-path volumes: directory-backed local-path PVC requests neither reserve nor enforce `/mnt/local` capacity. Operators must independently verify available capacity and leave operational headroom on every selected node.
 
 ## Deployment and verification
 
-Install Strimzi, apply `provisioner/local-path`, label the intended nodes, run the capacity preflight, and apply one profile. See the [package README](../README.md) for commands.
+Install Strimzi, apply `provisioner/local-path`, label the intended nodes, and apply one profile. See the [package README](../README.md) for commands.
 
 Verify that PVCs bind, Kafka resources become Ready, and every PV reports a local path and node affinity consistent with its Kafka Pod. The included [smoke test](../scripts/smoke-test.sh) produces with `acks=all` and verifies exact readback of a uniquely tagged message set. It is a basic deployment check only.
 
 ## Optional repair boundary
 
-The repository does not install the Repair DaemonSet through its normal Kustomizations. When explicitly rendered and applied, it is a privileged host-storage component: it uses `hostPID` to inspect `/proc/1/mountinfo` and a read-write hostPath for `/mnt/local`. Its trust boundary therefore requires a Pod Security exception, deliberate operator ownership, and serialized maintenance.
+The repository does not install the Repair DaemonSet through its normal Kustomizations. When explicitly rendered and applied, it is a privileged host-storage component: it uses `hostPID` to inspect `/proc/1/mountinfo` and a read-write hostPath for `/mnt/local`. Its trust boundary requires a Pod Security exception, deliberate operator ownership, and serialized maintenance.
 
-The agent is narrowly bounded. It may recreate only missing components of the exact managed directory hierarchy for a Bound local PV with an authorized same Node identity and a verified host mount signature. It does not restore data, delete directories, or write Kubernetes PV/PVC objects. Kafka rebuilds only from healthy replicas. It makes no claim of automatic reboot or replacement recovery, cleanup, provider validation, CoreWeave validation, or Kind testing. It runs as root solely to create missing root-owned directories, with only `CHOWN` and `DAC_OVERRIDE` added after dropping all capabilities.
+The agent may recreate only missing components of the exact managed directory hierarchy for a Bound local PV with an authorized same Node identity and a verified host mount signature. It does not restore data, delete directories, or write Kubernetes PV/PVC objects. Kafka rebuilds only from healthy replicas; this is not a claim of automatic reboot or replacement recovery, cleanup, or provider validation. It runs as root solely to create missing root-owned directories, with only `CHOWN` and `DAC_OVERRIDE` added after dropping all capabilities.
 
-Operators must build the image, publish it externally, and render with an immutable digest; the build helper never publishes. Rendering also requires Python 3, a captured exact Node name/hostname/UID/provider-ID allowlist, and independently verified mount filesystem, source, and canonical sorted options excluding `ro`/`rw`. Any identity mismatch requires reauthorization and a new rendered ConfigMap. Confirm readiness and logs, use OnDelete changes, and keep maintenance serialized. The two-node profile can lose controller quorum; simultaneous loss can be unrecoverable.
+Operators build and publish the image themselves, then render with its immutable digest. The Docker build runs Linux tests. Rendering requires Python 3, a captured exact Node name/hostname/UID/provider-ID allowlist, and independently verified mount filesystem, source, and canonical sorted options excluding `ro`/`rw`. Any identity mismatch requires reauthorization and a newly rendered ConfigMap; the changed Pod template rolls the DaemonSet automatically. Check rollout status and logs, and keep maintenance serialized. The two-node profile can lose controller quorum; simultaneous loss can be unrecoverable.
 
 ## Customer decisions before deployment
 

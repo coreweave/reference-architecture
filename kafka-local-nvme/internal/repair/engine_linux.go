@@ -5,7 +5,6 @@ package repair
 import (
 	"context"
 	"fmt"
-	"sync"
 )
 
 type Engine struct {
@@ -14,15 +13,9 @@ type Engine struct {
 	NodeName  string
 	MountInfo string
 	Mount     MountSignature
-	ready     bool
-	mu        sync.RWMutex
 }
 
-func (e *Engine) Ready() bool { e.mu.RLock(); defer e.mu.RUnlock(); return e.ready }
 func (e *Engine) Repair(ctx context.Context) error {
-	e.mu.Lock()
-	e.ready = false
-	e.mu.Unlock()
 	candidates, err := Candidates(ctx, e.Reader, e.Allowlist, e.NodeName)
 	if err != nil {
 		return err
@@ -54,8 +47,5 @@ func (e *Engine) Repair(ctx context.Context) error {
 			return err
 		}
 	}
-	e.mu.Lock()
-	e.ready = true
-	e.mu.Unlock()
 	return nil
 }

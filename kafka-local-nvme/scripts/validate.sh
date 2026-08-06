@@ -29,7 +29,6 @@ bash -n "$root_directory/tests/render-kafka-local-pv-repair-manifest-test.sh" ||
   GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -c ./internal/repair -o "$temporary_directory/repair-linux.test"
   GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go vet ./internal/repair ./cmd/kafka-local-pv-repair
 ) || fail 'Go validation failed'
-printf 'Linux runtime tests are executed by scripts/build-kafka-local-pv-repair-image.sh (Docker required).\n'
 
 provisioner="$temporary_directory/provisioner.yaml"
 two_node="$temporary_directory/two-node.yaml"
