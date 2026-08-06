@@ -1,0 +1,55 @@
+apiVersion: kafka.strimzi.io/v1
+kind: KafkaNodePool
+metadata:
+  name: brokers
+  labels:
+    strimzi.io/cluster: kafka-local
+    app.kubernetes.io/part-of: kafka-local
+spec:
+  replicas: 2
+  roles:
+    - broker
+  # Strimzi creates one PVC per broker. The kafka-local StorageClass
+  # dynamically provisions a stable PVC-named local PV directory beneath
+  # /mnt/local/kafka on the node selected for the broker.
+  storage:
+    type: persistent-claim
+    # One 400 GiB broker plus the conservative worst case of all three 20 GiB
+    # controllers requests 460 GiB, below 50% of a 1 TiB /mnt/local filesystem.
+    size: 400Gi
+    class: kafka-local
+    deleteClaim: false
+  resources:
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "4"
+      memory: 4Gi
+  jvmOptions:
+    -Xms: 2g
+    -Xmx: 2g
+  template:
+    pod:
+      terminationGracePeriodSeconds: 300
+      tolerations:
+        - key: dedicated
+          operator: Equal
+          value: kafka
+          effect: NoSchedule
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kafka.local/kafka-local
+                    operator: In
+                    values:
+                      - "true"
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchLabels:
+                  strimzi.io/cluster: kafka-local
+                  strimzi.io/broker-role: "true"

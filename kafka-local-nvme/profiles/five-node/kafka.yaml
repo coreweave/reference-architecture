@@ -1,0 +1,45 @@
+apiVersion: kafka.strimzi.io/v1
+kind: Kafka
+metadata:
+  name: kafka-local
+  labels:
+    app.kubernetes.io/name: kafka
+    app.kubernetes.io/instance: kafka-local
+    app.kubernetes.io/part-of: kafka-local
+    kafka.local/profile: five-node
+spec:
+  kafka:
+    version: 4.3.0
+    metadataVersion: "4.3"
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: tls
+        port: 9093
+        type: internal
+        tls: true
+    rack:
+      type: topology-label
+      topologyKey: kubernetes.io/hostname
+    # Strimzi generates one Kafka PodDisruptionBudget across all broker and
+    # controller node pools. The default is 1; it is explicit here so planned
+    # voluntary disruptions can never make more than one Kafka Pod unavailable.
+    template:
+      podDisruptionBudget:
+        maxUnavailable: 1
+    config:
+      auto.create.topics.enable: false
+      min.insync.replicas: 3
+      offsets.topic.replication.factor: 5
+      transaction.state.log.replication.factor: 5
+      transaction.state.log.min.isr: 3
+      unclean.leader.election.enable: false
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+  cruiseControl: {}
+  kafkaExporter:
+    groupRegex: ".*"
+    topicRegex: ".*"
