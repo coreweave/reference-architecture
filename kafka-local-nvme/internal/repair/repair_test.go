@@ -10,11 +10,14 @@ import (
 )
 
 type fakeReader struct {
-	pvs    []PV
-	pv     PV
-	pvc    PVC
-	node   NodeIdentity
-	change bool
+	pvs              []PV
+	pv               PV
+	pvc              PVC
+	node             NodeIdentity
+	change           bool
+	cancel           context.CancelFunc
+	cancelOnNodeCall int
+	nodeCalls        int
 }
 
 func (f *fakeReader) ListPVs(context.Context) ([]PV, error) { return f.pvs, nil }
@@ -26,8 +29,14 @@ func (f *fakeReader) GetPV(context.Context, string) (PV, error) {
 	}
 	return f.pv, nil
 }
-func (f *fakeReader) GetPVC(context.Context, string, string) (PVC, error)   { return f.pvc, nil }
-func (f *fakeReader) GetNode(context.Context, string) (NodeIdentity, error) { return f.node, nil }
+func (f *fakeReader) GetPVC(context.Context, string, string) (PVC, error) { return f.pvc, nil }
+func (f *fakeReader) GetNode(context.Context, string) (NodeIdentity, error) {
+	f.nodeCalls++
+	if f.cancel != nil && f.nodeCalls == f.cancelOnNodeCall {
+		f.cancel()
+	}
+	return f.node, nil
+}
 
 func valid() (PV, PVC, NodeIdentity, Allowlist) {
 	n := NodeIdentity{"n", "host", "nodeuid", "provider"}
@@ -115,6 +124,28 @@ func TestEngineRevalidates(t *testing.T) {
 	e := Engine{Reader: f, Allowlist: a, MountInfo: m, Mount: MountSignature{"/dev/nvme", "ext4", []string{"rw"}}}
 	if e.Repair(context.Background()) == nil {
 		t.Fatal("changed resource accepted")
+	}
+}
+
+func TestEngineDoesNotMutateAfterCancellation(t *testing.T) {
+	p, c, n, a := valid()
+	ctx, cancel := context.WithCancel(context.Background())
+	f := &fakeReader{pvs: []PV{p}, pv: p, pvc: c, node: n, cancel: cancel, cancelOnNodeCall: 2}
+	m := filepath.Join(t.TempDir(), "mountinfo")
+	if err := os.WriteFile(m, []byte("1 0 8:1 / /mnt/local rw - ext4 /dev/nvme rw\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ensured := false
+	e := Engine{
+		Reader: f, Allowlist: a, NodeName: "n", MountInfo: m,
+		Mount:           MountSignature{"/dev/nvme", "ext4", []string{}},
+		ensureHierarchy: func(string) error { ensured = true; return nil },
+	}
+	if err := e.Repair(ctx); err != context.Canceled {
+		t.Fatalf("Repair() error = %v, want context canceled", err)
+	}
+	if ensured {
+		t.Fatal("ensure hierarchy called after cancellation")
 	}
 }
 

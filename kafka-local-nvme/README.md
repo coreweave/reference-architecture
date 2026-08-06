@@ -92,7 +92,7 @@ Use it only during serialized operator maintenance:
      --nodes nodes.tsv | kubectl apply -f -
    ```
 
-5. Obtain the required Pod Security approval for `hostPID` and a read-write `/mnt/local` hostPath. The container runs as root only to create missing root-owned hierarchy components, with `CHOWN` and `DAC_OVERRIDE` as its only added capabilities. Check the DaemonSet rollout and logs, and serialize all related operator maintenance. A newly rendered authorization changes the Pod template and rolls the DaemonSet automatically.
+5. Obtain the required Pod Security approval for `hostPID` and a read-write `/mnt/local` hostPath. The container runs as root only to create missing hierarchy components; only newly created components are mode `0770` and assigned UID `1001`/GID `0`, while existing components are left untouched. `CHOWN` and `DAC_OVERRIDE` are its only added capabilities. Check the DaemonSet rollout and logs, and serialize all related operator maintenance. A newly rendered authorization changes the Pod template and rolls the DaemonSet automatically.
 
 The two-node profile can lose controller quorum. Simultaneous local-storage loss can be unrecoverable even with the five-node profile.
 

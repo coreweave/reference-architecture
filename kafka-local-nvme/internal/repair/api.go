@@ -11,18 +11,25 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 var ErrUnavailable = errors.New("Kubernetes reader is not configured")
 
+const (
+	serviceAccountTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	apiRequestTimeout       = 10 * time.Second
+)
+
 type APIReader struct {
-	client      *http.Client
-	base, token string
+	client    *http.Client
+	base      string
+	tokenPath string
 }
 
 func NewInClusterReader() (*APIReader, error) {
-	token, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
-	if err != nil {
+	if _, err := loadServiceAccountToken(serviceAccountTokenPath); err != nil {
 		return nil, err
 	}
 	ca, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
@@ -37,14 +44,44 @@ func NewInClusterReader() (*APIReader, error) {
 	if host == "" || port == "" {
 		return nil, ErrUnavailable
 	}
-	return &APIReader{&http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}, "https://" + host + ":" + port, string(token)}, nil
+	return &APIReader{
+		client:    newAPIClient(pool),
+		base:      "https://" + host + ":" + port,
+		tokenPath: serviceAccountTokenPath,
+	}, nil
 }
+
+func newAPIClient(pool *x509.CertPool) *http.Client {
+	return &http.Client{
+		Timeout: apiRequestTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
+		},
+	}
+}
+
+func loadServiceAccountToken(path string) (string, error) {
+	token, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read service account token: %w", err)
+	}
+	normalized := strings.TrimSpace(string(token))
+	if normalized == "" {
+		return "", errors.New("service account token is empty")
+	}
+	return normalized, nil
+}
+
 func (r *APIReader) get(ctx context.Context, path string, out any) error {
+	token, err := loadServiceAccountToken(r.tokenPath)
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, r.base+path, nil)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+r.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 	res, err := r.client.Do(req)
 	if err != nil {
 		return err

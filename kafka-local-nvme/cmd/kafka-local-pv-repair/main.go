@@ -11,6 +11,8 @@ import (
 	"github.com/coreweave/reference-architecture/kafka-local-nvme/internal/repair"
 )
 
+const reconciliationTimeout = 20 * time.Second
+
 func main() {
 	config, err := repair.LoadConfig(env("REPAIR_CONFIG_PATH", "/etc/repair/config.json"))
 	if err != nil {
@@ -26,7 +28,10 @@ func main() {
 	}
 	engine := &repair.Engine{Reader: reader, Allowlist: allowed, NodeName: os.Getenv("NODE_NAME"), MountInfo: "/proc/1/mountinfo", Mount: repair.MountSignature{Source: config.MountSource, FSType: config.MountFilesystem, Options: config.MountOptions}}
 	for {
-		if err := engine.Repair(context.Background()); err != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), reconciliationTimeout)
+		err := engine.Repair(ctx)
+		cancel()
+		if err != nil {
 			log.Printf("repair reconciliation refused: %v", err)
 		}
 		time.Sleep(30 * time.Second)

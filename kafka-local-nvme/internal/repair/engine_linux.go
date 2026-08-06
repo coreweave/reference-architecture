@@ -13,6 +13,8 @@ type Engine struct {
 	NodeName  string
 	MountInfo string
 	Mount     MountSignature
+
+	ensureHierarchy func(string) error
 }
 
 func (e *Engine) Repair(ctx context.Context) error {
@@ -43,7 +45,14 @@ func (e *Engine) Repair(ctx context.Context) error {
 		if err = VerifyHostMount(e.MountInfo, e.Mount); err != nil {
 			return err
 		}
-		if err = EnsureHierarchy(expected); err != nil {
+		if err = ctx.Err(); err != nil {
+			return err
+		}
+		ensure := e.ensureHierarchy
+		if ensure == nil {
+			ensure = EnsureHierarchy
+		}
+		if err = ensure(expected); err != nil {
 			return err
 		}
 	}

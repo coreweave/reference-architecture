@@ -12,6 +12,16 @@ command -v kubectl >/dev/null 2>&1 || {
   exit 1
 }
 
+command -v python3 >/dev/null 2>&1 || {
+  printf 'python3 is required for repair manifest rendering.\n' >&2
+  exit 1
+}
+
+command -v go >/dev/null 2>&1 || {
+  printf 'go is required for Go test and vet validation.\n' >&2
+  exit 1
+}
+
 fail() {
   printf 'Validation error: %s\n' "$1" >&2
   exit 1
@@ -25,9 +35,9 @@ bash -n "$root_directory/tests/render-kafka-local-pv-repair-manifest-test.sh" ||
 
 (
   cd "$root_directory"
-  GOCACHE="$temporary_directory/go-build" go test ./...
-  GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -c ./internal/repair -o "$temporary_directory/repair-linux.test"
-  GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go vet ./internal/repair ./cmd/kafka-local-pv-repair
+  GOCACHE="$temporary_directory/go-build" go test ./... || exit 1
+  GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -c ./internal/repair -o "$temporary_directory/repair-linux.test" || exit 1
+  GOCACHE="$temporary_directory/go-build" GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go vet ./internal/repair ./cmd/kafka-local-pv-repair || exit 1
 ) || fail 'Go validation failed'
 
 provisioner="$temporary_directory/provisioner.yaml"
