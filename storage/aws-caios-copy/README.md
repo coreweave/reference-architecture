@@ -64,7 +64,7 @@ For access to every bucket in the account, add the policy:
         "*"
       ],
       "principals": 
-        "role/https://oidc.cks.coreweave.com/id/3f393060-f8dd-4833-96b7-756e37c43223:system:serviceaccount:<NAMESPACE}:aws-to-caios-rclone"
+        "role/https://oidc.cks.coreweave.com/id/<ID>:system:serviceaccount:<NAMESPACE>:aws-to-caios-rclone"
     } 
   ]
 }
