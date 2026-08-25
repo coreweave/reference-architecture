@@ -1,0 +1,105 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rclone-config
+data:
+  rclone.conf: |
+    [aws]
+    type = s3
+    provider = AWS
+    env_auth = true
+    profile = aws
+    region = <AWS-REGION>
+    acl = private
+
+    [caios]
+    type = s3
+    provider = Other
+    env_auth = true
+    endpoint = https://cwobject.com
+    region = <US-EAST-04A>
+    force_path_style = false
+    acl = private
+
+  aws-config: |
+    [profile aws]
+    region = <AWS-REGION>
+    role_arn = arn:aws:iam::<AWS-ACCOUNT-ID>:role/<AWS-S3-READER-ROLE>
+    web_identity_token_file = /var/run/secrets/aws-irsa/token
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-to-caios-rclone
+  annotations:
+    caios.coreweave.com/inject: "true"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: aws-to-caios-rclone
+spec:
+  schedule: "0 2 * * *" # 2am daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: aws-to-caios-rclone
+          restartPolicy: OnFailure
+          volumes:
+            - name: rclone-config
+              configMap:
+                name: rclone-config
+                items:
+                  - key: rclone.conf
+                    path: rclone.conf
+            - name: aws-config
+              configMap:
+                name: rclone-config
+                items:
+                  - key: aws-config
+                    path: config
+            - name: aws-irsa-token
+              projected:
+                sources:
+                  - serviceAccountToken:
+                      path: token
+                      audience: sts.amazonaws.com
+                      expirationSeconds: 3600
+          containers:
+            - name: rclone
+              image: rclone/rclone:latest
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  rclone copy \
+                    --config /etc/rclone/rclone.conf \
+                    aws:<AWS-SOURCE-BUCKET><AWS-SOURCE-PREFIX> \
+                    caios:<CAIOS-DEST-BUCKET><CAIOS-DEST-PREFIX> \
+                    -v
+              env:
+                - name: RCLONE_CONFIG
+                  value: /etc/rclone/rclone.conf
+                - name: AWS_CONFIG_FILE
+                  value: /etc/aws/config
+              volumeMounts:
+                - name: rclone-config
+                  mountPath: /etc/rclone
+                - name: aws-config
+                  mountPath: /etc/aws
+                  readOnly: true
+                - name: aws-irsa-token
+                  mountPath: /var/run/secrets/aws-irsa
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  memory: "4Gi"
