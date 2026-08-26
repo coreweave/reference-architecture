@@ -1,0 +1,86 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rclone-config
+data:
+  rclone.conf: |
+    [caios-1]
+    type = s3
+    provider = Other
+    env_auth = true
+    endpoint = https://cwobject.com
+    region = <US-EAST-04A>
+    force_path_style = false
+    acl = private
+
+    [caios-2]
+    type = s3
+    provider = Other
+    env_auth = true
+    endpoint = https://cwobject.com
+    region = <CA-EAST-01A>
+    force_path_style = false
+    acl = private
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: caios-to-caios-rclone
+  annotations:
+    caios.coreweave.com/inject: "true"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: caios-to-caios-rclone
+spec:
+  schedule: "0 2 * * *" # 2am daily
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          serviceAccountName: caios-to-caios-rclone
+          restartPolicy: OnFailure
+          volumes:
+            - name: rclone-config
+              configMap:
+                name: rclone-config
+                items:
+                  - key: rclone.conf
+                    path: rclone.conf
+          containers:
+            - name: rclone
+              image: rclone/rclone:latest
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -e
+                  rclone copy \
+                    --transfers 16 \
+                    --checkers 32 \
+                    --multi-thread-streams 12 \
+                    --s3-chunk-size 32M \
+                    --s3-upload-concurrency 8 \
+                    --buffer-size 64M \
+                    --fast-list \
+                    --config /etc/rclone/rclone.conf \
+                    caios-1:<SOURCE-BUCKET><SOURCE-PREFIX> \
+                    caios-2:<DEST-BUCKET><DEST-PREFIX> \
+                    -v
+              env:
+                - name: RCLONE_CONFIG
+                  value: /etc/rclone/rclone.conf
+              volumeMounts:
+                - name: rclone-config
+                  mountPath: /etc/rclone
+              resources:
+                requests:
+                  cpu: "2"
+                  memory: "4Gi"
+                limits:
+                  memory: "16Gi"
