@@ -1,0 +1,23 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "coreweave-docs": {
+      "type": "remote",
+      "url": "https://docs.coreweave.com/mcp"
+    },
+    "coreweave-mission-control": {
+      "type": "remote",
+      "url": "https://mc.coreweave.com/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:CW_SECRET}"
+      }
+    },
+    "wandb": {
+      "type": "remote",
+      "url": "https://mcp.withwandb.com/mcp",
+      "headers": {
+        "Authorization": "Bearer {env:WANDB_API_KEY}"
+      }
+    }
+  }
+}

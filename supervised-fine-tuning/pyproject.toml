@@ -1,0 +1,55 @@
+[project]
+name = "coreweave-finetuning"
+version = "0.1.0"
+description = "Fine-tune on CoreWeave Sunk"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+
+dependencies = [
+    "datasets==4.8.4",
+    "marimo>=0.23.8",
+    "peft==0.20.0",
+    "torch>=2.12.0,<2.13.0",
+    "axolotl @ git+https://github.com/axolotl-ai-cloud/axolotl.git@main",
+    "torchvision>=0.27.1",
+    "cut-cross-entropy[transformers] @ git+https://github.com/axolotl-ai-cloud/ml-cross-entropy.git@4dfa522",
+    "boto3>=1.41.5",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+xformers = { index = "pytorch-cu130" }
+triton = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130"}
+
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+
+reportMissingTypeStubs = "none"
+reportMissingImports = "error"
+reportMissingModuleSource = "error"
+reportOptionalMemberAccess = "warning"
+reportOptionalSubscript = "warning"
+reportOptionalCall = "warning"
+reportPrivateUsage = "warning"
+reportUnusedImport = "error"
+reportUnusedVariable = "warning"
+reportUnusedClass = "warning"
+reportUnusedFunction = "warning"
+
+reportGeneralTypeIssues = "warning"
+reportArgumentType = "warning"
+reportAssignmentType = "warning"
+reportReturnType = "warning"
+reportUnknownMemberType = "none"
+reportUnknownParameterType = "none"
+reportUnknownVariableType = "none"
+reportMissingTypeArgument = "none"
+
+reportUntypedBaseClass = "warning"

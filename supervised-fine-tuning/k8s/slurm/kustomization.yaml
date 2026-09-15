@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: tenant-slurm
+
+helmCharts:
+  - name: slurm-supporting
+    repo: oci://coreweave.jfrog.io/cw-solutions-architecture-services-oci/charts
+    version: "2.26.2"
+    releaseName: slurm-supporting
+    valuesFile: slurm-supporting.yaml
+    namespace: tenant-slurm
+
+  - name: slurm
+    repo: http://helm.corp.ingress.ord1.coreweave.com
+    version: "7.4.1"
+    releaseName: slurm
+    valuesFile: slurm.yaml
+    namespace: tenant-slurm

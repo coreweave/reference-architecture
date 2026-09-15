@@ -1,0 +1,50 @@
+base_model: Qwen/Qwen3-14B
+
+strict: false
+
+chat_template: qwen3
+
+seed: 42
+
+datasets:
+  - path: "winglian/pirate-ultrachat-10k"
+    type: chat_template
+    split: train
+    eot_tokens:
+      - <|im_end|>
+
+sequence_len: 2048
+sample_packing: true
+
+load_in_4bit: true
+adapter: qlora
+lora_r: 32
+lora_alpha: 64
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - gate_proj
+  - down_proj
+  - up_proj
+
+gradient_accumulation_steps: 2
+micro_batch_size: 8
+num_epochs: 1
+optimizer: paged_adamw_8bit
+lr_scheduler: cosine
+learning_rate: 0.0002
+
+bf16: auto
+tf32: true
+
+gradient_checkpointing: true
+logging_steps: 5
+attn_implementation: sdpa
+
+warmup_ratio: 0.1
+evals_per_epoch: 1
+saves_per_epoch: 1
+weight_decay: 0.01

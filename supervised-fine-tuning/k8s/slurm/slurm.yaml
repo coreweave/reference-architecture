@@ -1,0 +1,113 @@
+gpusd:
+  enabled: true
+sssdContainer:
+  enabled: false
+directoryCache:
+  source: nsscache
+nsscache:
+  enabled: true
+  existingSecret: nsscache-scim-secret
+  sudoGroups:
+    - slurm-sudo
+  nsscacheConfig:
+    default:
+      source: scim
+      scim_base_url: https://api.coreweave.com/scim/cw623e
+      scim_users_parameters: filter=active eq "true"&groups=slurm-users,slurm-sudo
+      scim_groups_parameters: excludeInactiveUsers=true&includeVirtualUserGroups=slurm-users,slurm-sudo
+slurmConfig:
+  PreemptMode: REQUEUE # When a job is preempted, it will be requeued
+  PreemptType: preempt/partition_prio # Preempt based on the partition's priority
+  PreemptExemptTime: "-1" # Jobs can be preempted as soon as they start
+  SelectTypeParameters: CR_Core_Memory
+  JobRequeue: "1" # All jobs can be requeued if necessary (instead of cancelled)
+  ProctrackType: proctrack/cgroup
+  TaskPlugin: task/cgroup,task/affinity
+  cgroupConfig:
+    CgroupPlugin: cgroup/v2
+    IgnoreSystemd: true
+    ConstrainCores: true
+    ConstrainDevices: true
+    ConstrainRAMSpace: true
+scheduler:
+  enabled: true
+  scope:
+    type: cluster
+moco:
+  enabled: true
+controller:
+  stateVolume:
+    storageClassName: shared-vast
+login:
+  enabled: true
+  replicas: 1
+  s6:
+    packages:
+      type: oneshot
+      timeoutUp: 600000 # 10m
+      script: |
+        #!/usr/bin/env sh
+        set -ex
+        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+        unzip awscliv2.zip
+        sudo ./aws/install --update
+        curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+  service:
+    metadata:
+      "0":
+        annotations:
+          service.beta.kubernetes.io/coreweave-load-balancer-ip-families: ipv4
+          service.beta.kubernetes.io/coreweave-load-balancer-type: public
+          service.beta.kubernetes.io/external-hostname: sunk
+  updateStrategy:
+    type: OnDelete
+  resources:
+    limits:
+      memory: 128Gi
+      cpu: "16"
+    requests:
+      memory: 1Gi
+      cpu: "1"
+compute:
+  gpusd:
+    enabled: true
+  s6:
+    packages:
+      type: oneshot
+      timeoutUp: 600000 # 10m
+      script: |
+        #!/usr/bin/env sh
+        set -ex
+        curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local/bin" sh
+  prologConfigMap: slurm-supporting-prolog
+  epilogConfigMap: slurm-supporting-epilog
+  pyxis:
+    enabled: true
+    mountHome: true
+    plugstackOptions:
+      - container_scope=job
+    enrootConfig:
+      ENROOT_UNSHARE_PID: y
+      ENROOT_UNSHARE_IPC: y
+      ENROOT_UNSHARE_UTS: y
+  volumeMounts:
+    - mountPath: /mnt/home
+      name: slurm-home
+    - mountPath: /mnt/data
+      name: slurm-data
+  volumes:
+    - name: slurm-data
+      persistentVolumeClaim:
+        claimName: slurm-data
+    - name: slurm-home
+      persistentVolumeClaim:
+        claimName: slurm-home
+  autoPartition:
+    enabled: true
+  nodes:
+    b200:
+      enabled: true
+      replicas: 2
+      definitions:
+        - cu130
+        - b200-8x

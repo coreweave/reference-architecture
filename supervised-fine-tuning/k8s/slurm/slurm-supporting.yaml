@@ -1,0 +1,7 @@
+storage:
+  - name: slurm-data
+    storageClassName: shared-vast
+    size: 1Ti
+  - name: slurm-home
+    storageClassName: shared-vast
+    size: 1Ti

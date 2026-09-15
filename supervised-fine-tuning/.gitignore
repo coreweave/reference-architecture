@@ -1,0 +1,16 @@
+.venv
+.uv-cache
+.envrc
+.env
+logs
+fine_tuning/outputs
+
+inference/vllm/charts
+
+k8s/*/charts
+last_run_prepared
+
+wandb
+
+*.dec.*
+result
