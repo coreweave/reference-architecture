@@ -3,8 +3,6 @@ from typing import Literal
 
 import marimo as mo
 import requests
-from kubernetes import config
-from kubernetes.client.configuration import Configuration
 
 
 def validate_cw_token(token: str) -> int:
@@ -67,6 +65,12 @@ def detect_cw_token(  # noqa: C901
         return "", "Not Found"
 
     try:
+        # kubeconfig parsing needs the kubernetes package, which is optional
+        # for callers that don't list it in their PEP 723 deps. ImportError
+        # is caught by the outer except and falls through to "Not Found".
+        from kubernetes import config
+        from kubernetes.client.configuration import Configuration
+
         contexts, active_context = config.list_kube_config_contexts(config_file=kubeconfig_path)
 
         # Use specified context or active context
@@ -113,22 +117,60 @@ def detect_cw_token(  # noqa: C901
         return "", "Not Found"
 
 
-def cw_token_input() -> tuple[mo.Html | None, mo.ui.form | None]:
+def cw_token_input(
+    extra_fields: dict[str, object] | None = None,
+) -> tuple[mo.Html | None, mo.ui.form | None]:
     """Create a form for a user to input their CW_TOKEN secret for auth.
 
-    To access the token in your code, use token_form.value.get("cw_token")
+    Args:
+        extra_fields: Optional mapping of {name: widget} for additional
+            form fields to include alongside the CoreWeave token. Each
+            widget should already carry its own label
+            (e.g. mo.ui.text(label="...", kind="password")). Values are
+            accessible at ``form.value[name]`` alongside ``form.value["cw_token"]``.
+
+    To access the token in your code, use token_form.value.get("cw_token").
     """
+    if not extra_fields:
+        token_form = (
+            mo.md("{cw_token}")
+            .batch(cw_token=mo.ui.text(kind="password", placeholder="CW-SECRET-...", full_width=True))  # type: ignore
+            .form(submit_button_label="Connect", bordered=False)
+        )
+        token_ui = mo.md(
+            f"""
+            /// admonition | Manual Initialization Required
+                type: warning
+
+            Automatic CoreWeave credentials not found. Please enter your [CoreWeave access token](https://console.coreweave.com/tokens) to initialize the ObjectStorage client.
+            ///
+
+            {token_form}
+            """
+        )
+        return token_ui, token_form
+
+    fields: dict[str, object] = {
+        "cw_token": mo.ui.text(  # type: ignore
+            label="CoreWeave access token (required)",
+            kind="password",
+            placeholder="CW-SECRET-...",
+            full_width=True,
+        ),
+    }
+    fields.update(extra_fields)
+    template = "\n\n".join(f"{{{name}}}" for name in fields)
     token_form = (
-        mo.md("{cw_token}")
-        .batch(cw_token=mo.ui.text(kind="password", placeholder="CW-SECRET-...", full_width=True))  # type: ignore
+        mo.md(template)
+        .batch(**fields)  # type: ignore
         .form(submit_button_label="Connect", bordered=False)
     )
     token_ui = mo.md(
         f"""
-        /// admonition | Manual Initialization Required
-            type: warning
+        /// admonition | Provide credentials
+            type: info
 
-        Automatic CoreWeave credentials not found. Please enter your [CoreWeave access token](https://console.coreweave.com/tokens) to initialize the ObjectStorage client.
+        Paste your [CoreWeave access token](https://console.coreweave.com/tokens) below, plus any additional credentials this notebook needs.
         ///
 
         {token_form}
