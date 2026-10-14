@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: linux-legacy-vm-ingress
+  namespace: vm-workloads
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: linux-legacy-vm
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: vm-client
+      ports:
+        - protocol: TCP
+          port: 8080
