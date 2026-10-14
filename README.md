@@ -6,3 +6,4 @@ Reference architectures for various use cases at CoreWeave.
 - [Two-node PyTorch training with Kueue and Kubeflow Trainer](./training/kueue-kubeflow/README.md)
 - [secrets-management](./secrets-management/README.md): Cloud KMS-backed secret manager patterns for Kubernetes workloads.
 - [kafka-local-nvme](./kafka-local-nvme/README.md): Strimzi Kafka reference for CoreWeave local NVMe, with opt-in local-PV repair.
+- [kubevirt](./kubevirt/README.md): Customer-managed, CPU-only KubeVirt reference for rehosting a Linux VM workload on CKS. GPU VFIO passthrough is unsupported.
