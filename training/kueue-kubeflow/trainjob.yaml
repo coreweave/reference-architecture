@@ -1,0 +1,52 @@
+apiVersion: trainer.kubeflow.org/v1alpha1
+kind: TrainJob
+metadata:
+  name: two-node-h100-allreduce
+  namespace: training
+  labels:
+    kueue.x-k8s.io/queue-name: training
+spec:
+  activeDeadlineSeconds: 1800
+  runtimeRef:
+    apiGroup: trainer.kubeflow.org
+    kind: ClusterTrainingRuntime
+    name: torch-distributed
+  trainer:
+    image: nvcr.io/nvidia/pytorch:25.08-py3
+    command: ["/bin/bash", "-lc"]
+    args:
+      - |
+        set -euo pipefail
+        cat > /tmp/all_reduce.py <<'PY'
+        import os
+        import torch
+        import torch.distributed as dist
+
+        local_rank = int(os.environ["LOCAL_RANK"])
+        torch.cuda.set_device(local_rank)
+        dist.init_process_group(backend="nccl")
+        value = torch.ones(1, device=f"cuda:{local_rank}")
+        dist.all_reduce(value)
+        print(f"rank={dist.get_rank()} world_size={dist.get_world_size()} sum={value.item():g}", flush=True)
+        dist.destroy_process_group()
+        PY
+        exec torchrun \
+          --nnodes="$PET_NNODES" \
+          --nproc-per-node="$PET_NPROC_PER_NODE" \
+          --node-rank="$PET_NODE_RANK" \
+          --master-addr="$PET_MASTER_ADDR" \
+          --master-port="$PET_MASTER_PORT" \
+          /tmp/all_reduce.py
+    numNodes: 2
+    numProcPerNode: 8
+    resourcesPerNode:
+      requests:
+        cpu: "16"
+        memory: 128Gi
+        nvidia.com/gpu: "8"
+        rdma/ib: "1"
+      limits:
+        cpu: "16"
+        memory: 128Gi
+        nvidia.com/gpu: "8"
+        rdma/ib: "1"
