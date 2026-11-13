@@ -7,8 +7,14 @@ from kubernetes.client.models.v1_node_list import V1NodeList
 from kubernetes.client.rest import ApiException
 from ruamel.yaml import YAML
 
+from .remote_execution_helpers import shell
+
 # We don't have a good way to get this off node labels currently
 AVAILABILITY_ZONE = os.getenv("AVAILABILITY_ZONE", "A")
+
+SERVICE_ACCOUNT_TOKEN_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+SERVICE_ACCOUNT_CA_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+KUBECTL_INCLUSTER_KUBECONFIG_PATH = "/tmp/arena-incluster-kubectl.yaml"
 
 
 class KubernetesError(Exception):
@@ -541,6 +547,85 @@ class K8s:
                 results["failed"].append(f"Failed to list {kind}: {e}")
 
         return results
+
+
+def _write_incluster_kubeconfig(kubeconfig_path: str) -> None:
+    """Write a kubeconfig that references the mounted service-account token via `tokenFile:`.
+
+    Using `tokenFile:` (rather than inlining `token:`) keeps the bearer token in the
+    kernel-protected `/var/run/secrets/...` mount and picks up token rotation automatically.
+
+    Assumes `config.load_incluster_config()` has already validated the mount exists.
+    """
+    host = os.environ["KUBERNETES_SERVICE_HOST"]
+    port = os.getenv("KUBERNETES_SERVICE_PORT_HTTPS") or os.getenv("KUBERNETES_SERVICE_PORT", "443")
+    kubeconfig = f"""apiVersion: v1
+kind: Config
+clusters:
+- name: in-cluster
+  cluster:
+    server: https://{host}:{port}
+    certificate-authority: {SERVICE_ACCOUNT_CA_PATH}
+users:
+- name: service-account
+  user:
+    tokenFile: {SERVICE_ACCOUNT_TOKEN_PATH}
+contexts:
+- name: in-cluster
+  context:
+    cluster: in-cluster
+    user: service-account
+current-context: in-cluster
+"""
+    with open(kubeconfig_path, "w", encoding="utf-8") as file:
+        file.write(kubeconfig)
+    os.chmod(kubeconfig_path, 0o600)
+
+
+def ensure_kubectl_access() -> tuple[bool, str]:
+    """Make sure `kubectl` has a usable context, without disturbing the user's existing KUBECONFIG.
+
+    Order of preference:
+      1. An existing `kubectl config current-context` (local or already-configured) — leave env alone.
+      2. An in-cluster service-account identity — write a bridge kubeconfig at
+         `KUBECTL_INCLUSTER_KUBECONFIG_PATH` and set `KUBECONFIG` so kubectl picks it up.
+    """
+    if not shell("kubectl version --client", quiet=True).ok:
+        return (
+            False,
+            "`kubectl` is not available. Install it in this environment and rerun all cells.",
+        )
+
+    local_context = shell("kubectl config current-context", quiet=True)
+    cluster_probe = None
+    if local_context.ok:
+        cluster_probe = shell("kubectl cluster-info", quiet=True, timeout=15)
+        if cluster_probe.ok:
+            # Non-fatal Python-side connectivity probe — kubectl will still work even if this fails.
+            try:
+                K8s().validate_config()
+            except KubernetesConfigError:
+                pass
+            return True, f"Using local kubectl context `{local_context.strip()}`."
+
+    # No local kubectl context — try in-cluster. `load_incluster_config()` is the canonical
+    # detection: it succeeds only when the SA token + CA + service env vars are all in place.
+    try:
+        config.load_incluster_config()
+    except config.ConfigException as e:
+        details = (
+            cluster_probe.stderr.strip() if cluster_probe is not None else local_context.stderr.strip()
+        ) or str(e)
+        return (
+            False,
+            "kubectl is installed but no cluster context is usable. "
+            "If running locally, set a context with `kubectl config use-context <name>`. "
+            f"Details: `{details}`",
+        )
+
+    _write_incluster_kubeconfig(KUBECTL_INCLUSTER_KUBECONFIG_PATH)
+    os.environ["KUBECONFIG"] = KUBECTL_INCLUSTER_KUBECONFIG_PATH
+    return True, f"Using in-cluster service-account context via `{KUBECTL_INCLUSTER_KUBECONFIG_PATH}`."
 
 
 def kubeconfig_input() -> tuple[mo.Html | None, mo.ui.form | None]:
