@@ -2,25 +2,28 @@
 # Manual edits may be lost in future updates.
 
 provider "registry.terraform.io/coreweave/coreweave" {
-  version     = "0.11.0"
-  constraints = ">= 0.3.0"
+  version     = "0.29.0"
+  constraints = ">= 0.29.0"
   hashes = [
-    "h1:FbF7gSx4G9pLQE/QIjGpj3HNvAik4PFatOEOdRHHUrQ=",
-    "zh:4b46795e4a79bbf2d1761d183861f9eddbec9e1ff5e85971739732ae3d788ce3",
+    "h1:AB/6TQ9J4pGawQRSj7ej+2OWB5Kz1r0WZaeSvTdn07o=",
+    "h1:M5ydoCrJm33Z7xjMlUdVNRY/l91zETimrdFd4QOxE2I=",
+    "h1:Ov3oLT0fNWQDbvcGZ8qFR+Ljj1aazmO3AX/Aix2eE5Y=",
+    "h1:ieM9t69BZCuGFZNGQvU+op7XAcs04Fwi2eGRoV7FmtQ=",
+    "h1:q5BvtmzFxHJqJuD12BFsvCMdm+ePAjRZ+4qouRUxoJk=",
+    "zh:0f8d76c628fce7b155e967f940a07f277f4b6bae2ac69befe363ec5307d7e501",
+    "zh:30226ed8d5939dacfe6825ccd143ae53df95dfdb2975176d938de21481132ae6",
+    "zh:38b6e29d973504fdb1c4addb49c9b031174ed2d8b0dfb875482df3dfcb3275a9",
     "zh:541d4532c875b2ee7ecb98da9a1461e76788893b623b0adf7c634d9fff7770e3",
-    "zh:594fb48ba7790321379e7557bbeb1bef120f00bb718a58013ed1223f503e994e",
-    "zh:84420bd5cfa54d8af59c6c5a3998f35c19eed815c705e8cd811e893ff3abc59b",
-    "zh:857bc8a0fb27e07112f643b8cc2cc50c36d782ea4d3ab9a505177f91c86782e6",
-    "zh:994c05a7333464b9df28b89d2e034691df5e5506eab794378b70aec1d14d9f76",
-    "zh:a6e99957ce005e49b7a034ef40107323fdbe9bbb2dcd6061d12805dc614d9b47",
-    "zh:ada7541ffc8c4676ff90dbcd7bdcae47c30c390bf172cdd705a08b0b8844bf1a",
-    "zh:b99d735022fe72df427b0e4fc0fa09e236a62003f5ab29c0645ae001a6054832",
-    "zh:be1d2d6b4267b63ed306437e8a6a1186d2b25034a4631942d2e935427114e06d",
-    "zh:c11ae5eb30de0c30930382dd6b2e1d8328416888cabd00a16d5378f2c5b62586",
-    "zh:cd267305f2e83289caefcd717ee4709cccb310446e4a1234f6b2fcab3c2d271f",
-    "zh:d7ed5b6f8ebeff6c66a10be0e810c00e0d724d5cd7e9d9dc2f5b107a5b692e6d",
-    "zh:e301859822b37b5547f4adb45ca4f6a4a5969a414a5d7572f0f9f0a2339ea4b0",
-    "zh:f3cf76d6d2dd1375103ca5b7b1cdc2bc771443612e635c7b96dfe85075792183",
+    "zh:90402eb8ac486f32eeae2024ab0bad72b7e3c52e57c15d843a174188fb1700b6",
+    "zh:914ef0a61f839806e65b223f67c485327286f63c1defe5483d47736336d25822",
+    "zh:9d229e20669d24e978c9713196e6e1bb02e91bba25877340eab6a9b8c38c9cf2",
+    "zh:b343c93e478b3975030bfb8486de3b0ef0a7b386c4b8a7d08e0e1c9abcdab3f9",
+    "zh:b36d44a43d6b8b23ede95d3a01d0ebbd2ae5141f6a75418a67b2fdc4a657d743",
+    "zh:b68af54438cd9f2965c9e98d8fb7ea2edf027ab84d48a9ddfae25bdd4801d1a4",
+    "zh:c8cca57893874fd6bc3680f849912a80a651e8de8d5d857cb87d9d78ff17e971",
+    "zh:da968278fbcdf97c6d1c1fd902bfb6930043b7f20f9a8301ed9db1746fa23656",
+    "zh:f0e6d3a8502a2233a652e1e338a294ee6862431a9afe3d39c3a80198b222423b",
+    "zh:ff3377038de8f4277bb4e165b72d79310e5ef53db3330103e02110bfd4c05e3c",
   ]
 }
 
@@ -29,6 +32,10 @@ provider "registry.terraform.io/hashicorp/kubernetes" {
   constraints = ">= 2.23.0"
   hashes = [
     "h1:P0c8knzZnouTNFIRij8IS7+pqd0OKaFDYX0j4GRsiqo=",
+    "h1:fu3VBNxwJU/G1Ocw+rEoUtPEM233B0bQMquk12+pxWY=",
+    "h1:uRzxEKw6nmLiKhD95yVsvk4bkAEYNhzO7ivoFFo4iEQ=",
+    "h1:vyHdH0p6bf9xp1NPePObAJkXTJb/I09FQQmmevTzZe0=",
+    "h1:wZsAFR6ICMxB29/a4nlwdLcyWxQChEubkut0ffk5BPc=",
     "zh:02d55b0b2238fd17ffa12d5464593864e80f402b90b31f6e1bd02249b9727281",
     "zh:20b93a51bfeed82682b3c12f09bac3031f5bdb4977c47c97a042e4df4fb2f9ba",
     "zh:6e14486ecfaee38c09ccf33d4fdaf791409f90795c1b66e026c226fad8bc03c7",
