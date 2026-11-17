@@ -16,7 +16,7 @@ Deploy CoreWeave infrastructure with Terraform: a **VPC**, **CKS (Kubernetes) cl
 
 ## Prerequisites
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.2 (or [OpenTofu](https://opentofu.org/))
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.3 (or [OpenTofu](https://opentofu.org/))
 - [CoreWeave Terraform provider](https://registry.terraform.io/providers/coreweave/coreweave/latest) >= 0.29.0 (pinned in `.terraform.lock.hcl`; `vpc_prefixes[*].type` requires >= 0.28.0)
 - [CoreWeave](https://console.coreweave.com/) account
 - **CoreWeave API token** - [Create in Console -> Tokens](https://console.coreweave.com/tokens)

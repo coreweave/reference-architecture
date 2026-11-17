@@ -33,7 +33,8 @@ variable "vpc_prefixes" {
   validation {
     condition = alltrue([
       for p in var.vpc_prefixes :
-      p.type == null || contains(["POD", "SERVICE", "LOAD_BALANCER", "PRIVATE_ACCESS"], p.type)
+      # Ternary (not ||): Terraform < 1.12 does not short-circuit ||, and contains() rejects null
+      p.type == null ? true : contains(["POD", "SERVICE", "LOAD_BALANCER", "PRIVATE_ACCESS"], p.type)
     ])
     error_message = "vpc_prefixes[*].type must be one of POD, SERVICE, LOAD_BALANCER, PRIVATE_ACCESS, or omitted."
   }
