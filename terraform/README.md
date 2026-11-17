@@ -16,7 +16,8 @@ Deploy CoreWeave infrastructure with Terraform: a **VPC**, **CKS (Kubernetes) cl
 
 ## Prerequisites
 
-- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.2
+- [Terraform](https://developer.hashicorp.com/terraform/downloads) >= 1.2 (or [OpenTofu](https://opentofu.org/))
+- [CoreWeave Terraform provider](https://registry.terraform.io/providers/coreweave/coreweave/latest) >= 0.29.0 (pinned in `.terraform.lock.hcl`; `vpc_prefixes[*].type` requires >= 0.28.0)
 - [CoreWeave](https://console.coreweave.com/) account
 - **CoreWeave API token** - [Create in Console -> Tokens](https://console.coreweave.com/tokens)
 - (Optional) For **Object Storage**: set up an org access policy (via Terraform or Console) before creating buckets.
@@ -39,7 +40,7 @@ Edit `terraform.tfvars` and replace placeholders:
 
 - **zone** - e.g. `US-EAST-02A`
 - **vpc_name** - your VPC name
-- **vpc_prefixes** - CIDR blocks for pod, service, and internal LB; see [CoreWeave VPC CIDR docs](https://docs.coreweave.com/docs/products/networking/vpc/vpc-cidr) for sizing and examples (the example values in `terraform.tfvars.example` are valid to use as-is).
+- **vpc_prefixes** - CIDR blocks for pod, service, and internal LB, each with a `type` (`POD`, `SERVICE`, `LOAD_BALANCER`, and optionally `PRIVATE_ACCESS`); see [VPC prefixes](#vpc-prefixes-and-prefix-types) below and [CoreWeave VPC CIDR docs](https://docs.coreweave.com/docs/products/networking/vpc/vpc-cidr) for sizing and examples (the example values in `terraform.tfvars.example` are valid to use as-is).
 - **cluster_name** - your CKS cluster name (max 30 characters)
 - Leave **create_nodepool** and **create_dfs_pvc** as `false` for the first run.
 
@@ -84,6 +85,35 @@ After the cluster is **Running**:
 ```bash
 terraform apply
 ```
+
+## VPC prefixes and prefix types
+
+Each entry in `vpc_prefixes` has a `name`, a CIDR `value`, and an optional `type` that declares the prefix's intended use:
+
+| `type` | Used for |
+|--------|----------|
+| `POD` | CKS pod CIDR (exactly one) |
+| `SERVICE` | CKS service CIDR (exactly one) |
+| `LOAD_BALANCER` | CKS internal load balancer CIDR(s) (one or more) |
+| `PRIVATE_ACCESS` | Private access prefix (e.g. AI Object Storage private endpoints). Must be enabled for your organization; never passed to CKS. |
+
+```hcl
+vpc_prefixes = [
+  { name = "pod cidr",         value = "10.0.0.0/13",  type = "POD" },
+  { name = "service cidr",     value = "10.16.0.0/22", type = "SERVICE" },
+  { name = "internal lb cidr", value = "10.32.4.0/22", type = "LOAD_BALANCER" },
+  # { name = "private access", value = "10.32.8.0/27", type = "PRIVATE_ACCESS" },
+]
+```
+
+When any prefix has a `POD`, `SERVICE` or `LOAD_BALANCER` type, the CKS cluster's `pod_cidr_name`, `service_cidr_name` and `internal_lb_cidr_names` are derived from the types. If no prefix has one of those types, the legacy positional convention applies to the non-`PRIVATE_ACCESS` prefixes: first = pod, second = service, rest = internal LB(s).
+
+**Things to know:**
+
+- **Declare `type` everywhere you wrap these modules.** Terraform and OpenTofu silently drop object attributes that are not declared in a variable's type. If you copy these modules into your own root or wrapper module, its `vpc_prefixes` variable must include `type = optional(string)`, or `type` never reaches the provider and `terraform plan` shows no diff.
+- **Use provider >= 0.28.0.** Older provider versions do not support `vpc_prefixes[*].type`. Run `terraform init -upgrade` if your lock file pins an older version.
+- **Set the type when you create the prefix.** Prefix type changes are applied in place where the VPC API allows it; an unsupported change fails at apply time. To change a type that cannot be updated, you must remove the prefix, apply, then re-add it with the new type. Removing a prefix that a CKS cluster references (pod, service, or internal LB CIDR) changes the cluster, so review `terraform plan` carefully for any change to `module.cks`.
+- **Upgrading an existing deployment.** Earlier versions of this repo treated every prefix after the second as an internal LB CIDR. If you appended a private access prefix to that list, it was passed to CKS as an internal LB CIDR. After upgrading, run `terraform plan` before applying and check `module.cks`: if `internal_lb_cidr_names` would change, either keep the old value by setting `cks_internal_lb_cidr_names`, or plan the change deliberately.
 
 ## Object Storage access policies
 
@@ -176,7 +206,7 @@ For production use cases, OIDC Workload Identity Federation eliminates static AP
 
 > **What Terraform manages vs. what's manual:**
 > - **Terraform manages:** Organization and bucket access policies that authorize OIDC-derived roles (steps 2-3 below)
-> - **Manual (Console):** The WIF configuration that tells CoreWeave how to validate your IdP's tokens (step 1 below). There is no Terraform resource for WIF configurations today.
+> - **Manual (Console):** The WIF configuration that tells CoreWeave how to validate your IdP's tokens (step 1 below). This repo configures it in Console; the CoreWeave provider (>= 0.29.0) also offers a [`coreweave_workload_federation_oidc_config`](https://registry.terraform.io/providers/coreweave/coreweave/latest/docs/resources/workload_federation_oidc_config) resource if you prefer to manage it in Terraform.
 > - **Manual (workload):** Client-side environment variables that tell the AWS SDK where to exchange tokens (step 3 below)
 >
 > You will need your IdP's issuer URL and the subject identifier for your workloads before writing the Terraform policy.

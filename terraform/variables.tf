@@ -10,13 +10,66 @@ variable "vpc_name" {
   description = "VPC name"
 }
 
-# VPC prefixes - order defines CKS usage: [0]=pod, [1]=service, [2..]=internal LB(s). At least 3 entries required.
+# VPC prefixes. Set `type` on each prefix (recommended); CKS prefix names are then derived from type:
+#   POD -> pod CIDR, SERVICE -> service CIDR, LOAD_BALANCER -> internal LB CIDR(s),
+#   PRIVATE_ACCESS -> private access prefix (never passed to CKS).
+# If no prefix has a POD/SERVICE/LOAD_BALANCER type, the legacy positional convention applies to the
+# non-PRIVATE_ACCESS prefixes: [0]=pod, [1]=service, [2..]=internal LB(s).
 variable "vpc_prefixes" {
   type = list(object({
     name  = string
     value = string
+    type  = optional(string) # POD, SERVICE, LOAD_BALANCER, PRIVATE_ACCESS (requires provider >= 0.28.0)
   }))
-  description = "Named VPC CIDR prefixes for CKS. Order: first=pod, second=service, rest=internal LB(s). Names are reused for CKS (no separate vars)."
+  description = "Named VPC CIDR prefixes. `type` (optional) is one of POD, SERVICE, LOAD_BALANCER, PRIVATE_ACCESS and drives which prefixes CKS uses. Without CKS types, order is used: first=pod, second=service, rest=internal LB(s)."
+
+  validation {
+    condition = alltrue([
+      for p in var.vpc_prefixes :
+      p.type == null || contains(["POD", "SERVICE", "LOAD_BALANCER", "PRIVATE_ACCESS"], p.type)
+    ])
+    error_message = "vpc_prefixes[*].type must be one of POD, SERVICE, LOAD_BALANCER, PRIVATE_ACCESS, or omitted."
+  }
+
+  validation {
+    condition = (
+      # Typed mode: exactly one POD, exactly one SERVICE, at least one LOAD_BALANCER
+      length([for p in var.vpc_prefixes : p if contains(["POD", "SERVICE", "LOAD_BALANCER"], coalesce(p.type, "-"))]) == 0
+      || (
+        length([for p in var.vpc_prefixes : p if p.type == "POD"]) == 1 &&
+        length([for p in var.vpc_prefixes : p if p.type == "SERVICE"]) == 1 &&
+        length([for p in var.vpc_prefixes : p if p.type == "LOAD_BALANCER"]) >= 1
+      )
+    )
+    error_message = "When using prefix types for CKS, define exactly one POD, exactly one SERVICE and at least one LOAD_BALANCER prefix."
+  }
+
+  validation {
+    condition = (
+      # Positional mode: at least 3 non-PRIVATE_ACCESS prefixes
+      length([for p in var.vpc_prefixes : p if contains(["POD", "SERVICE", "LOAD_BALANCER"], coalesce(p.type, "-"))]) > 0
+      || length([for p in var.vpc_prefixes : p if p.type != "PRIVATE_ACCESS"]) >= 3
+    )
+    error_message = "Without POD/SERVICE/LOAD_BALANCER types, at least 3 non-PRIVATE_ACCESS prefixes are required (pod, service, internal LB)."
+  }
+}
+
+variable "vpc_dhcp_dns_servers" {
+  type        = set(string)
+  description = "Optional DNS servers handed out by DHCP within the VPC (e.g. your own resolvers over a private interconnect). Leave null for the zone default. If set, keep the zone default resolver in the list unless your resolvers can resolve CoreWeave domains, or nodes may fail to boot."
+  default     = null
+}
+
+variable "vpc_dhcp_dns_search_domains" {
+  type        = list(string)
+  description = "Optional DNS search domains handed out by DHCP within the VPC. Leave null to leave unset."
+  default     = null
+}
+
+variable "cks_internal_lb_cidr_names" {
+  type        = set(string)
+  description = "Optional override for the CKS internal LB CIDR prefix names. Leave null to derive them from vpc_prefixes. Use this to pin the existing value on an already-deployed cluster if the derived value would change."
+  default     = null
 }
 
 variable "host_prefixes" {
@@ -48,16 +101,16 @@ variable "cks_public" {
 
 variable "oidc" {
   type = object({
-    issuer_url         = string
-    client_id          = string
-    ca                 = optional(string)
+    issuer_url          = string
+    client_id           = string
+    ca                  = optional(string)
     admin_group_binding = optional(string)
-    groups_claim       = optional(string)
-    groups_prefix      = optional(string)
-    required_claim     = optional(string)
-    signing_algs       = optional(set(string))
-    username_claim     = optional(string)
-    username_prefix    = optional(string)
+    groups_claim        = optional(string)
+    groups_prefix       = optional(string)
+    required_claim      = optional(string)
+    signing_algs        = optional(set(string))
+    username_claim      = optional(string)
+    username_prefix     = optional(string)
   })
   description = <<-EOT
     OIDC config for the CKS cluster (external IdP). Omit or set to null to leave unset.
