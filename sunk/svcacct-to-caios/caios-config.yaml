@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caios-config
+data:
+  config: |
+    [default]
+    region = US-EAST-04A
+    endpoint_url = http://cwlota.com
+    s3 =
+        addressing_style = virtual

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: slurm-identity
+  namespace: tenant-slurm
+  annotations:
+    # Activates the pod-identity-webhook for pods using this ServiceAccount.
+    caios.coreweave.com/inject: "true"

@@ -1,0 +1,109 @@
+login:
+  enabled: true
+  replicas: 1
+  serviceAccountName: slurm-identity ### Add this ###
+  volumes:
+    ### Add this block ###
+    - name: caios-config
+      configMap:
+        name: caios-config
+        defaultMode: 0444
+  ### ###
+  volumeMounts:
+    - name: caios-config
+      mountPath: /etc/aws
+      readOnly: true
+  s6:
+    ### Add this block ###
+    # This is what configures your users and workers to use the token and aws config you configured
+    aws-env: &aws-env-s6
+      type: oneshot
+      timeoutUp: 60000 # 1m
+      script: |
+        #!/bin/env sh
+        set -u
+
+        get_var() {
+          eval "v=\${$1:-}"
+          if [ -z "$v" ]; then
+            f="/run/s6/container_environment/$1"
+            [ -r "$f" ] && v=$(cat "$f")
+          fi
+          printf '%s' "$v"
+        }
+
+        vars='AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_CREDENTIALS_FULL_URI AWS_CONTAINER_CREDENTIALS_RELATIVE_URI AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE AWS_REGION AWS_DEFAULT_REGION AWS_STS_REGIONAL_ENDPOINTS'
+
+        static='AWS_CONFIG_FILE=/etc/aws/config AWS_ENDPOINT_URL_S3=http://cwlota.com'
+
+        profile=/etc/profile.d/aws-env.sh
+        tmp=$(mktemp "${profile}.XXXXXX") || exit 1
+        {
+          echo '# injected AWS identity for SUNK sessions'
+          for pair in $static; do
+            printf 'export %s\n' "$pair"
+          done
+          for v in $vars; do
+            val=$(get_var "$v")
+            if [ -n "$val" ]; then
+              printf 'export %s=%s\n' "$v" "$val"
+            fi
+          done
+        } > "$tmp" || { rm -f "$tmp"; exit 1; }
+        mv -f "$tmp" "$profile" || { rm -f "$tmp"; exit 1; }
+
+        envf=/etc/environment
+        tmp=$(mktemp "${envf}.XXXXXX") || exit 1
+        {
+          cat "$envf" 2>/dev/null
+          printf '\n# injected AWS identity for SUNK sessions\n'
+          for pair in $static; do
+            printf '%s\n' "$pair"
+          done
+          for v in $vars; do
+            val=$(get_var "$v")
+            if [ -n "$val" ]; then
+              printf '%s=%s\n' "$v" "$val"
+            fi
+          done
+        } > "$tmp" || { rm -f "$tmp"; exit 1; }
+        mv -f "$tmp" "$envf" || { rm -f "$tmp"; exit 1; }
+
+        exit 0
+### ###
+compute:
+  s6:
+    aws-env: *aws-env-s6 ### Add this ###
+  volumeMounts:
+    - mountPath: /mnt/home
+      name: slurm-home
+    - mountPath: /mnt/data
+      name: slurm-data
+    ### Add this block ###
+    - name: caios-config
+      mountPath: /etc/aws
+      readOnly: true
+  ### ###
+  volumes:
+    - name: slurm-data
+      persistentVolumeClaim:
+        claimName: slurm-data
+    - name: slurm-home
+      persistentVolumeClaim:
+        claimName: slurm-home
+    ### Add this block ###
+    - name: caios-config
+      configMap:
+        name: caios-config
+        defaultMode: 0444
+  ### ###
+  autoPartition:
+    enabled: true
+  nodes:
+    h200:
+      enabled: true
+      replicas: 1
+      serviceAccountName: slurm-identity ### Add this ###
+      definitions:
+        - cu130
+        - gd-8xh200ib-i128
