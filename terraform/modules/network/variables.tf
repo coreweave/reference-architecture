@@ -20,7 +20,34 @@ variable "host_prefixes" {
 variable "vpc_prefixes" {
   type = list(object({
     name  = string
-    value = string # CIDR
+    value = string           # CIDR
+    type  = optional(string) # POD, SERVICE, LOAD_BALANCER, PRIVATE_ACCESS (requires provider >= 0.28.0)
   }))
-  description = "Named VPC prefixes for CKS (pod cidr, service cidr, internal lb cidr)"
+  description = <<-EOT
+    Named VPC prefixes (e.g. pod cidr, service cidr, internal lb cidr, private access).
+    `type` is optional and declares the prefix's intended use: POD, SERVICE, LOAD_BALANCER or PRIVATE_ACCESS.
+    It must be declared here (and in any wrapping module) or Terraform/OpenTofu silently drops it
+    before the provider sees it.
+  EOT
+
+  validation {
+    condition = alltrue([
+      for p in var.vpc_prefixes :
+      # Ternary (not ||): Terraform < 1.12 does not short-circuit ||, and contains() rejects null
+      p.type == null ? true : contains(["POD", "SERVICE", "LOAD_BALANCER", "PRIVATE_ACCESS"], p.type)
+    ])
+    error_message = "vpc_prefixes[*].type must be one of POD, SERVICE, LOAD_BALANCER, PRIVATE_ACCESS, or omitted."
+  }
+}
+
+variable "dhcp_dns_servers" {
+  type        = set(string)
+  description = "DNS servers handed out by DHCP within the VPC. Leave null to use the zone default resolvers. If you set custom resolvers, keep the zone default resolver in the list unless your resolvers can resolve CoreWeave domains, or nodes may fail to boot."
+  default     = null
+}
+
+variable "dhcp_dns_search_domains" {
+  type        = list(string)
+  description = "DNS search domains handed out by DHCP within the VPC, in order of precedence. Leave null to leave unset."
+  default     = null
 }

@@ -2,14 +2,14 @@ terraform {
   required_providers {
     coreweave = {
       source  = "coreweave/coreweave"
-      version = ">= 0.3.0"
+      version = ">= 0.29.0"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
       version = ">= 2.23.0"
     }
   }
-  required_version = ">= 1.2.0"
+  required_version = ">= 1.3.0" # optional() object attributes require >= 1.3
 }
 
 variable "coreweave_api_token" {

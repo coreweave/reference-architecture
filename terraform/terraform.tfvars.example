@@ -14,13 +14,25 @@
 zone     = "US-EAST-02A"   # Replace with your CoreWeave zone (e.g. US-EAST-02A, US-EAST-04A)
 vpc_name = "my-vpc"       # Replace with your VPC name
 
-# VPC prefixes - order matters: [0]=pod, [1]=service, [2..]=internal LB(s). At least 3 entries. Same names are used for CKS (no duplicate vars).
+# VPC prefixes - set `type` on every prefix (requires CoreWeave provider >= 0.28.0).
+# CKS prefix names are derived from type: POD -> pod CIDR, SERVICE -> service CIDR,
+# LOAD_BALANCER -> internal LB CIDR(s). PRIVATE_ACCESS prefixes are never passed to CKS.
+# Set the type when you first create a prefix: changing an existing prefix's type may require
+# removing the prefix and re-adding it, which is disruptive if anything is using it.
 # CIDR sizes and examples: https://docs.coreweave.com/docs/products/networking/vpc/vpc-cidr
 vpc_prefixes = [
-  { name = "pod cidr", value = "10.0.0.0/13" },
-  { name = "service cidr", value = "10.16.0.0/22" },
-  { name = "internal lb cidr", value = "10.32.4.0/22" },
+  { name = "pod cidr", value = "10.0.0.0/13", type = "POD" },
+  { name = "service cidr", value = "10.16.0.0/22", type = "SERVICE" },
+  { name = "internal lb cidr", value = "10.32.4.0/22", type = "LOAD_BALANCER" },
+  # Optional: private access prefix (e.g. for AI Object Storage private endpoints). This feature
+  # must be enabled for your organization; contact your CoreWeave account team before using it.
+  # { name = "private access", value = "10.32.8.0/27", type = "PRIVATE_ACCESS" },
 ]
+
+# Optional: custom DNS servers for the VPC (e.g. your own resolvers reachable over a private
+# interconnect). Leave unset to use the zone default. If you set this, keep the zone default
+# resolver in the list unless your resolvers can resolve CoreWeave domains, or nodes may fail to boot.
+# vpc_dhcp_dns_servers = ["<ZONE_DEFAULT_RESOLVER>", "<YOUR_RESOLVER_IP>"]
 # Provider requires at least one host prefix
 host_prefixes = [
   { name = "primary", type = "PRIMARY", prefixes = ["10.16.192.0/18"] }
