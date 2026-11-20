@@ -8,10 +8,20 @@ login:
       configMap:
         name: caios-config
         defaultMode: 0444
+    - name: aws-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: sts.amazonaws.com
+              expirationSeconds: 3600
+              path: token
   ### ###
   volumeMounts:
     - name: caios-config
       mountPath: /etc/aws
+      readOnly: true
+    - name: aws-token
+      mountPath: /var/run/secrets/tokens/aws
       readOnly: true
   s6:
     ### Add this block ###
@@ -34,7 +44,7 @@ login:
 
         vars='AWS_ROLE_ARN AWS_WEB_IDENTITY_TOKEN_FILE AWS_CONTAINER_CREDENTIALS_FULL_URI AWS_CONTAINER_CREDENTIALS_RELATIVE_URI AWS_CONTAINER_AUTHORIZATION_TOKEN_FILE AWS_REGION AWS_DEFAULT_REGION AWS_STS_REGIONAL_ENDPOINTS'
 
-        static='AWS_CONFIG_FILE=/etc/aws/config AWS_ENDPOINT_URL_S3=http://cwlota.com'
+        static='AWS_CONFIG_FILE=/etc/aws/config'
 
         profile=/etc/profile.d/aws-env.sh
         tmp=$(mktemp "${profile}.XXXXXX") || exit 1
@@ -83,6 +93,9 @@ compute:
     - name: caios-config
       mountPath: /etc/aws
       readOnly: true
+    - name: aws-token
+      mountPath: /var/run/secrets/tokens/aws
+      readOnly: true
   ### ###
   volumes:
     - name: slurm-data
@@ -96,6 +109,13 @@ compute:
       configMap:
         name: caios-config
         defaultMode: 0444
+    - name: aws-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              audience: sts.amazonaws.com
+              expirationSeconds: 3600
+              path: token
   ### ###
   autoPartition:
     enabled: true
