@@ -9,3 +9,9 @@ data:
     endpoint_url = http://cwlota.com
     s3 =
         addressing_style = virtual
+    [profile aws]
+    region = us-east-1
+    web_identity_token_file = /var/run/secrets/tokens/aws/token
+    role_arn = arn:aws:iam::575492972426:role/sunk-identity
+    request_checksum_calculation = when_required
+    response_checksum_validation = when_required
