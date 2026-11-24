@@ -499,7 +499,7 @@ def _():
 
     Every attempt gets a fresh checkout of the task's starting commit and runs a small, instrumented agent loop with
     six tools (list, read, search, edit, write, and a read-only `run_command`). Every model call and tool call is
-    traced in Weave. A frontier model then grades the resulting diff (or plan) against the merged change.
+    traced in Weave. The judge model you choose then grades the resulting diff (or plan) against the merged change.
 
     **Harness profile** controls how much the harness forgives:
 

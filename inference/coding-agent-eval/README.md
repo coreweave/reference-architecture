@@ -41,18 +41,71 @@ flowchart LR
 - An **Anthropic API key** (`ANTHROPIC_API_KEY`), only if you include a Claude baseline or choose a Claude judge
 - Optional: `GITHUB_TOKEN` (or a logged-in `gh` CLI) so task prompts use full PR descriptions and linked issues
 
+## Set up marimo
+
+[marimo](https://docs.marimo.io) is an open-source Python notebook that runs in your browser. A marimo notebook is a
+plain `.py` file, and cells re-run automatically when something they depend on changes. You don't need to install
+marimo or the kit's dependencies yourself: [uv](https://docs.astral.sh/uv/) fetches both the first time you launch the
+notebook.
+
+1. **Install uv** (skip if `uv --version` already works):
+
+   ```bash
+   # macOS or Linux
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   # or, on macOS with Homebrew
+   brew install uv
+   ```
+
+   ```powershell
+   # Windows (PowerShell)
+   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+   ```
+
+   Open a new terminal afterwards so `uv` and `uvx` are on your `PATH`.
+
+2. **Get the kit:**
+
+   ```bash
+   git clone https://github.com/coreweave/reference-architecture.git
+   cd reference-architecture/inference/coding-agent-eval
+   ```
+
+3. **Optional, if you're new to marimo:** `uvx marimo tutorial intro` opens a short interactive tour.
+
+<details>
+<summary>Other ways to run marimo</summary>
+
+- **Keep marimo installed:** `uv tool install marimo`, then use `marimo edit --sandbox notebook.py` in place of
+  `uvx marimo edit --sandbox notebook.py`.
+- **Without uv:** `--sandbox` needs uv. Instead, create a Python 3.12+ virtual environment, run
+  `pip install marimo altair anthropic openai pandas weave`, and then run `marimo edit notebook.py` from this directory.
+- **App view:** `uvx marimo run --sandbox notebook.py` shows the same notebook with the code hidden.
+- **On a remote machine** (for example, a GPU dev box): start it with
+  `uvx marimo edit --sandbox notebook.py --headless --port 2718`. Then forward the port from your laptop with
+  `ssh -L 2718:localhost:2718 <user>@<host>`, and open the URL the server printed, including its `access_token`.
+
+</details>
+
 ## Run it
 
 From this directory (the notebook imports the local `coding_eval` package):
 
 ```bash
-cd inference/coding-agent-eval
 export WANDB_API_KEY=...          # or paste it into the notebook
 export ANTHROPIC_API_KEY=...      # only for a Claude baseline or judge
 uvx marimo edit --sandbox notebook.py
 ```
 
-`--sandbox` installs the dependencies declared at the top of `notebook.py` into an isolated environment.
+`--sandbox` installs the dependencies declared at the top of `notebook.py` into an isolated environment. The first
+launch can take a minute while it downloads them, plus Python 3.12 if your machine doesn't have it. marimo then opens
+the notebook in your browser at `http://localhost:2718`. If no browser opens, copy the URL the terminal prints,
+including its `access_token`. Press `Ctrl+C` in the terminal to stop the server.
+
+Nothing expensive runs on its own. Each step that calls a model waits for you to click its button, so you can read
+ahead and change settings safely.
+
+If port 2718 is busy, add `--port <n>`. If `uvx` isn't found, open a new terminal after installing uv.
 
 Then work through the notebook top to bottom:
 

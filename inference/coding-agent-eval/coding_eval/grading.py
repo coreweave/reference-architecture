@@ -85,7 +85,7 @@ def _fail(reason: str, cost_usd: float | None) -> dict[str, Any]:
 
 
 class CompletionJudge(weave.Scorer):
-    """Frontier-model grade of each attempt against the merged change.
+    """Judge-model grade of each attempt against the merged change.
 
     ``summarize`` adds the headline economics: ``cost_per_success`` is the total
     spend on all attempts divided by the number that passed.
