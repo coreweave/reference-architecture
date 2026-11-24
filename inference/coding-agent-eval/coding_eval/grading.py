@@ -143,6 +143,7 @@ class CompletionJudge(weave.Scorer):
         if problem:
             result = _fail(f"judge failed: {problem}", cost)
             result["judge_cost_usd"] = judge_cost
+            result["judge_error"] = True  # reported separately: not the candidate's failure
             return result
         passed = verdict["verdict"] == "pass" or (self.count_partial_as_pass and verdict["verdict"] == "partial")
         return {
@@ -175,7 +176,14 @@ class CompletionJudge(weave.Scorer):
         ) / 1e6
         if resp.stop_reason in ("refusal", "max_tokens"):
             return None, judge_cost, f"stopped with {resp.stop_reason}"
-        return json.loads(next(b.text for b in resp.content if b.type == "text")), judge_cost, None
+        text = next((b.text for b in resp.content if b.type == "text"), "")
+        try:
+            verdict = json.loads(text)
+        except json.JSONDecodeError:
+            verdict = None
+        if not isinstance(verdict, dict) or verdict.get("verdict") not in ("pass", "partial", "fail"):
+            return None, judge_cost, f"unparseable verdict (stop_reason={resp.stop_reason})"
+        return verdict, judge_cost, None
 
     def _ask_openai(self, system: str, user: str) -> tuple[dict[str, Any] | None, float, str | None]:
         import os

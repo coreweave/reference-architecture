@@ -62,12 +62,38 @@ def _():
 
     This notebook is the companion to the CoreWeave blog post **Choosing an Open Model for your Coding Agent**.
     It builds an evaluation from **your own merged pull requests**, runs three or four open models and your current
-    closed model on each task several times, has a frontier model grade every attempt against the code your team
-    actually merged, and tracks everything in **W&B Weave**.
+    closed model on each task several times, has a strong judge model (never one of the candidates) grade every
+    attempt against the code your team actually merged, and tracks everything in **W&B Weave**.
 
     You will come away with each model's **completion rate**, **tool-call accuracy**, **speed**, and
     **cost per successful task**, measured on your code rather than a public benchmark.
 
+    Attempts run through a small, **instrumented harness** included in this kit rather than your own coding tool,
+    so that every tool call can be measured before anything repairs it. The **forgiving** profile approximates what
+    a mature harness covers up, and **Use the Winner** shows how to point your own harness at the model you pick.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.mermaid(
+        """
+        flowchart LR
+            A[Merged PRs] --> B[Task set<br/>quick edits, features, plans]
+            B --> C{Tool-call probe<br/>per model}
+            C --> D[Models x tasks x trials<br/>strict / forgiving harness]
+            D --> E[Judge grades each attempt<br/>against the merged diff]
+            E --> F[Weave: completion, tool calls,<br/>speed, cost per success]
+            F --> G[Pick a model per task type]
+        """
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    mo.md(r"""
     /// details | Contents
         type: info
 
@@ -84,9 +110,14 @@ def _():
         type: warning
 
     Each attempt clones the repository you choose into a temporary directory and lets the model read, search and
-    edit files there. Shell commands requested by the model are limited to a read-only allowlist (`ls`, `cat`,
-    `grep`, read-only `git`, ...) with no pipes or redirects. Model and judge requests are billed to the API keys you
-    provide, and every prompt, diff and tool call is logged to the Weave project you choose.
+    edit files there. Shell commands requested by the model run **as your user on this machine**, limited to a small
+    allowlist (`ls`, `cat`, `head`, `grep`, read-only `git`, ...) whose arguments must stay inside that directory,
+    with no pipes or redirects. This is a guardrail, not a sandbox: for untrusted repositories, or to let agents run
+    tests, run the kit in an isolated environment such as a [CoreWeave Sandbox](https://docs.coreweave.com/products/sandboxes).
+
+    Model and judge requests are billed to the API keys you provide, and every prompt, diff, tool call and tool
+    output is sent to the model providers and logged to the Weave project you choose. Use a repository you are
+    allowed to share with them.
     ///
     """)
     return
@@ -103,9 +134,12 @@ def _():
 
     - **W&B API key** (`WANDB_API_KEY`): traces every run to your **Weave project** (`entity/project`), and also
       authenticates the open models on CoreWeave Serverless Inference (`https://api.inference.wandb.ai/v1`).
-    - **Serverless Inference usage project** (`team/project`): sent as the `OpenAI-Project` header. **Required:**
-      without it, Serverless Inference rejects a valid key with `401 invalid_api_key`.
-    - **Anthropic API key** (`ANTHROPIC_API_KEY`): the closed-model baseline and the judge that grades every attempt.
+    - **Serverless Inference usage project** (`team/project`): sent as the `OpenAI-Project` header to attribute
+      usage. Without it, Serverless Inference uses your default team and a project named `inference`. **Set it if
+      your account belongs to more than one team**: a request that can't be attributed may be rejected with a
+      misleading `401 invalid_api_key`.
+    - **Anthropic API key** (`ANTHROPIC_API_KEY`): the Claude baseline, and the judge if you pick a Claude judge.
+      The default judge (DeepSeek V4 Pro on Serverless Inference) needs no extra key.
     - **Serverless Inference API key** (`SI_API_KEY`, optional): only if you want SI billed to a different key.
 
     Keys already set in the environment are detected and do not need to be pasted. Keys are kept in this
@@ -130,7 +164,7 @@ def _():
         - **Anthropic API key:** {anthropic_key}
         - **W&B API key:** {wandb_key}
         - **Weave project** (`entity/project`): {weave_project}
-        - **Serverless Inference usage project** (`team/project`, required): {si_project}
+        - **Serverless Inference usage project** (`team/project`, recommended): {si_project}
         """)
         .batch(
             si_key=_key_field("SI_API_KEY"),  # type: ignore
@@ -161,9 +195,8 @@ def _(creds_form: mo.ui.form):
     si_project = (_v.get("si_project") or "").strip() or None
 
     _status = {
-        "Serverless Inference": bool(os.environ.get("SI_API_KEY") or os.environ.get("WANDB_API_KEY"))
-        and bool(si_project),
-        "Anthropic (baseline + judge)": bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "Serverless Inference": bool(os.environ.get("SI_API_KEY") or os.environ.get("WANDB_API_KEY")),
+        "Anthropic (Claude baseline / judge)": bool(os.environ.get("ANTHROPIC_API_KEY")),
         "W&B": bool(os.environ.get("WANDB_API_KEY")),
         "Weave project": "/" in weave_project,
     }
@@ -172,6 +205,7 @@ def _(creds_form: mo.ui.form):
         mo.md(
             " · ".join(f"{'✅' if ok else '⬜'} {k}" for k, ok in _status.items())
             + ("" if not _missing else f"<br><br>Still needed before running the evaluation: **{', '.join(_missing)}**")
+            + ("" if si_project else "<br>No usage project set: Serverless Inference will use your default team.")
         ),
         kind="success" if not _missing else "warn",
     )
@@ -389,8 +423,8 @@ def _():
     A coding agent only works if its tool calls arrive as tool calls. When the serving stack's parser does not
     recognize a model's tool-call format, the call either **leaks** into the reply as text or is **dropped**
     entirely — and because the agent receives a normal-looking response, nothing errors. It just stops reading files
-    and making edits. We have seen a widely recommended fast model do exactly this for a customer until a parser fix
-    shipped.
+    and making edits. This depends on the serving stack's parser version as much as on the model, so a model that
+    works on one endpoint can fail silently on another.
 
     This probe sends {len(PROBES)} single-turn requests per model where the only correct response is a specific tool
     call: arguments full of quotes, backslashes and non-ASCII text; a long file write; a call deep into a trajectory;
@@ -545,6 +579,18 @@ def _(
 
     _v = run_form.value
     _judge = JUDGES[_v["judge_model"]](si_project)  # one judge object shared by every evaluation
+    _overlap = [s.label for s in specs if s.model == _judge.judge_model]
+    mo.stop(
+        bool(_overlap),
+        mo.callout(
+            mo.md(
+                f"The judge (`{_judge.judge_model}`) is also a candidate (`{', '.join(_overlap)}`). A model grading its "
+                "own attempts biases the results: pick a different judge under **Run the Evaluation**, or remove it "
+                "from the candidates."
+            ),
+            kind="danger",
+        ),
+    )
     run_results = []
     suite_name = f"coding-agent-eval-{pd.Timestamp.now(tz='UTC').strftime('%Y%m%d-%H%M%S')}"
     for _profile in _v["profiles"] or ["strict"]:
@@ -572,7 +618,9 @@ def _():
     ---
     ## Results
 
-    - **completion_rate** — share of attempts the judge would accept as completing the task.
+    - **completion_rate** — share of *all* attempts the judge accepted as completing the task.
+    - **unjudged** — attempts the judge failed to grade. They count as not passed; if this is more than a handful,
+      fix the judge (key, model, rate limits) before reading the other numbers.
     - **tool_call_accuracy** — share of tool-call attempts that arrived well-formed, *before* any harness repair.
     - **silent_stop_rate** — attempts that ended because a tool call leaked or was dropped.
     - **cost_per_success** — total spend on all attempts divided by the attempts that passed. This is the number to
@@ -612,8 +660,7 @@ def _(run_results: list, suite_name: str):
 @app.cell(hide_code=True)
 def _(attempt_rows: pd.DataFrame):
     _by_cat = (
-        attempt_rows.dropna(subset=["passed"])
-        .assign(passed=lambda d: d["passed"].astype(float))
+        attempt_rows.assign(passed=lambda d: d["passed"].fillna(False).astype(float))
         .groupby(["model", "profile", "category"], as_index=False)["passed"]
         .mean()
     )
@@ -698,6 +745,57 @@ def _(attempt_rows: pd.DataFrame, board: pd.DataFrame):
 
 
 @app.cell(hide_code=True)
+def _():
+    pick_tolerance = mo.ui.slider(
+        start=0, stop=20, step=1, value=5, label="Accept models within this many points of the best completion rate"
+    )
+    mo.vstack(
+        [
+            mo.md(
+                "### Picking a model\n"
+                "A simple rule: for each task type and harness profile, take the models whose completion rate is within a "
+                "few points of the best, then pick the cheapest per *successful* task among them. Widen the tolerance "
+                "if your developers will review every change anyway; narrow it if mistakes are expensive."
+            ),
+            pick_tolerance,
+        ]
+    )
+    return (pick_tolerance,)
+
+
+@app.cell(hide_code=True)
+def _(attempt_rows: pd.DataFrame, pick_tolerance: mo.ui.slider):
+    _g = (
+        attempt_rows.assign(passed=lambda d: d["passed"].fillna(False).astype(bool))
+        .groupby(["category", "profile", "model"], as_index=False)
+        .agg(attempts=("passed", "size"), passes=("passed", "sum"), spend=("cost_usd", "sum"))
+    )
+    _g["completion_rate"] = _g["passes"] / _g["attempts"]
+    _g["cost_per_success"] = _g["spend"].where(_g["passes"] > 0) / _g["passes"].where(_g["passes"] > 0)
+    _picks = []
+    for (_cat, _prof), _grp in _g.groupby(["category", "profile"]):
+        _best = _grp["completion_rate"].max()
+        _ok = _grp[(_grp["completion_rate"] >= _best - pick_tolerance.value / 100) & _grp["cost_per_success"].notna()]
+        if _ok.empty:
+            continue
+        _choice = _ok.sort_values("cost_per_success").iloc[0]
+        _top = _grp.sort_values(["completion_rate", "cost_per_success"], ascending=[False, True]).iloc[0]
+        _picks.append(
+            {
+                "task type": _cat,
+                "profile": _prof,
+                "pick": _choice["model"],
+                "its completion": round(_choice["completion_rate"], 3),
+                "its cost_per_success": round(_choice["cost_per_success"], 4),
+                "most accurate": _top["model"],
+                "best completion": round(_best, 3),
+            }
+        )
+    mo.ui.table(pd.DataFrame(_picks), selection=None) if _picks else mo.md("_No model passed any task yet._")
+    return
+
+
+@app.cell(hide_code=True)
 def _(attempt_rows: pd.DataFrame):
     failure_model = mo.ui.dropdown(
         options=sorted(attempt_rows["model"].dropna().unique()), label="Inspect failed attempts for"
@@ -748,13 +846,16 @@ def _(specs: list):
 
 
 @app.cell(hide_code=True)
-def _(winner_pick: mo.ui.dropdown):
+def _(si_project: str | None, winner_pick: mo.ui.dropdown):
     mo.stop(not winner_pick.value)
     _m = winner_pick.value
+    _proj = si_project or "my-team/coding-agent-eval"
     mo.ui.tabs(
         {
             "Cline": mo.md(f"""
-Documented in the [Serverless Inference Cline tutorial](https://docs.coreweave.com/products/inference/serverless/tutorials/integration-cline):
+Documented in the [Serverless Inference Cline tutorial](https://docs.coreweave.com/products/inference/serverless/tutorials/integration-cline).
+If your account belongs to more than one team and Cline gets `401 invalid_api_key`, use a tool that can send the
+`OpenAI-Project: {_proj}` header (see the other tabs).
 
 ```bash
 cline auth -k "$SI_API_KEY" -p openai -b {SI_BASE_URL} -m {_m}
@@ -770,7 +871,11 @@ cline auth -k "$SI_API_KEY" -p openai -b {SI_BASE_URL} -m {_m}
     "coreweave": {{
       "npm": "@ai-sdk/openai-compatible",
       "name": "CoreWeave Serverless Inference",
-      "options": {{ "baseURL": "{SI_BASE_URL}", "apiKey": "{{env:SI_API_KEY}}" }},
+      "options": {{
+        "baseURL": "{SI_BASE_URL}",
+        "apiKey": "{{env:SI_API_KEY}}",
+        "headers": {{ "OpenAI-Project": "{_proj}" }}
+      }},
       "models": {{ "{_m}": {{ "name": "{_m}" }} }}
     }}
   }},
@@ -782,8 +887,12 @@ cline auth -k "$SI_API_KEY" -p openai -b {SI_BASE_URL} -m {_m}
 ```bash
 export OPENAI_BASE_URL={SI_BASE_URL}
 export OPENAI_API_KEY="$SI_API_KEY"
+export OPENAI_PROJECT_ID="{_proj}"  # sent as the OpenAI-Project header by the official OpenAI SDKs
 # model name: {_m}
 ```
+
+The `OpenAI-Project` header attributes usage to a team and project, and is needed if your account belongs to more
+than one team. If your tool does not use the official OpenAI SDK, set that header in its provider settings instead.
 """),
         }
     )

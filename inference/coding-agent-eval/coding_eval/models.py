@@ -58,9 +58,10 @@ class ModelSpec:
         """The API key from ``api_key_env``, or None if unset.
 
         Serverless Inference accepts a W&B API key, so SI specs fall back to
-        ``WANDB_API_KEY`` when ``SI_API_KEY`` is not set. SI also needs the
-        ``OpenAI-Project`` header (``team/project``): without it, a valid key is
-        rejected with a misleading ``401 invalid_api_key``.
+        ``WANDB_API_KEY`` when ``SI_API_KEY`` is not set. Set ``project``
+        (``team/project``, sent as ``OpenAI-Project``) to attribute usage; it is
+        needed when the account belongs to more than one team, where a request
+        without it can be rejected with a misleading ``401 invalid_api_key``.
         """
         key = os.environ.get(self.api_key_env)
         if not key and self.api_key_env == "SI_API_KEY":

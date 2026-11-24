@@ -276,6 +276,8 @@ def collect_rows(suite: str | None = None) -> list[dict[str, Any]]:
                 "mode": a.get("mode"),
                 "category": a.get("category"),
                 "passed": verdict.get("passed"),
+                # No recorded verdict (scorer crashed) or the judge itself failed.
+                "judge_error": (not verdict) or bool(verdict.get("judge_error")),
                 "verdict": verdict.get("verdict"),
                 "score": verdict.get("score"),
                 "rationale": verdict.get("rationale"),
@@ -308,8 +310,11 @@ def leaderboard(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         groups.setdefault((r["model"], r["profile"]), []).append(r)
     board = []
     for (model, profile), rs in groups.items():
-        judged = [r for r in rs if r["passed"] is not None]
-        passes = sum(bool(r["passed"]) for r in judged)
+        # Every attempt stays in the denominator, as it does for cost: an attempt the judge
+        # could not grade is not a pass. `unjudged` shows how many there were, so a flaky
+        # judge is visible instead of silently inflating (or deflating) completion.
+        passes = sum(bool(r["passed"]) for r in rs)
+        unjudged = sum(bool(r.get("judge_error", r["passed"] is None)) for r in rs)
         costs = [r["cost_usd"] for r in rs]
         total = sum(costs) if all(c is not None for c in costs) else None
         accs = [r["tool_call_accuracy"] for r in rs if r["tool_call_accuracy"] is not None]
@@ -319,10 +324,9 @@ def leaderboard(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "model": model,
                 "profile": profile,
                 "attempts": len(rs),
-                "completion_rate": round(passes / len(judged), 3) if judged else None,
-                "partial_rate": round(sum(r["verdict"] == "partial" for r in judged) / len(judged), 3)
-                if judged
-                else None,
+                "unjudged": unjudged,
+                "completion_rate": round(passes / len(rs), 3),
+                "partial_rate": round(sum(r["verdict"] == "partial" for r in rs) / len(rs), 3),
                 "tool_call_accuracy": round(statistics.fmean(accs), 3) if accs else None,
                 "silent_stop_rate": round(sum(r["silent_stop"] for r in rs) / len(rs), 3),
                 "median_wall_s": round(statistics.median(walls), 1) if walls else None,

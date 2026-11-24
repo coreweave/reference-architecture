@@ -52,7 +52,8 @@ Use the provided tools to explore the code and make changes. Work step by step:
 locate the relevant code, read it, then make focused edits that match the existing style.
 Always act through tool calls; do not describe edits in prose instead of making them.
 You cannot run Python, tests, or builds in this environment: `run_command` only allows read-only
-commands (ls, cat, grep, find, read-only git, ...) without pipes or redirects. Reason about correctness
+commands (ls, cat, head, grep, read-only git, ...) on paths inside the repository, without pipes or
+redirects. Use `search` and `list_files` to find code. Reason about correctness
 from the code instead of trying to execute it.
 When you are done, call the `finish` tool exactly once with a short summary."""
 
@@ -243,8 +244,11 @@ class OpenAICompatibleBackend:
                 for tc in delta.tool_calls or []:
                     slot = acc.setdefault(tc.index, {"id": None, "name": "", "arguments": ""})
                     slot["id"] = tc.id or slot["id"]
-                    if tc.function and tc.function.name:
-                        slot["name"] += tc.function.name
+                    # The name normally arrives once, but some servers repeat it in every
+                    # delta; appending would turn "read_file" into "read_fileread_file" and
+                    # misreport a serving quirk as an unknown-tool model failure.
+                    if tc.function and tc.function.name and not slot["name"]:
+                        slot["name"] = tc.function.name
                     if tc.function and tc.function.arguments:
                         slot["arguments"] += tc.function.arguments
                 if choice.finish_reason:

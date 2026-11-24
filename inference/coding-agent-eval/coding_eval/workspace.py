@@ -26,16 +26,33 @@ from typing import Any
 
 MAX_TOOL_OUTPUT = 12_000
 HISTORY_DEPTH = 200  # commits of pre-task history kept in each workspace
-READ_ONLY_COMMANDS = {
-    "ls", "cat", "head", "tail", "wc", "grep", "rg", "find", "tree", "sed", "awk", "sort", "uniq", "cut",
-    "diff", "file", "stat", "echo", "pwd", "git",
-}  # fmt: skip
+# Only programs with no option that runs another program or writes a file. Tools such as
+# awk, sed, find, rg, sort, tree, uniq and file are deliberately absent: each has options
+# that execute commands or write output (system(), -exec, --pre, -o, ...). The search and
+# list_files tools cover what they would be used for.
+READ_ONLY_COMMANDS = {"ls", "cat", "head", "tail", "wc", "grep", "cut", "diff", "stat", "echo", "pwd", "git"}
 READ_ONLY_GIT = {"status", "diff", "log", "show", "grep", "ls-files", "blame", "rev-parse"}
+# git options that run a program or write a file, even under a read-only subcommand.
+_GIT_DENIED_OPTIONS = (
+    "--output", "--open-files-in-pager", "--ext-diff", "--textconv", "--exec", "--upload-pack", "--no-index",
+)  # fmt: skip
 _SHELL_META = re.compile(r"[;&|`$><]|\n")
 
 
 class ToolError(Exception):
     """A tool call that failed in a way the model should see and recover from."""
+
+
+def _check_git(argv: list[str]) -> None:
+    """Allow only read-only git subcommands, without options that run programs or write files."""
+    if len(argv) < 2 or argv[1] not in READ_ONLY_GIT:
+        raise ToolError(f"only read-only git subcommands are allowed: {', '.join(sorted(READ_ONLY_GIT))}")
+    for a in argv[2:]:
+        if a.startswith(_GIT_DENIED_OPTIONS):
+            raise ToolError(f"git option {a.split('=', 1)[0]!r} is not allowed here")
+        # git grep -O / clustered short options such as -nO run a pager program.
+        if argv[1] == "grep" and a.startswith("-") and not a.startswith("--") and "O" in a:
+            raise ToolError("git grep -O (open files in a pager) is not allowed here")
 
 
 def _truncate(text: str, limit: int = MAX_TOOL_OUTPUT) -> str:
@@ -190,13 +207,13 @@ class Workspace:
         if not self.allow_any_command:
             if _SHELL_META.search(command):
                 raise ToolError("pipes, redirects and command chaining are disabled in this workspace")
-            argv = shlex.split(command)
-            if argv[0] not in READ_ONLY_COMMANDS:
-                raise ToolError(f"{argv[0]!r} is not allowed here; allowed: {', '.join(sorted(READ_ONLY_COMMANDS))}")
-            if argv[0] == "git" and (len(argv) < 2 or argv[1] not in READ_ONLY_GIT):
-                raise ToolError(f"only read-only git subcommands are allowed: {', '.join(sorted(READ_ONLY_GIT))}")
-            if argv[0] in ("sed", "awk") and any(a.startswith("-i") for a in argv):
-                raise ToolError("in-place edits via sed/awk are disabled; use edit_file")
+            try:
+                argv = shlex.split(command)
+            except ValueError as e:
+                raise ToolError(f"could not parse command: {e}") from None
+            if not argv:
+                raise ToolError("command is required")
+            self._check_read_only(argv)
             shell, args = False, argv
         else:
             shell, args = True, command
@@ -210,6 +227,25 @@ class Workspace:
             raise ToolError(f"command timed out after {self.command_timeout_s}s") from None
         out = (result.stdout + (("\n[stderr]\n" + result.stderr) if result.stderr else "")).strip()
         return _truncate(f"exit code {result.returncode}\n{out}")
+
+    def _check_read_only(self, argv: list[str]) -> None:
+        """Reject commands that could run programs, write files, or reach outside the workspace."""
+        prog = argv[0]
+        if prog not in READ_ONLY_COMMANDS:
+            raise ToolError(f"{prog!r} is not allowed here; allowed: {', '.join(sorted(READ_ONLY_COMMANDS))}")
+        if prog == "git":
+            _check_git(argv)
+        root = self.root.resolve()
+        for a in argv[1:]:
+            # Check the value of --opt=value as well as bare arguments.
+            value = a.split("=", 1)[1] if a.startswith("-") and "=" in a else a
+            if value.startswith(("/", "~")) or ".." in Path(value).parts:
+                raise ToolError(f"argument {a!r} points outside the repository; use paths relative to its root")
+            candidate = self.root / value
+            if value and os.path.lexists(candidate):  # follows symlinks: a link out of the repo is rejected too
+                resolved = candidate.resolve()
+                if resolved != root and root not in resolved.parents:
+                    raise ToolError(f"argument {a!r} resolves outside the repository")
 
     # -- results -----------------------------------------------------------
 
